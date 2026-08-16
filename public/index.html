@@ -1,0 +1,2292 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CEO — Practice Level</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:#fcfcfb; --page:#f9f9f7;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --series-1:#2a78d6; --series-neg:#e34948;
+    --good:#0ca30c; --critical:#d03b3b; --warning:#fab219; --good-text:#006300;
+    --lock:#f0efec;
+    --radius:10px;
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --surface-1:#1a1a19; --page:#0d0d0d;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+    --series-1:#3987e5; --series-neg:#e66767;
+    --good:#0ca30c; --critical:#d03b3b; --warning:#fab219; --good-text:#0ca30c;
+    --lock:#232322;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--page); color:var(--text-primary);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-size:15px; line-height:1.5;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 18px 64px}
+  h1{font-size:19px;margin:0;letter-spacing:-0.01em}
+  h2{font-size:14px;margin:0 0 12px;letter-spacing:0.04em;text-transform:uppercase;color:var(--text-secondary);font-weight:600}
+  h3{font-size:16px;margin:0;letter-spacing:-0.01em}
+  .tnum{font-variant-numeric:tabular-nums}
+
+  header.bar{
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+    padding:14px 18px;background:var(--surface-1);border:1px solid var(--border);
+    border-radius:var(--radius);margin-bottom:16px;
+  }
+  .brand{display:flex;align-items:baseline;gap:10px;margin-right:auto}
+  .brand span{color:var(--muted);font-size:13px}
+  .stat{display:flex;flex-direction:column;gap:1px;min-width:96px}
+  .stat .k{font-size:11px;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted)}
+  .stat .v{font-size:18px;font-weight:650;letter-spacing:-0.02em}
+  .icon-btn{
+    background:none;border:1px solid var(--border);color:var(--text-secondary);
+    border-radius:8px;padding:6px 10px;cursor:pointer;font-size:13px;font-family:inherit;
+  }
+  .icon-btn:hover{background:var(--lock)}
+
+  .rivals{
+    background:var(--surface-1);border:1px solid var(--border);
+    border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;
+  }
+  .rivals .hd{font-size:11px;letter-spacing:0.08em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:10px;display:flex;justify-content:space-between}
+  .rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .rcard{border:1px solid var(--border);border-radius:9px;padding:10px 11px}
+  .rcard.me{border-color:var(--series-1);box-shadow:inset 0 0 0 1px var(--series-1)}
+  .rcard.dead{opacity:0.45}
+  .rcard .nm{font-weight:650;font-size:14px}
+  .rcard .tg{font-size:11px;color:var(--muted);margin-bottom:7px}
+  .rcard .rw{display:flex;justify-content:space-between;font-size:12px;padding:1px 0}
+  .rcard .rw .k{color:var(--text-secondary)}
+  .rcard .rw .v{font-variant-numeric:tabular-nums;font-weight:600}
+  .sharebar{height:6px;border-radius:3px;background:var(--lock);margin-top:7px;overflow:hidden}
+  .sharebar i{display:block;height:100%;background:var(--series-1);border-radius:3px}
+  .rcard:not(.me) .sharebar i{background:var(--muted)}
+  .news{
+    background:var(--surface-1);border:1px solid var(--border);
+    border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;
+  }
+  .news .hd{
+    font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:8px;
+  }
+  .news .item{display:flex;gap:10px;align-items:flex-start;padding:4px 0;font-size:14px}
+  .news .item .dot{
+    width:7px;height:7px;border-radius:50%;margin-top:7px;flex-shrink:0;
+    background:var(--muted);
+  }
+  .news .item.bad .dot{background:var(--critical)}
+  .news .item.good .dot{background:var(--good)}
+  .news .item .txt{font-weight:500}
+  .news .item .eff{color:var(--muted);font-size:12px;margin-left:6px;font-weight:400}
+  .conds{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;
+    border-top:1px solid var(--grid)}
+  .coach{
+    background:var(--surface-1);border:1px solid var(--border);border-left:3px solid var(--series-1);
+    border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;
+  }
+  .coach .title{font-weight:650;margin-bottom:4px}
+  .coach p{margin:0 0 6px;color:var(--text-secondary);font-size:14px}
+  .coach p:last-child{margin-bottom:0}
+  .coach b{color:var(--text-primary);font-weight:600}
+
+  main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:start}
+  @media (max-width:900px){main{grid-template-columns:1fr}}
+
+  .card{
+    background:var(--surface-1);border:1px solid var(--border);
+    border-radius:var(--radius);padding:16px;margin-bottom:16px;
+  }
+  .phead{display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap}
+  .chip{
+    font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--border);
+    color:var(--text-secondary);letter-spacing:0.02em;white-space:nowrap;
+  }
+  .chip.ramp{border-color:var(--warning);color:var(--warning)}
+  .chip.decline{border-color:var(--series-neg);color:var(--series-neg)}
+  .chip.mature{border-color:var(--good);color:var(--good-text)}
+
+  .facts{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));
+    gap:10px;margin:12px 0 4px;padding:12px 0;
+    border-top:1px solid var(--grid);border-bottom:1px solid var(--grid);
+  }
+  .fact .k{font-size:11px;color:var(--muted);letter-spacing:0.03em}
+  .fact .v{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+
+  .ctrl{margin-top:14px;position:relative}
+  .ctrl.locked{opacity:0.45;pointer-events:none}
+  .ctrl .lab{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+  .ctrl .lab .name{font-weight:600;font-size:14px}
+  .ctrl .lab .hint{font-size:12px;color:var(--muted)}
+  .row{display:flex;gap:10px;align-items:center}
+  input[type=range]{flex:1;accent-color:var(--series-1);height:22px}
+  input[type=number]{
+    width:104px;padding:6px 8px;font-family:inherit;font-size:14px;
+    background:var(--page);color:var(--text-primary);
+    border:1px solid var(--border);border-radius:7px;font-variant-numeric:tabular-nums;
+  }
+  input[type=number]:focus{outline:2px solid var(--series-1);outline-offset:-1px}
+  .lockmsg{
+    position:absolute;inset:auto 0 0 0;top:0;display:flex;align-items:center;
+    justify-content:center;font-size:12px;color:var(--muted);
+  }
+  .locknote{font-size:12px;color:var(--muted);margin-top:4px}
+
+  .projection .line{
+    display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:14px;
+    border-bottom:1px solid var(--grid);
+  }
+  .projection .line:last-of-type{border-bottom:none}
+  .projection .line.total{
+    border-top:2px solid var(--baseline);border-bottom:none;margin-top:4px;padding-top:9px;
+    font-weight:650;font-size:16px;
+  }
+  .projection .line.total .k{white-space:nowrap}
+  /* a profit RANGE is a long string; let it shrink rather than wrap the label */
+  .projection .line.total.range{font-size:14px}
+  .projection .line.total.range .v{text-align:right}
+  .projection .k{color:var(--text-secondary)}
+  .projection .v{font-variant-numeric:tabular-nums;font-weight:600}
+  .neg{color:var(--series-neg)}
+  .pos{color:var(--good-text)}
+
+  .warnbox{
+    display:flex;gap:8px;align-items:flex-start;font-size:13px;
+    background:var(--lock);border-radius:8px;padding:9px 11px;margin-top:12px;
+    color:var(--text-secondary);
+  }
+  .warnbox .ic{font-weight:700;flex-shrink:0}
+  .warnbox.bad .ic{color:var(--critical)}
+  .warnbox.warn .ic{color:var(--warning)}
+
+  button.primary{
+    width:100%;margin-top:14px;padding:12px 16px;font-size:15px;font-weight:650;
+    font-family:inherit;background:var(--series-1);color:#fff;border:none;
+    border-radius:9px;cursor:pointer;letter-spacing:-0.01em;
+  }
+  button.primary:hover{filter:brightness(1.08)}
+  button.primary:disabled{opacity:0.45;cursor:not-allowed}
+  button.ghost{
+    padding:9px 14px;font-size:13px;font-family:inherit;font-weight:600;
+    background:none;color:var(--text-secondary);border:1px solid var(--border);
+    border-radius:8px;cursor:pointer;
+  }
+  button.ghost:hover{background:var(--lock)}
+  button.ghost.danger:hover{border-color:var(--critical);color:var(--critical)}
+
+  table.pl{width:100%;border-collapse:collapse;font-size:14px}
+  table.pl td{padding:5px 0;border-bottom:1px solid var(--grid)}
+  table.pl td.v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  table.pl tr.total td{
+    border-top:2px solid var(--baseline);border-bottom:none;
+    padding-top:9px;font-weight:700;font-size:15px;
+  }
+  table.pl tr.sub td{color:var(--text-secondary)}
+
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media (max-width:760px){.charts{grid-template-columns:1fr}}
+  .chartbox{position:relative}
+  svg{display:block;width:100%;overflow:visible}
+  .tip{
+    position:absolute;pointer-events:none;opacity:0;transition:opacity .1s;
+    background:var(--surface-1);border:1px solid var(--border);border-radius:7px;
+    padding:6px 9px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.13);
+    font-variant-numeric:tabular-nums;white-space:nowrap;z-index:5;
+  }
+
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;
+    align-items:center;justify-content:center;padding:20px;z-index:50;
+  }
+  /* display:flex above beats the UA [hidden] rule, so a hidden overlay would
+     still sit on top of the page and swallow every click. Restore it. */
+  .overlay[hidden]{display:none}
+  .modal{
+    background:var(--surface-1);border-radius:14px;padding:26px;max-width:520px;width:100%;
+    border:1px solid var(--border);max-height:88vh;overflow:auto;
+  }
+  .modal h2{font-size:12px}
+  .choices{display:flex;gap:10px;margin:16px 0 4px;flex-wrap:wrap}
+  .choice{
+    flex:1;min-width:120px;padding:12px;border:1px solid var(--border);border-radius:10px;
+    cursor:pointer;background:var(--page);text-align:left;font-family:inherit;color:inherit;
+  }
+  .choice:hover{border-color:var(--series-1)}
+  .choice[aria-pressed=true]{border-color:var(--series-1);box-shadow:inset 0 0 0 1px var(--series-1)}
+  .choice .n{font-weight:700;font-size:16px}
+  .choice .d{font-size:12px;color:var(--muted);margin-top:2px}
+  .muted{color:var(--muted);font-size:13px}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  details.tablefold{margin-top:12px}
+  details.tablefold summary{cursor:pointer;font-size:13px;color:var(--text-secondary)}
+  table.data{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+  table.data th,table.data td{
+    padding:4px 6px;text-align:right;border-bottom:1px solid var(--grid);
+    font-variant-numeric:tabular-nums;
+  }
+  table.data th:first-child,table.data td:first-child{text-align:left}
+  table.data th{color:var(--muted);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="bar">
+    <div class="brand"><h1>CEO</h1><span id="level-label">Practice level</span></div>
+    <div class="stat"><div class="k">Round</div><div class="v tnum" id="s-round">—</div></div>
+    <div class="stat"><div class="k">Cash</div><div class="v tnum" id="s-cash">—</div></div>
+    <div class="stat"><div class="k">Company value</div><div class="v tnum" id="s-value">—</div></div>
+    <div class="stat"><div class="k">Borrowing</div><div class="v tnum" id="s-credit">—</div></div>
+    <button class="icon-btn" id="theme-toggle" title="Toggle light/dark">Dark</button>
+    <button class="icon-btn" id="restart">New game</button>
+  </header>
+
+  <div id="rivals"></div>
+  <div id="news"></div>
+  <div class="coach" id="coach"></div>
+
+  <main>
+    <div>
+      <div id="products"></div>
+      <div id="portfolio-actions" style="margin-bottom:16px"></div>
+      <div class="card" id="results-card" hidden>
+        <h2>Last round</h2>
+        <div id="results"></div>
+      </div>
+      <div class="card" id="charts-card" hidden>
+        <h2>History</h2>
+        <div class="charts">
+          <div class="chartbox">
+            <h3 style="font-size:13px;margin-bottom:2px">Cash on hand</h3>
+            <div class="muted" style="margin-bottom:6px">End of each round</div>
+            <svg id="chart-cash" role="img" aria-label="Cash on hand by round"></svg>
+            <div class="tip" id="tip-cash"></div>
+          </div>
+          <div class="chartbox">
+            <h3 style="font-size:13px;margin-bottom:2px">Profit per round</h3>
+            <div class="muted" style="margin-bottom:6px">Above or below break-even</div>
+            <svg id="chart-profit" role="img" aria-label="Profit per round"></svg>
+            <div class="tip" id="tip-profit"></div>
+          </div>
+        </div>
+        <details class="tablefold">
+          <summary>View as table</summary>
+          <div id="history-table"></div>
+        </details>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card projection" style="position:sticky;top:16px">
+        <h2>This round</h2>
+        <div id="projection"></div>
+        <div id="warnings"></div>
+        <button class="primary" id="run">Run round</button>
+        <div class="muted" style="margin-top:8px;text-align:center" id="run-note"></div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div class="overlay" id="setup">
+  <div class="modal">
+    <h2>New game</h2>
+    <h3 style="margin-bottom:6px">Which market?</h3>
+    <div class="choices" id="level-choices">
+      <button class="choice" data-level="1" aria-pressed="true">
+        <div class="n">Practice</div>
+        <div class="d">Solo. Steady market, exact forecasts. Levers unlock one per round.</div>
+      </button>
+      <button class="choice" data-level="2">
+        <div class="n">Volatile market</div>
+        <div class="d">Solo. Recessions, cost spikes and supply crunches hit; your forecast is a range.</div>
+      </button>
+      <button class="choice" data-level="3">
+        <div class="n">Shared market</div>
+        <div class="d">Rival companies compete for the same customers. Everything above, plus advertising.</div>
+      </button>
+    </div>
+    <div id="rival-pick" hidden>
+      <h3 style="margin:18px 0 6px">How many rivals?</h3>
+      <div class="choices" id="rival-choices">
+        <button class="choice" data-rivals="2"><div class="n">2</div><div class="d">Room to breathe</div></button>
+        <button class="choice" data-rivals="3" aria-pressed="true"><div class="n">3</div><div class="d">Standard</div></button>
+        <button class="choice" data-rivals="4"><div class="n">4</div><div class="d">Crowded</div></button>
+      </div>
+      <h3 style="margin:18px 0 6px">Do you want to know who you are up against?</h3>
+      <p class="muted" style="margin:0">In a live session the empty seats are filled by AI
+        companies and nobody is told which is which until the end. Hidden rivals is that
+        game — same opponents, no labels.</p>
+      <div class="choices" id="reveal-choices">
+        <button class="choice" data-hidden="0" aria-pressed="true">
+          <div class="n">Labelled</div>
+          <div class="d">Each rival is named and described. Best for learning what the strategies look like.</div>
+        </button>
+        <button class="choice" data-hidden="1">
+          <div class="n">Hidden</div>
+          <div class="d">Ordinary company names, no descriptions. Work out who is who yourself.</div>
+        </button>
+      </div>
+    </div>
+    <h3 style="margin:18px 0 6px">How many rounds?</h3>
+    <p class="muted" style="margin:0">Everyone can see the end date. Knowing when the game
+      stops is what makes the late-game choice — milk what you have, or gamble on
+      innovation that may not land in time — a real decision.</p>
+    <div class="choices" id="round-choices">
+      <button class="choice" data-rounds="8"><div class="n">8 rounds</div><div class="d">Quick</div></button>
+      <button class="choice" data-rounds="12" aria-pressed="true"><div class="n">12 rounds</div><div class="d">Standard</div></button>
+      <button class="choice" data-rounds="20"><div class="n">20 rounds</div><div class="d">Long haul</div></button>
+    </div>
+    <p class="muted" style="margin-top:14px">You start with <b>$250,000</b> and one product.
+      In the first two levels you are running against the market. In the shared market
+      you are running against companies who want the same customers.</p>
+    <button class="primary" id="start">Start</button>
+  </div>
+</div>
+
+<div class="overlay" id="gameover" hidden>
+  <div class="modal">
+    <h2>Game over</h2>
+    <div id="final"></div>
+    <button class="primary" id="again">Play again</button>
+  </div>
+</div>
+
+<script>
+/* CEO — economy engine (JS port of ceo_engine.py).
+   Practice level uses the solo path: no shocks, no rivals, exact forecast. */
+
+const C = {
+  ELASTICITY: 2.0,
+  VALUE_REF: 100.0,
+  QUALITY_REACH: 0.60,
+  QUALITY_DECAY: 0.04,
+  RD_K: 1.5,
+  RD_DELAY: 2,
+  UNIT_COST0: 45.0,
+  LEARN_REF: 2000.0,
+  LEARN_EXP: -0.12,
+  LEARN_FLOOR: 0.60,
+  HOLDING: 0.22,
+  OBSOLESCENCE: 0.10,
+  SALVAGE: 0.40,
+  STOCKOUT_PEN: 0.90,
+  PRODUCT_FIXED: 40000.0,
+  CORP_FIXED: 25000.0,
+  CORP_SCALING: 1.30,
+  CAPACITY0: 2200.0,
+  CAPEX_PER_UNIT: 18.0,
+  CAPACITY_UPKEEP: 5.0,
+  CAPACITY_RESALE: 0.40,
+  CAPACITY_FLOOR: 400.0,
+  RD_K_PROC: 1.5,
+  EFFICIENCY_DECAY: 0.02,
+  EFFICIENCY_FLOOR: 0.55,
+  THROUGHPUT_EXP: 0.50,
+  LAUNCH_COST: 180000.0,
+  MAX_PRODUCTS: 3,           // more than three lines is bookkeeping, not strategy
+  /* A second line from an established company is not a startup's product. It
+     carries the firm's accumulated know-how, which is both realistic and the only
+     thing that makes launching survivable: a fresh product at quality 100 against
+     incumbents at 130 cannot get share, for exactly the reason a new entrant
+     cannot (§17). Unlike a raw quality gift to an outsider, this scales with the
+     launcher — a strong company's second line starts strong, a weak one's does
+     not — so it does not have the "no setting in between" problem. */
+  /* A launch must leave enough credit behind to survive the ramp. Without this the
+     affordability test passed on paper and killed the company two rounds later:
+     it would let a firm borrow most of its line to launch, then meet a ramp round
+     that costs ~$87,000 more than the one before it with nothing left to draw. */
+  LAUNCH_RESERVE: 135000.0,
+  LINE_QUALITY_INHERIT: 0.85,
+  LINE_EFFICIENCY_INHERIT: 0.90,
+  MARKET_BASE: 2000.0,
+  MATURITY_ROUND: 8,
+  DECLINE: 0.08,
+  RAMP: [0.65, 0.90],
+  CREDIT_LIMIT: 200000.0,
+  /* Borrowing is priced on how healthy the company looks, the way it is in the
+     real market. As of August 2026 investment-grade paper trades around 1% over
+     treasuries, all high yield around 2.7%, and CCC-and-lower at 10.2% — roughly
+     a tenfold span from sound to distressed. These numbers reproduce that shape
+     around the flat 5% the economy was originally balanced at. */
+  INTEREST: 0.05,            // retained: the rate a debt-free company would pay
+  RATE_BASE: 0.04,           // a company with no debt and profits behind it
+  RATE_LEVERAGE: 0.10,       // ...rising with how much of the credit line is used
+  RATE_LEVERAGE_EXP: 1.40,   // slowly at first, then quickly
+  RATE_LOSSES: 0.05,         // ...and again if the business is losing money
+  RATE_LOSS_REF: 80000.0,    // a loss this size counts as fully impaired
+  RATE_LOSS_FLOOR: 0.20,     // ...but losses only bite in proportion to what is owed
+  RATE_MAX: 0.22,            // the point past which nobody would lend at all
+  RESTRUCTURE: 20000.0,
+  /* --- shared market (Level 3) --- */
+  SHARE_BETA: 2.3,        // share sensitivity to value-for-money
+  QUALITY_PULL: 3.2,      // ...and to raw quality
+  AD_GAMMA: 0.8,          // ...and to awareness
+  CATEGORY_ELAST: 0.8,    // cheap prices barely grow the category; they steal share
+  AD_K: 8.0,
+  AD_DECAY: 0.55,         // awareness is rented, not owned
+  AD_AWARE_CAP: 80.0,
+  /* --- what happens when a company leaves the market --- */
+  INHERIT_SHARE: 0.65,     // only this much of its demand finds a new home
+  INHERIT_DECAY: 0.30,     // and the advantage fades this fast
+  INHERIT_AFFINITY: 12.0,  // customers go to whoever is priced closest to what they lost
+};
+
+/* ==================== what kind of thing you make ====================
+   Every constant above describes a manufactured physical good: materials in each
+   unit, a factory that costs money standing idle, a warehouse, stock that rots,
+   and a learning curve. That is one kind of business, not all of them. Software
+   has no factory and nothing to warehouse but expensive people and a short shelf
+   life; a commodity is quick and cheap and cannot be innovated into a premium;
+   deep tech costs more of everything and pays back only if the research lands.
+
+   These are multipliers on the baseline, so `hardware` is exactly the economy
+   every figure in the design doc was measured against — nothing already balanced
+   moves. A company always starts with a hardware product; the kind is chosen when
+   launching a new line. */
+
+const KINDS = {
+  hardware: {
+    label: 'Hardware',
+    blurb: 'Materials in every unit and a factory to build them. Gets cheaper the more you make.',
+    launch: 1.00, fixed: 1.00, unitCost: 1.00, learn: 1.00,
+    capacity: 1.00, upkeep: 1.00, inventory: 1.00,
+    rdLeverage: 1.00, rdDelay: 0, decay: 1.00,
+  },
+  software: {
+    label: 'Software',
+    blurb: 'No factory, nothing to warehouse, almost nothing per copy — but the people cost a fortune and it goes stale fast.',
+    launch: 1.00, fixed: 1.75, unitCost: 0.09, learn: 0.15,
+    capacity: 3.00, upkeep: 0.20, inventory: 0.00,
+    rdLeverage: 1.15, rdDelay: 0, decay: 1.60,
+  },
+  commodity: {
+    label: 'Commodity',
+    blurb: 'Cheap and quick to start. Thin margins, and research barely moves it.',
+    launch: 0.39, fixed: 0.65, unitCost: 0.62, learn: 1.00,
+    capacity: 0.80, upkeep: 0.90, inventory: 1.00,
+    rdLeverage: 0.45, rdDelay: 0, decay: 0.70,
+  },
+  deeptech: {
+    label: 'Deep tech',
+    blurb: 'Slow, dear and complicated to build — but research compounds hard once it lands.',
+    launch: 1.15, fixed: 1.38, unitCost: 1.15, learn: 1.00,
+    capacity: 1.00, upkeep: 1.00, inventory: 1.00,
+    rdLeverage: 1.70, rdDelay: 1, decay: 1.00,
+  },
+};
+
+const kindOf = (p) => KINDS[(p && p.kind) || 'hardware'] || KINDS.hardware;
+const launchCostOf = (kind) => C.LAUNCH_COST * (KINDS[kind] || KINDS.hardware).launch;
+
+let _pid = 0;
+function newProduct(name, kind) {
+  return {
+    id: ++_pid,
+    name,
+    quality: 100.0,
+    age: 0,
+    inventory: 0.0,
+    invBook: 0.0,
+    cumUnits: C.LEARN_REF,
+    kind: KINDS[kind] ? kind : 'hardware',
+    capacity: C.CAPACITY0 * (KINDS[kind] || KINDS.hardware).capacity,
+    alive: true,
+    efficiency: 100.0,   // higher = cheaper to build and more output per plant
+    awareness: 0.0,      // advertising stock: pulls SHARE, never demand
+    inherited: 0.0,      // customers picked up from a company that left
+    rdPipeline: [],      // {lands, dq, spend}
+    procPipeline: [],    // {lands, de, spend}
+    pendingCapacity: 0.0,
+    stockoutLast: false,
+    profitHistory: [],
+  };
+}
+
+function newFirm(cash) {
+  return { cash: cash === undefined ? 250000.0 : cash, debt: 0.0, products: [],
+           bankrupt: false, profitHistory: [] };
+}
+
+const live = (firm) => firm.products.filter((p) => p.alive);
+
+/* What this company pays to borrow, and what to call it.
+
+   Two things move it, and both are things a player can see coming: how much of
+   the credit line is already drawn, and whether the business behind the debt is
+   making money. Leverage is superlinear — the first quarter of the line is nearly
+   free, the last quarter is punishing — which is what makes borrowing early to
+   fund something that pays off a genuinely different decision from borrowing late
+   to cover a loss. */
+function creditRate(firm, creditLimit) {
+  const limit = creditLimit === undefined ? C.CREDIT_LIMIT : creditLimit;
+  const lev = Math.max(0, Math.min(1, firm.debt / Math.max(1, limit)));
+  const hist = firm.profitHistory || [];
+  const recent = hist.slice(-3);
+  const avg = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
+  const impaired = avg < 0 ? Math.min(1, -avg / C.RATE_LOSS_REF) : 0;
+  /* Losses are charged in proportion to how much is already drawn. A lender
+     prices your ability to repay what you owe — and a company that owes nothing
+     is not distressed no matter how its quarter went. Without this, a brand new
+     company was rated Stretched in round one purely for the ordinary cost of
+     starting up. */
+  const exposure = Math.min(1, C.RATE_LOSS_FLOOR + lev);
+  const rate = C.RATE_BASE
+    + C.RATE_LEVERAGE * Math.pow(lev, C.RATE_LEVERAGE_EXP)
+    + C.RATE_LOSSES * impaired * exposure;
+  return Math.min(C.RATE_MAX, rate);
+}
+
+/* Plain language for the same thing. Players should not have to learn a ratings
+   scale to understand that the bank has gone cold on them. */
+function creditStanding(firm, creditLimit) {
+  const r = creditRate(firm, creditLimit);
+  if (r < 0.055) return { label: 'Strong', note: 'Lenders like the look of you.' };
+  if (r < 0.080) return { label: 'Sound', note: 'Normal terms.' };
+  if (r < 0.115) return { label: 'Stretched', note: 'Borrowing is getting expensive.' };
+  if (r < 0.160) return { label: 'Strained', note: 'The bank is charging you for the risk.' };
+  return { label: 'Distressed', note: 'You are paying penalty rates on every dollar owed.' };
+}
+
+const value = (p) => C.VALUE_REF * (p.quality / 100.0);
+
+function unitCost(p, costShock) {
+  const shock = costShock === undefined ? 1.0 : costShock;
+  const k = kindOf(p);
+  const f = Math.max(C.LEARN_FLOOR, Math.pow(p.cumUnits / C.LEARN_REF, C.LEARN_EXP * k.learn));
+  const eff = Math.max(C.EFFICIENCY_FLOOR, 100.0 / Math.max(p.efficiency, 1.0));
+  return C.UNIT_COST0 * k.unitCost * f * eff * shock;
+}
+
+/* Process R&D raises throughput as well as cutting cost, so it is a genuine
+   alternative to buying more plant. */
+function effCapacity(p) {
+  return p.capacity * Math.pow(p.efficiency / 100.0, C.THROUGHPUT_EXP);
+}
+
+function demandPool(p, marketMult) {
+  const mm = marketMult === undefined ? 1.0 : marketMult;
+  const ramp = p.age < C.RAMP.length ? C.RAMP[p.age] : 1.0;
+  let decline = 1.0;
+  if (p.age >= C.MATURITY_ROUND) {
+    decline = Math.pow(1 - C.DECLINE, p.age - C.MATURITY_ROUND + 1);
+  }
+  const reach = Math.pow(p.quality / 100.0, C.QUALITY_REACH);
+  let pool = (C.MARKET_BASE + p.inherited) * ramp * decline * reach * mm;
+  if (p.stockoutLast) pool *= C.STOCKOUT_PEN;
+  return pool;
+}
+
+const priceMultiplier = (price, val) =>
+  Math.max(0.0, 1 + C.ELASTICITY * (1 - price / val));
+
+const soloDemand = (p, price, marketMult) =>
+  demandPool(p, marketMult) * priceMultiplier(price, value(p));
+
+/* ---------------- PHASE A ---------------- */
+function upkeep(firm, roundNo) {
+  const landed = [];
+  for (const p of live(firm)) {
+    const due = p.rdPipeline.filter((r) => r.lands <= roundNo);
+    const gain = due.reduce((a, r) => a + r.dq, 0);
+    if (gain > 0) landed.push({ product: p.name, gain });
+    p.quality += gain;
+    p.rdPipeline = p.rdPipeline.filter((r) => r.lands > roundNo);
+    const dueP = p.procPipeline.filter((r) => r.lands <= roundNo);
+    const gainE = dueP.reduce((a, r) => a + r.de, 0);
+    if (gainE > 0) landed.push({ product: p.name, efficiency: gainE });
+    p.efficiency += gainE;
+    p.procPipeline = p.procPipeline.filter((r) => r.lands > roundNo);
+    const capAdded = p.pendingCapacity;
+    p.capacity += p.pendingCapacity;
+    p.pendingCapacity = 0.0;
+    if (capAdded > 0) landed.push({ product: p.name, capacity: capAdded });
+    p.quality *= 1 - C.QUALITY_DECAY * kindOf(p).decay;
+    p.efficiency *= 1 - C.EFFICIENCY_DECAY;
+    p.awareness *= 1 - C.AD_DECAY;
+    p.inherited *= 1 - C.INHERIT_DECAY;
+    p.invBook *= 1 - C.OBSOLESCENCE * kindOf(p).inventory;
+  }
+  return landed;
+}
+
+/* Advertising buys awareness the same round it is spent, and awareness feeds
+   SHARE — so in a shared market it has to land before demand is split. The caller
+   runs this for every firm first, which keeps the ordering identical to Python. */
+function applyAdvertising(firm, decisions) {
+  for (const p of live(firm)) {
+    const ad = (decisions[p.name] || {}).advertising || 0;
+    if (ad > 0) {
+      p.awareness = Math.min(C.AD_AWARE_CAP,
+        p.awareness + C.AD_K * Math.sqrt(ad / 1000.0));
+    }
+  }
+}
+
+/* When a company leaves, its customers do not evaporate — but neither do they all
+   find a new supplier. About two thirds land somewhere; the rest simply stop
+   buying, because nobody has the capacity or the proposition to serve them. And
+   they go to the closest substitute, not the biggest survivor: when Spirit failed,
+   its traffic went to JetBlue, Breeze, Frontier and Allegiant, and none of it went
+   to the legacy carriers. */
+function distributeCustomers(leaver, survivors, leaverPrice, prices) {
+  const orphaned = live(leaver).reduce((a, p) => a + C.MARKET_BASE + p.inherited, 0)
+                 * C.INHERIT_SHARE;
+  const pool = [];
+  for (const f of survivors) if (!f.bankrupt) for (const p of live(f)) pool.push(p);
+  if (!pool.length || orphaned <= 0) return { orphaned: 0, shares: [] };
+  const affinity = (p) => {
+    if (leaverPrice === undefined || !prices || prices[p.name] === undefined) return 1;
+    const gap = Math.abs(Math.log(Math.max(prices[p.name], 1e-6) / Math.max(leaverPrice, 1e-6)));
+    return Math.exp(-C.INHERIT_AFFINITY * gap);
+  };
+  const weights = pool.map((p) => demandPool(p) * affinity(p));
+  const total = weights.reduce((a, b) => a + b, 0) || pool.length;
+  const shares = [];
+  pool.forEach((p, i) => {
+    const got = orphaned * (weights[i] / total);
+    p.inherited += got;
+    shares.push({ product: p, units: got, fraction: weights[i] / total });
+  });
+  return { orphaned, shares };
+}
+
+/* ---------------- shared market ---------------- */
+/* entries: [{product, price}] across every firm. Three kinds of buyer. */
+function sharedDemands(entries, marketMult) {
+  const mm = marketMult === undefined ? 1 : marketMult;
+  const vbar = entries.reduce((a, e) => a + value(e.product), 0) / Math.max(1, entries.length);
+  const attr = entries.map((e) => e.price > 0
+    ? Math.pow(value(e.product) / e.price, C.SHARE_BETA)
+      * Math.pow(value(e.product) / vbar, C.QUALITY_PULL)
+      * Math.pow(1 + e.product.awareness / 100, C.AD_GAMMA)
+    : 0);
+  const tot = attr.reduce((a, b) => a + b, 0) || 1;
+  const shares = attr.map((a) => a / tot);
+  const pbar = entries.reduce((a, e, i) => a + e.price * shares[i], 0);
+  const vbarW = entries.reduce((a, e, i) => a + value(e.product) * shares[i], 0);
+  const pool = entries.reduce((a, e) => a + demandPool(e.product, mm), 0);
+  const total = pool * Math.max(0, 1 + C.CATEGORY_ELAST * (1 - pbar / vbarW));
+  return { demands: shares.map((s) => total * s), shares };
+}
+
+/* Demand a firm cannot fill spills to rivals that still have stock. */
+function spill(demands, availables) {
+  const n = demands.length;
+  const sales = new Array(n).fill(0);
+  const remD = demands.slice();
+  const remA = availables.slice();
+  for (let pass = 0; pass < 5; pass++) {
+    let unmet = 0;
+    for (let i = 0; i < n; i++) {
+      const take = Math.min(remD[i], remA[i]);
+      sales[i] += take; remA[i] -= take; unmet += remD[i] - take; remD[i] = 0;
+    }
+    if (unmet <= 1e-6) break;
+    const spare = remA.map((a) => Math.max(0, a));
+    const tot = spare.reduce((a, b) => a + b, 0);
+    if (tot <= 1e-6) break;
+    for (let i = 0; i < n; i++) remD[i] = unmet * (spare[i] / tot);
+  }
+  return sales;
+}
+
+/* ---------------- PHASE C ---------------- */
+function resolve(firm, decisions, roundNo, opts) {
+  const o = opts || {};
+  const marketMult = o.marketMult === undefined ? 1.0 : o.marketMult;
+  const costShock = o.costShock === undefined ? 1.0 : o.costShock;
+  const capacityMult = o.capacityMult === undefined ? 1.0 : o.capacityMult;
+
+  let revenue = 0.0, costs = 0.0;
+  const log = [];
+  const liveList = live(firm);
+
+  /* In a shared market the caller has already split demand between firms and
+     passes each firm its slice. Only compute demand here when playing solo. */
+  const demands = {};
+  for (const p of liveList) {
+    demands[p.name] = (o.sharedDemands && o.sharedDemands[p.name] !== undefined)
+      ? o.sharedDemands[p.name]
+      : soloDemand(p, decisions[p.name].price, marketMult);
+  }
+
+  const availables = {};
+  const unitCosts = {};
+  for (const p of liveList) {
+    const d = decisions[p.name];
+    if (d.discontinue) continue;
+    const sell = Math.min(Math.max(0.0, d.sellCapacity || 0.0),
+                          Math.max(0.0, p.capacity - C.CAPACITY_FLOOR));
+    if (sell > 0) { p.capacity -= sell; d._soldCapacity = sell; }
+    const produce = Math.max(0.0, Math.min(d.produce, effCapacity(p) * capacityMult));
+    const uc = unitCost(p, costShock);
+    unitCosts[p.name] = uc;
+    costs += produce * uc;
+    p.cumUnits += produce;
+    p.invBook += produce * uc;
+    availables[p.name] = p.inventory + produce;
+    d._produced = produce;
+  }
+
+  for (const p of liveList) {
+    const d = decisions[p.name];
+    if (d.discontinue) {
+      costs += C.RESTRUCTURE;
+      revenue += p.invBook * C.SALVAGE;
+      log.push({
+        name: p.name, event: 'discontinued', profit: 0,
+        salvage: p.invBook * C.SALVAGE, restructure: C.RESTRUCTURE,
+      });
+      p.alive = false;
+      p.inventory = 0.0;
+      p.invBook = 0.0;
+      continue;
+    }
+
+    const available = availables[p.name];
+    const demand = demands[p.name];
+    const sales = Math.min(demand, available);
+    p.stockoutLast = demand > available + 1e-6;
+    const unitBook = available > 0 ? p.invBook / available : 0.0;
+    const cogs = sales * unitBook;
+    p.inventory = available - sales;
+    p.invBook = p.inventory * unitBook;
+    revenue += sales * d.price;
+    const pk = kindOf(p);
+    const holding = p.invBook * C.HOLDING * pk.inventory;
+    const upkeepCost = p.capacity * C.CAPACITY_UPKEEP * pk.upkeep;
+    const rd = d.rd || 0.0;
+    const rdProcess = d.rdProcess || 0.0;
+    const advertising = d.advertising || 0.0;
+    const capex = d.capex || 0.0;
+    costs += holding + upkeepCost + C.PRODUCT_FIXED * pk.fixed + rd + rdProcess + advertising + capex;
+
+    const sold = d._soldCapacity || 0.0;
+    if (sold > 0) revenue += sold * C.CAPEX_PER_UNIT * C.CAPACITY_RESALE;
+    if (rd > 0) {
+      const dq = C.RD_K * pk.rdLeverage * Math.sqrt(rd / 1000.0) * (100.0 / Math.max(p.quality, 1));
+      p.rdPipeline.push({ lands: roundNo + C.RD_DELAY + pk.rdDelay, dq, spend: rd });
+    }
+    if (rdProcess > 0) {
+      const de = C.RD_K_PROC * Math.sqrt(rdProcess / 1000.0)
+               * (100.0 / Math.max(p.efficiency, 1));
+      p.procPipeline.push({ lands: roundNo + C.RD_DELAY + pk.rdDelay, de, spend: rdProcess });
+    }
+    if (capex > 0) p.pendingCapacity += capex / C.CAPEX_PER_UNIT;
+
+    p.age += 1;
+    const pprofit = sales * d.price - cogs - holding - upkeepCost
+                  - C.PRODUCT_FIXED * pk.fixed - rd - rdProcess - advertising;
+    p.profitHistory.push(pprofit);
+    log.push({
+      name: p.name, demand, sales, produced: d._produced,
+      inventory: p.inventory, profit: pprofit, stockout: p.stockoutLast,
+      revenue: sales * d.price, cogs, holding, upkeepCost, rd, capex,
+      unitCost: unitCosts[p.name], lostSales: Math.max(0, demand - available),
+    });
+  }
+
+  const corp = C.CORP_FIXED * Math.pow(Math.max(1, liveList.length), C.CORP_SCALING);
+  costs += corp;
+  /* Priced on last round's standing, not this one's — you borrow at the rate you
+     had earned, and the consequences of a bad round land the round after. */
+  const rate = creditRate(firm, o.creditLimit);
+  const interest = firm.debt * rate;
+  costs += interest;
+  const profit = revenue - costs;
+  firm.profitHistory.push(profit);
+  if (firm.profitHistory.length > 8) firm.profitHistory.shift();
+  firm.cash += profit;
+  if (firm.cash < 0) {
+    firm.debt += -firm.cash;
+    firm.cash = 0.0;
+  } else if (firm.debt > 0) {
+    const pay = Math.min(firm.cash, firm.debt);
+    firm.debt -= pay;
+    firm.cash -= pay;
+  }
+  /* Live sessions let the host pick a difficulty preset, which moves the credit
+     limit. Defaults to the balanced constant when nothing is passed. */
+  const creditLimit = o.creditLimit === undefined ? C.CREDIT_LIMIT : o.creditLimit;
+  if (firm.debt > creditLimit) firm.bankrupt = true;
+  return { profit, log, corp, interest, rate, revenue, costs };
+}
+
+function companyValue(firm) {
+  let v = firm.cash - firm.debt;
+  for (const p of firm.products) {
+    v += p.invBook * C.SALVAGE;
+    if (p.alive && p.profitHistory.length) {
+      const recent = p.profitHistory.slice(-3);
+      const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+      if (avg > 0) v += 4 * avg;
+    }
+  }
+  return v;
+}
+
+
+
+/* ==================== shock deck (Level 2) ====================
+   Three independent tracks, so a recession and a cost spike can bite at once.
+   Headlines describe what is happening NOW — they are narration, not prediction.
+   Measured testing showed leading indicators are worth ~3% even when perfectly
+   reliable, so this deliberately does not forecast. */
+
+const SHOCKS = {
+  demand: [
+    { name: 'Recession', mult: 0.70, dur: 3,
+      start: 'Recession declared as output falls for a second quarter',
+      during: 'Recession — households have stopped spending',
+      end: 'Forecasters call the recession over' },
+    { name: 'Consumer boom', mult: 1.30, dur: 2,
+      start: 'Spending surges as consumer confidence hits a five-year high',
+      during: 'Consumer boom — buyers are out in force',
+      end: 'The spending surge cools off' },
+    { name: 'Category trend', mult: 1.25, dur: 3,
+      start: 'Your category is suddenly fashionable, say retail analysts',
+      during: 'Category in vogue — new buyers keep arriving',
+      end: 'The trend moves on to something else' },
+    { name: 'Demand slump', mult: 0.80, dur: 2,
+      start: 'Retailers report a sharp slowdown at the checkout',
+      during: 'Slump — the shops are quiet',
+      end: 'Retail traffic returns to normal' },
+  ],
+  cost: [
+    { name: 'Input cost spike', mult: 1.35, dur: 2,
+      start: 'Component prices jump after a supplier fire',
+      during: 'Input costs are up sharply — every unit is dearer to make',
+      end: 'Component prices settle back down' },
+    { name: 'Tariffs', mult: 1.20, dur: 3,
+      start: 'New tariffs announced on imported parts',
+      during: 'Tariffs in force — parts cost more',
+      end: 'Tariffs lifted after trade talks' },
+    { name: 'Commodity glut', mult: 0.85, dur: 2,
+      start: 'Oversupply sends raw material prices tumbling',
+      during: 'Cheap materials — your units cost less to build',
+      end: 'Material prices normalise' },
+  ],
+  capacity: [
+    { name: 'Supply crunch', mult: 0.65, dur: 2,
+      start: 'Port strike halts inbound shipments',
+      during: 'Supply crunch — you cannot run the factory at full tilt',
+      end: 'The ports reopen' },
+    { name: 'Logistics strike', mult: 0.75, dur: 2,
+      start: 'Hauliers walk out over pay',
+      during: 'Haulage disrupted — output is constrained',
+      end: 'Hauliers return to work' },
+  ],
+};
+const SHOCK_CHANCE = { demand: 0.20, cost: 0.16, capacity: 0.12 };
+const TECH_LEAP_CHANCE = 0.08;
+const TECH_LEAP_HIT = 0.88;
+
+/* Small seeded PRNG so a game can be replayed from its seed. */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* The shock stream has to survive being written to storage and read back in a
+   different process, so the state is a seed and a call count rather than a live
+   generator — JSON cannot hold a closure. Rebuilding costs one cheap loop and the
+   count stays in the low hundreds over a whole game. */
+function newShockState(seed) {
+  return { seed: seed >>> 0, calls: 0, active: {}, news: [] };
+}
+
+function shockRand(S) {
+  if (typeof S.rand !== 'function' || S.at !== S.calls) {
+    const r = mulberry32(S.seed);
+    for (let i = 0; i < S.calls; i++) r();
+    S.rand = r;
+  }
+  const v = S.rand();
+  S.calls += 1;
+  S.at = S.calls;
+  return v;
+}
+
+/* Called at the top of each round, before the player decides. */
+/* `firms` may be one firm or many. A technology leap raises the bar for everyone
+   in the market — passing a single firm made it hit that company alone, which in
+   a shared market means one player is randomly punished and the rest are not. */
+function shockTick(S, firms) {
+  S.news = [];
+  for (const track of Object.keys(SHOCKS)) {
+    const cur = S.active[track];
+    if (cur && cur.left > 1) {
+      cur.left -= 1;
+      S.news.push({ kind: 'during', track, text: cur.card.during, card: cur.card });
+    } else if (cur) {
+      S.news.push({ kind: 'end', track, text: cur.card.end, card: cur.card });
+      delete S.active[track];
+    } else if (shockRand(S) < SHOCK_CHANCE[track]) {
+      const deck = SHOCKS[track];
+      const card = deck[Math.floor(shockRand(S) * deck.length)];
+      S.active[track] = { card, left: card.dur };
+      S.news.push({ kind: 'start', track, text: card.start, card });
+    }
+  }
+  const hit = Array.isArray(firms) ? firms : (firms ? [firms] : []);
+  if (shockRand(S) < TECH_LEAP_CHANCE && hit.length) {
+    for (const f of hit) for (const p of live(f)) p.quality *= TECH_LEAP_HIT;
+    S.news.push({ kind: 'start', track: 'tech',
+      text: 'A new generation of products arrives — the bar for "good" just rose',
+      card: { name: 'Technology leap' } });
+  }
+  return S.news;
+}
+
+const shockMult = (S, track) => (S.active[track] ? S.active[track].card.mult : 1.0);
+
+
+
+/* ==================== bot opponents (Level 3) ====================
+   Personalities are the five configurations measured in simulation. They are
+   fixed rather than adaptive: the balance numbers were obtained with these
+   exact values, and a bot that improvises would invalidate them. */
+
+const BOTS = [
+  { id: 'discounter', name: 'Valu-Line', tagline: 'Cheap and everywhere',
+    strategy: 'Discounter — undercut and win on volume',
+    blurb: 'Undercuts on price and makes it up on volume. Spends most of its research on cutting costs.',
+    priceRatio: 0.92, produceRatio: 1.18, rdTotal: 58000, procShare: 0.30, headroom: 1.05, ad: 12000 },
+  { id: 'premium', name: 'Meridian', tagline: 'The best thing on the shelf',
+    strategy: 'Premium — charge more, out-innovate',
+    blurb: 'Charges the most and earns it — nearly all research goes into the product. Buys little advertising.',
+    priceRatio: 1.04, produceRatio: 1.05, rdTotal: 68000, procShare: 0.05, headroom: 1.00, ad: 9000 },
+  { id: 'marketer', name: 'Brightwell', tagline: 'You have heard of them',
+    strategy: 'Marketer — buy attention',
+    blurb: 'Outspends everyone on advertising. Watch what that does to its balance sheet before you copy it.',
+    priceRatio: 0.99, produceRatio: 1.10, rdTotal: 58000, procShare: 0.15, headroom: 1.00, ad: 15000 },
+  { id: 'operator', name: 'Kestrel Works', tagline: 'Lean and quiet',
+    strategy: 'Operator — small plant, low unit costs',
+    blurb: 'Runs a small plant at full tilt and grinds its unit costs down. Rarely spectacular, rarely in trouble.',
+    priceRatio: 0.96, produceRatio: 1.12, rdTotal: 60000, procShare: 0.28, headroom: 0.95, ad: 10000 },
+  { id: 'balanced', name: 'Harbour & Co', tagline: 'Middle of everything',
+    strategy: 'Balanced — no strong opinions',
+    blurb: 'No strong opinions. Prices near value, splits research sensibly, advertises moderately.',
+    priceRatio: 0.98, produceRatio: 1.10, rdTotal: 60000, procShare: 0.15, headroom: 1.00, ad: 12000 },
+];
+
+/* ---------------- seating: labelled vs hidden ----------------
+   The behaviour layer below removes the tells a player could measure. This layer
+   removes the ones they could simply read. In a labelled game the personalities
+   are the teaching material and keep their names and taglines. In a hidden game
+   a tagline is a perfect identity leak — "Cheap and everywhere" is a confession —
+   so names come from the same pool human players draw from, taglines vanish, and
+   the personalities are shuffled so seat order carries no information either. */
+
+const NAME_POOL = [
+  'Northgate', 'Aster Industries', 'Bellweather', 'Corvid Manufacturing', 'Dunmore & Sons',
+  'Elder Row', 'Fairhaven Works', 'Granby Supply', 'Halloway', 'Ironvale',
+  'Juniper Trading', 'Kepler Goods', 'Larkfield', 'Mercer Brothers', 'Nine Elms',
+  'Osprey Works', 'Pemberton', 'Quarry Lane', 'Redhill Manufacturing', 'Stanmore',
+  'Thackeray', 'Uplands Co', 'Vance & Hart', 'Westmere', 'Yarrow Industries',
+];
+
+function shuffle(arr, rnd) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* Returns the rival seats for a game: which personality sits where, what it is
+   called, and what — if anything — the player is told about it. */
+function seatRivals(seed, n, hidden) {
+  const rnd = mulberry32(seed ^ 0x5eaf1);
+  const count = Math.max(1, Math.min(n, BOTS.length));
+  const picked = hidden ? shuffle(BOTS, rnd).slice(0, count) : BOTS.slice(0, count);
+  const names = hidden ? shuffle(NAME_POOL, rnd) : null;
+  return picked.map((bot, i) => ({
+    bot,
+    label: hidden ? names[i] : bot.name,
+    tagline: hidden ? '' : bot.tagline,
+    blurb: hidden ? '' : bot.blurb,
+    isBot: true,
+  }));
+}
+
+/* ---------------- making a bot hard to spot ----------------
+   A player only ever sees a rival's price, quality and share — so price is where
+   essentially all the detection risk lives. The giveaway was never that a bot's
+   price stayed still (it moves, because value moves); it was the DECIMALS. A fixed
+   ratio times a computed value emits $106.59 every round forever. People type $105. */
+
+function newBotState(seed, bot) {
+  return { rand: mulberry32(seed), drift: 0, lastShare: null,
+           lastStockout: false, mistakeCd: 0, anchor: bot.priceRatio };
+}
+
+const snapTo = (x, step) => Math.round(x / step) * step;
+
+/* A per-round variant of the personality — never a different personality. */
+function humaniseBot(bot, st) {
+  const rnd = st.rand;
+  const u = (a, b) => a + rnd() * (b - a);
+  // a slow, mean-reverting wander: nobody re-derives the same number every quarter
+  st.drift += u(-0.026, 0.026);
+  st.drift *= 0.84;
+  // and reactions to what just happened
+  if (st.lastShare !== null) {
+    if (st.lastShare < 0.14) st.drift -= 0.012;        // losing badly: shade down
+    else if (st.lastShare > 0.34) st.drift += 0.008;   // comfortable: take margin
+  }
+  if (st.lastStockout) st.drift += 0.010;              // could not supply: ease off
+  st.drift = Math.max(-0.07, Math.min(0.07, st.drift));
+
+  const out = Object.assign({}, bot);
+  out.priceRatio = st.anchor + st.drift;
+  out.rdTotal = Math.max(0, snapTo(bot.rdTotal * (1 + u(-0.14, 0.14)), 5000));
+  out.ad = Math.max(0, snapTo(bot.ad * (1 + u(-0.18, 0.18)), 1000));
+  out.produceRatio = bot.produceRatio * (1 + u(-0.05, 0.05));
+  out.headroom = bot.headroom * (1 + u(-0.04, 0.04));
+  out.procShare = Math.min(0.6, Math.max(0, bot.procShare + u(-0.05, 0.05)));
+
+  // real mistakes, occasionally, with a cooldown so they do not cluster
+  st.mistakeCd = Math.max(0, st.mistakeCd - 1);
+  if (st.mistakeCd === 0 && rnd() < 0.09) {
+    st.mistakeCd = 3;
+    const kind = Math.floor(rnd() * 4);
+    if (kind === 0) out.produceRatio *= 1.35;             // over-ordered
+    else if (kind === 1) out.rdTotal = 0;                 // skipped research
+    else if (kind === 2) out.ad = snapTo(bot.ad * 2.2, 1000);  // panic-bought attention
+    else out.headroom *= 1.45;                            // overbuilt the factory
+  }
+  return out;
+}
+
+/* People post round prices. This is the single most visible tell. */
+function humanPrice(val, ratio, rnd) {
+  const raw = val * ratio;
+  const roll = rnd();
+  if (roll < 0.30) return Math.round(raw / 5) * 5;
+  if (roll < 0.80) return Math.round(raw);
+  return Math.round(raw * 2) / 2;
+}
+
+function botObserve(st, share, stockout) {
+  st.lastShare = share;
+  st.lastStockout = stockout;
+}
+
+/* What any firm can honestly work out before a round resolves: its own share if
+   every rival repeats the price it charged last round. The bots get exactly the
+   same information the human player does — nobody sees this round's prices. */
+function estimateShare(me, myPrice, rivals, rivalLastPrices, marketMult) {
+  const entries = [{ product: me, price: myPrice }].concat(
+    rivals.map((rp, k) => ({ product: rp, price: rivalLastPrices[k] })));
+  return sharedDemands(entries, marketMult).demands[0];
+}
+
+/* Per product, so a bot running two lines splits its money across them instead of
+   spending its whole budget twice. */
+function botDecideFor(firm, bot, p, guess, opts) {
+  const o = opts || {};
+  const cm = o.capacityMult === undefined ? 1 : o.capacityMult;
+  const share = o.budgetShare === undefined ? 1 : o.budgetShare;
+  const price = value(p) * bot.priceRatio;
+  let budget = firm.cash * 0.55 * share;
+  let capex = 0, sellCapacity = 0;
+  const target = guess * bot.headroom;
+  if (target > effCapacity(p) * 0.95) {
+    capex = Math.min(Math.max(0, target - effCapacity(p)) * C.CAPEX_PER_UNIT, budget * 0.45);
+    budget -= capex;
+  } else if (p.age >= C.MATURITY_ROUND && effCapacity(p) > target * 1.3) {
+    sellCapacity = p.capacity - target * 1.1;   // only shed plant in real decline
+  }
+  const advertising = Math.min(bot.ad, Math.max(0, budget)); budget -= advertising;
+  const rd = Math.min(bot.rdTotal * (1 - bot.procShare), Math.max(0, budget)); budget -= rd;
+  const rdProcess = Math.min(bot.rdTotal * bot.procShare, Math.max(0, budget)); budget -= rdProcess;
+  const produce = Math.max(0, Math.min(guess * bot.produceRatio, effCapacity(p) * cm) - p.inventory);
+  return { price, produce, rd, rdProcess, advertising, capex, sellCapacity };
+}
+
+function botDecide(firm, bot, guess, opts) {
+  return botDecideFor(firm, bot, live(firm)[0], guess, opts);
+}
+
+/* A new product line for an existing company, carrying over what the company
+   already knows how to do. */
+function newLine(firm, name, kind) {
+  const p = newProduct(name, kind);
+  const best = live(firm).reduce((a, x) => Math.max(a, x.quality), 0);
+  const eff = live(firm).reduce((a, x) => Math.max(a, x.efficiency), 0);
+  /* Know-how carries over in full only when the new line is the same sort of
+     thing. A factory's process learning is worth much less to a software product,
+     and vice versa — which is what stops "launch a different kind" being a free
+     reset into whichever kind is currently strongest. */
+  const same = live(firm).some((x) => (x.kind || 'hardware') === (p.kind || 'hardware'));
+  const carry = same ? 1 : 0.6;
+  if (best > 0) p.quality = Math.max(p.quality, best * C.LINE_QUALITY_INHERIT * carry);
+  if (eff > 0) p.efficiency = Math.max(p.efficiency, eff * C.LINE_EFFICIENCY_INHERIT * carry);
+  return p;
+}
+
+/* Whether a bot opens a second line. Without this, long live games are decided by
+   the fact that only the humans can answer a product going into decline — which
+   would be a worse asymmetry than the one it fixes. The rules are the ones a
+   cautious operator would use: pay cash, never while in debt, only once the
+   existing line is maturing, and never so late that it cannot pay back. */
+function botShouldLaunch(firm, roundNo, totalRounds, rnd, creditLimit) {
+  const ps = live(firm);
+  if (!ps.length || ps.length >= C.MAX_PRODUCTS) return false;
+  /* Bots will borrow for a launch, but only a third of their remaining line —
+     they are meant to be plausible operators, not reckless ones. */
+  const headroom = Math.max(0, (creditLimit === undefined ? C.CREDIT_LIMIT : creditLimit) - firm.debt);
+  if (firm.cash + headroom - C.LAUNCH_COST < C.LAUNCH_RESERVE) return false;
+  if (totalRounds - roundNo < 5) return false;
+  const oldest = ps.reduce((a, p) => Math.max(a, p.age), 0);
+  if (oldest < C.MATURITY_ROUND - 3) return false;
+  return rnd() < 0.5;
+}
+
+
+
+
+/* ============================ game state ============================ */
+const S = {
+  firm: null, round: 0, totalRounds: 12, history: [], last: null,
+  started: false, over: false,
+  level: 1,            // 1 = practice, 2 = volatile, 3 = shared market
+  shocks: null, seed: 0, news: [], forecast: {},
+  rivals: [],          // [{bot, label, tagline, firm, lastPrice, lastShare, settled, state}]
+  hidden: false,       // L3: are the rivals unlabelled?
+  myLastShare: 0, lastReveal: null,
+};
+const NOISE = 0.15;    // how far the demand estimate can be off in Level 2
+const isL2 = () => S.level >= 2;      // volatile market: shocks + noisy forecast
+const isL3 = () => S.level === 3;      // ...and rivals sharing the market
+const mult = (track) => (S.shocks ? shockMult(S.shocks, track) : 1.0);
+/* A technology leap raises the bar for the whole market, not just for you. */
+const allFirms = () => [S.firm].concat(S.rivals.filter((r) => !r.firm.bankrupt).map((r) => r.firm));
+const $ = (id) => document.getElementById(id);
+const money = (n) => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString();
+const money2 = (n) => '$' + n.toFixed(2);
+const units = (n) => Math.round(n).toLocaleString();
+
+/* Stage gating: one new lever per round for the first four rounds. */
+const STAGE = { PRICE: 0, PRODUCE: 1, RD: 2, CAPEX: 3, ALL: 4 };
+const effCapacityOf = (cap, eff) => cap * Math.pow(eff / 100, C.THROUGHPUT_EXP);
+const stage = () => (S.level >= 2 ? STAGE.ALL : Math.min(S.round, STAGE.ALL));
+const unlocked = (lvl) => stage() >= lvl;
+
+/* Per-product decisions for the current round, keyed by product id. */
+let D = {};
+
+/* The estimate is drawn ONCE per round and held, so the number does not jitter
+   while the player is still moving sliders. */
+function drawForecast() {
+  S.forecast = {};
+  for (const p of live(S.firm)) {
+    S.forecast[p.id] = isL2()
+      ? 1 + (S.shocks.rand() * 2 - 1) * NOISE   // multiplicative estimate error
+      : 1;
+  }
+}
+
+/* What the player can honestly work out before the round resolves.
+   In a shared market that means assuming every rival repeats last round's price —
+   which is all anyone knows. The bots plan on exactly the same basis. */
+function estimateDemand(p, price) {
+  const err = S.forecast[p.id] || 1;
+  if (!isL3()) return soloDemand(p, price, mult('demand')) * err;
+  const live3 = S.rivals.filter((r) => !r.firm.bankrupt && live(r.firm).length);
+  if (!live3.length) return soloDemand(p, price, mult('demand')) * err;
+  return estimateShare(p, price,
+    live3.map((r) => live(r.firm)[0]),
+    live3.map((r) => r.lastPrice), mult('demand')) * err;
+}
+
+function freshDecisions() {
+  D = {};
+  for (const p of live(S.firm)) {
+    const price = value(p) * 0.95;
+    const forecast = estimateDemand(p, price);
+    D[p.id] = {
+      price: Math.round(price * 100) / 100,
+      produce: Math.max(0, Math.round(forecast - p.inventory)),
+      rd: 0, rdProcess: 0, advertising: 0,
+      targetCapacity: Math.round(p.capacity), discontinue: false,
+    };
+  }
+}
+
+/* Auto-pilot for levers the player has not unlocked yet. */
+function applyStageDefaults() {
+  for (const p of live(S.firm)) {
+    const d = D[p.id];
+    if (!unlocked(STAGE.PRODUCE)) {
+      d.produce = Math.max(0, Math.round(estimateDemand(p, d.price) - p.inventory));
+    }
+    if (!unlocked(STAGE.RD)) { d.rd = 0; d.rdProcess = 0; }
+    if (!isL3()) d.advertising = 0;
+    if (!unlocked(STAGE.CAPEX)) d.targetCapacity = Math.round(p.capacity);
+  }
+}
+
+/* ==================== pure projection (no mutation) ==================== */
+/* Mirrors resolve() on a cash basis so every line the player sees adds up to
+   the profit they actually get. */
+function project(scale) {
+  const demandScale = scale === undefined ? 1 : scale;
+  const rows = [];
+  let revenue = 0, production = 0, holding = 0, capUpkeep = 0,
+      fixed = 0, rd = 0, capex = 0, restructure = 0, salvage = 0, plantSale = 0, ads = 0;
+  const liveList = live(S.firm);
+
+  for (const p of liveList) {
+    const d = D[p.id];
+    if (d.discontinue) {
+      restructure += C.RESTRUCTURE;
+      salvage += p.invBook * C.SALVAGE;
+      rows.push({ p, discontinue: true });
+      continue;
+    }
+    const demand = estimateDemand(p, d.price) * demandScale;
+    /* selling plant takes effect immediately; building it arrives next round */
+    const sell = Math.min(Math.max(0, p.capacity - d.targetCapacity),
+                          Math.max(0, p.capacity - C.CAPACITY_FLOOR));
+    const build = Math.max(0, d.targetCapacity - p.capacity);
+    const capThisRound = effCapacityOf(p.capacity - sell, p.efficiency) * mult('capacity');
+    const produce = Math.max(0, Math.min(d.produce, capThisRound));
+    const uc = unitCost(p, mult('cost'));
+    const available = p.inventory + produce;
+    const sales = Math.min(demand, available);
+    const leftover = available - sales;
+    const unitBook = available > 0 ? (p.invBook + produce * uc) / available : 0;
+    const leftoverBook = leftover * unitBook;
+    const hold = leftoverBook * C.HOLDING;
+    const upk = (p.capacity - sell) * C.CAPACITY_UPKEEP;
+
+    revenue += sales * d.price;
+    production += produce * uc;
+    holding += hold;
+    capUpkeep += upk;
+    fixed += C.PRODUCT_FIXED;
+    rd += d.rd + d.rdProcess;
+    ads += d.advertising;
+    capex += build * C.CAPEX_PER_UNIT;
+    plantSale += sell * C.CAPEX_PER_UNIT * C.CAPACITY_RESALE;
+
+    rows.push({
+      p, demand, produce, sales, leftover, uc, unitBook,
+      lost: Math.max(0, demand - available),
+      contribution: sales * d.price - produce * uc - hold - upk
+        - C.PRODUCT_FIXED - d.rd - d.rdProcess - d.advertising,
+      capped: d.produce > capThisRound + 1e-6,
+      capThisRound, sell, build,
+    });
+  }
+
+  const corp = C.CORP_FIXED * Math.pow(Math.max(1, liveList.length), C.CORP_SCALING);
+  /* Must use the same health-based rate the engine will charge. Left on the flat
+     constant, the projection quietly understated interest for any company carrying
+     debt — and the projection being exact is the promise the practice level makes. */
+  const interest = S.firm.debt * creditRate(S.firm);
+  const profit = revenue + salvage + plantSale - production - holding - capUpkeep
+               - fixed - rd - ads - capex - restructure - corp - interest;
+  return { rows, revenue, salvage, plantSale, production, holding, capUpkeep, fixed,
+           rd, ads, capex, restructure, corp, interest, profit };
+}
+
+/* ============================== rendering ============================== */
+function lifecycleChip(p) {
+  if (p.age < C.RAMP.length) {
+    return `<span class="chip ramp">Launching · awareness ${Math.round(C.RAMP[p.age] * 100)}%</span>`;
+  }
+  if (p.age >= C.MATURITY_ROUND) {
+    const shrink = Math.round((1 - Math.pow(1 - C.DECLINE, p.age - C.MATURITY_ROUND + 1)) * 100);
+    return `<span class="chip decline">Declining · market ${shrink}% below peak</span>`;
+  }
+  return `<span class="chip mature">Mature</span>`;
+}
+
+function renderProducts() {
+  const host = $('products');
+  host.innerHTML = '';
+  for (const p of live(S.firm)) {
+    const d = D[p.id];
+    const val = value(p);
+    const uc = unitCost(p);
+    const effCap = effCapacity(p);
+    const inFlight = p.rdPipeline.reduce((a, r) => a + r.spend, 0);
+    const inFlightQ = p.rdPipeline.reduce((a, r) => a + r.dq, 0);
+    const nextLand = p.rdPipeline.length ? Math.min(...p.rdPipeline.map(r => r.lands)) : null;
+    const inFlightP = p.procPipeline.reduce((a, r) => a + r.spend, 0);
+    const inFlightE = p.procPipeline.reduce((a, r) => a + r.de, 0);
+    const nextLandP = p.procPipeline.length ? Math.min(...p.procPipeline.map(r => r.lands)) : null;
+
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML = `
+      <div class="phead">
+        <h3>${p.name}</h3>
+        ${lifecycleChip(p)}
+        ${p.pendingCapacity > 0 ? `<span class="chip">+${units(p.pendingCapacity)} capacity next round</span>` : ''}
+        ${inFlight > 0 ? `<span class="chip">${money(inFlight)} → +${inFlightQ.toFixed(1)} quality, round ${nextLand + 1}</span>` : ''}
+        ${inFlightP > 0 ? `<span class="chip">${money(inFlightP)} → +${inFlightE.toFixed(1)} efficiency, round ${nextLandP + 1}</span>` : ''}
+        ${p.inherited > 1 ? `<span class="chip">+${units(p.inherited)} inherited customers · fading ${Math.round(C.INHERIT_DECAY*100)}%/round</span>` : ''}
+      </div>
+      <div class="facts">
+        <div class="fact"><div class="k">Quality</div><div class="v tnum">${p.quality.toFixed(1)}</div></div>
+        <div class="fact"><div class="k">Value</div><div class="v tnum">${money2(val)}</div></div>
+        <div class="fact"><div class="k">Unit cost</div><div class="v tnum">${money2(uc)}</div></div>
+        <div class="fact"><div class="k">Efficiency</div><div class="v tnum">${p.efficiency.toFixed(1)}</div></div>
+        <div class="fact"><div class="k">Can make</div><div class="v tnum">${units(effCap)}</div></div>
+        <div class="fact"><div class="k">In stock</div><div class="v tnum">${units(p.inventory)}</div></div>
+      </div>
+
+      <div class="ctrl" data-lock="${STAGE.PRICE}">
+        <div class="lab"><span class="name">Price</span>
+          <span class="hint">value is ${money2(val)} · you're at <b id="pr-${p.id}"></b> of value</span></div>
+        <div class="row">
+          <input type="range" min="${(val*0.5).toFixed(0)}" max="${(val*1.6).toFixed(0)}" step="0.5"
+                 value="${d.price}" data-pid="${p.id}" data-field="price">
+          <input type="number" min="0" step="0.5" value="${d.price}" data-pid="${p.id}" data-field="price">
+        </div>
+      </div>
+
+      <div class="ctrl ${unlocked(STAGE.PRODUCE) ? '' : 'locked'}" data-lock="${STAGE.PRODUCE}">
+        <div class="lab"><span class="name">Units to make</span>
+          <span class="hint">max <b id="cap-${p.id}">${units(effCap)}</b> this round</span></div>
+        <div class="row">
+          <input type="range" min="0" max="${Math.round(effCap)}" step="10"
+                 value="${Math.min(d.produce, effCap)}" data-pid="${p.id}" data-field="produce">
+          <input type="number" min="0" step="10" value="${d.produce}" data-pid="${p.id}" data-field="produce">
+        </div>
+        ${unlocked(STAGE.PRODUCE) ? '' : '<div class="locknote">Set to match demand for you — unlocks round 2</div>'}
+      </div>
+
+      <div class="ctrl ${unlocked(STAGE.RD) ? '' : 'locked'}" data-lock="${STAGE.RD}">
+        <div class="lab"><span class="name">Product R&amp;D — make it better</span>
+          <span class="hint">${d.rd > 0 ? `+${(C.RD_K*Math.sqrt(d.rd/1000)*(100/Math.max(p.quality,1))).toFixed(1)} quality in 2 rounds` : 'raises what you can charge, and your reach'}</span></div>
+        <div class="row">
+          <input type="range" min="0" max="150000" step="2500" value="${d.rd}" data-pid="${p.id}" data-field="rd">
+          <input type="number" min="0" step="2500" value="${d.rd}" data-pid="${p.id}" data-field="rd">
+        </div>
+        ${unlocked(STAGE.RD) ? '' : '<div class="locknote">Unlocks round 3</div>'}
+      </div>
+
+      <div class="ctrl ${unlocked(STAGE.RD) ? '' : 'locked'}" data-lock="${STAGE.RD}">
+        <div class="lab"><span class="name">Process R&amp;D — make it cheaper</span>
+          <span class="hint">${d.rdProcess > 0 ? `+${(C.RD_K_PROC*Math.sqrt(d.rdProcess/1000)*(100/Math.max(p.efficiency,1))).toFixed(1)} efficiency in 2 rounds` : 'cuts unit cost, and gets more out of the factory'}</span></div>
+        <div class="row">
+          <input type="range" min="0" max="150000" step="2500" value="${d.rdProcess}" data-pid="${p.id}" data-field="rdProcess">
+          <input type="number" min="0" step="2500" value="${d.rdProcess}" data-pid="${p.id}" data-field="rdProcess">
+        </div>
+        ${unlocked(STAGE.RD) ? '' : '<div class="locknote">Unlocks round 3</div>'}
+      </div>
+
+      ${isL3() ? `
+      <div class="ctrl">
+        <div class="lab"><span class="name">Advertising</span>
+          <span class="hint">${d.advertising > 0
+            ? `awareness ${p.awareness.toFixed(0)} → ${Math.min(C.AD_AWARE_CAP, p.awareness + C.AD_K*Math.sqrt(d.advertising/1000)).toFixed(0)} this round`
+            : `awareness ${p.awareness.toFixed(0)} · fades ${Math.round(C.AD_DECAY*100)}% every round`}</span></div>
+        <div class="row">
+          <input type="range" min="0" max="60000" step="1000" value="${d.advertising}" data-pid="${p.id}" data-field="advertising">
+          <input type="number" min="0" step="1000" value="${d.advertising}" data-pid="${p.id}" data-field="advertising">
+        </div>
+        <div class="locknote">Buys share, not customers — it takes buyers from rivals rather than
+          creating new ones. Works the same round you spend it, then fades fast.</div>
+      </div>` : ''}
+
+      <div class="ctrl ${unlocked(STAGE.CAPEX) ? '' : 'locked'}" data-lock="${STAGE.CAPEX}">
+        <div class="lab"><span class="name">Factory size</span>
+          <span class="hint" id="caphint-${p.id}"></span></div>
+        <div class="row">
+          <input type="range" min="${C.CAPACITY_FLOOR}" max="${Math.round(Math.max(6000, p.capacity * 1.6))}"
+                 step="50" value="${d.targetCapacity}" data-pid="${p.id}" data-field="targetCapacity">
+          <input type="number" min="${C.CAPACITY_FLOOR}" step="50" value="${d.targetCapacity}"
+                 data-pid="${p.id}" data-field="targetCapacity">
+        </div>
+        <div class="locknote">Currently ${units(p.capacity)}. Building costs ${money2(C.CAPEX_PER_UNIT)}/unit and
+          arrives next round; selling returns only ${money2(C.CAPEX_PER_UNIT * C.CAPACITY_RESALE)}/unit but frees
+          the ${money2(C.CAPACITY_UPKEEP)}/unit upkeep immediately.
+          ${unlocked(STAGE.CAPEX) ? '' : ' Unlocks round 4.'}</div>
+      </div>
+
+      ${unlocked(STAGE.ALL) && live(S.firm).length > 0 ? `
+      <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
+        <button class="ghost danger" data-kill="${p.id}" aria-pressed="${d.discontinue}">
+          ${d.discontinue ? 'Keep this product' : 'Discontinue'}
+        </button>
+        ${d.discontinue ? `<span class="muted">Costs ${money(C.RESTRUCTURE)}, recovers ${money(p.invBook * C.SALVAGE)} of stock${
+          live(S.firm).filter((x) => !D[x.id].discontinue).length === 0
+            ? ' — <b>this is your last product; the game ends when it closes</b>' : ''}</span>` : ''}
+      </div>` : ''}
+    `;
+    host.appendChild(el);
+  }
+
+  const acts = $('portfolio-actions');
+  if (unlocked(STAGE.ALL) && !S.over) {
+    /* Not every product is a manufactured good. A software line has no factory and
+       nothing to warehouse but expensive people; a commodity is cheap to start and
+       impossible to innovate; deep tech costs more of everything and compounds. */
+    const buttons = Object.entries(KINDS).map(([id, k]) => {
+      const cost = launchCostOf(id);
+      const can = S.firm.cash >= cost;
+      return `<button class="ghost launch-kind" data-kind="${id}" ${can ? '' : 'disabled'}
+        title="${k.blurb}" style="margin:0 6px 6px 0;text-align:left">
+        + ${k.name || k.label} — ${money(cost)}</button>`;
+    }).join('');
+    acts.innerHTML = `<div style="margin-bottom:4px">${buttons}</div>
+      <span class="muted">Each extra line raises corporate overhead sharply.
+      Hover a kind to see what it costs you and what it gives you.</span>`;
+  } else acts.innerHTML = '';
+
+  for (const p of live(S.firm)) {
+    const el = document.getElementById('pr-' + p.id);
+    if (el) el.textContent = (D[p.id].price / value(p)).toFixed(2) + '×';
+    updateCapacityHint(p);
+  }
+}
+
+/* The factory-size control does two different things depending on which side of
+   your current plant it sits, so it has to say which one out loud. */
+function updateCapacityHint(p) {
+  const hint = document.getElementById('caphint-' + p.id);
+  if (!hint) return;
+  const d = D[p.id];
+  const build = Math.max(0, d.targetCapacity - p.capacity);
+  const sell = Math.min(Math.max(0, p.capacity - d.targetCapacity),
+                        Math.max(0, p.capacity - C.CAPACITY_FLOOR));
+  if (build > 0) {
+    hint.innerHTML = `build ${units(build)} for <b>${money(build * C.CAPEX_PER_UNIT)}</b>, ready next round`;
+  } else if (sell > 0) {
+    hint.innerHTML = `sell ${units(sell)} for <b>${money(sell * C.CAPEX_PER_UNIT * C.CAPACITY_RESALE)}</b> now`;
+  } else {
+    hint.innerHTML = `no change · upkeep ${money(p.capacity * C.CAPACITY_UPKEEP)}/round`;
+  }
+  /* selling shrinks what you can build THIS round, so move the production cap */
+  const cap = effCapacityOf(p.capacity - sell, p.efficiency);
+  const capEl = document.getElementById('cap-' + p.id);
+  if (capEl) capEl.textContent = units(cap);
+  document.querySelectorAll(`[data-pid="${p.id}"][data-field="produce"]`).forEach((o) => {
+    if (o.type === 'range') o.max = Math.round(cap);
+  });
+}
+
+function renderProjection() {
+  const pr = project();
+  const lo = isL2() ? project(1 - NOISE) : null;
+  const hi = isL2() ? project(1 + NOISE) : null;
+  const rows = [];
+  for (const r of pr.rows) {
+    if (r.discontinue) {
+      rows.push(`<div class="line"><span class="k">${r.p.name}</span><span class="v">shutting down</span></div>`);
+      continue;
+    }
+    if (isL2()) {
+      const l = lo.rows.find((x) => x.p.id === r.p.id);
+      const h = hi.rows.find((x) => x.p.id === r.p.id);
+      rows.push(`<div class="line"><span class="k">${r.p.name} — demand</span>
+        <span class="v tnum">${units(l.demand)}–${units(h.demand)}</span></div>`);
+      rows.push(`<div class="line"><span class="k" style="padding-left:10px">will sell</span>
+        <span class="v tnum">${units(l.sales)}–${units(h.sales)}</span></div>`);
+    } else {
+      rows.push(`<div class="line"><span class="k">${r.p.name} — demand</span>
+        <span class="v tnum">${units(r.demand)}</span></div>`);
+      rows.push(`<div class="line"><span class="k" style="padding-left:10px">will sell</span>
+        <span class="v tnum">${units(r.sales)}</span></div>`);
+    }
+  }
+  rows.push(`<div class="line"><span class="k">Revenue</span><span class="v tnum">${money(pr.revenue + pr.salvage)}</span></div>`);
+  rows.push(`<div class="line"><span class="k">Making the units</span><span class="v tnum neg">${money(-pr.production)}</span></div>`);
+  if (pr.holding > 1) rows.push(`<div class="line"><span class="k">Holding unsold stock</span><span class="v tnum neg">${money(-pr.holding)}</span></div>`);
+  rows.push(`<div class="line"><span class="k">Keeping the factory</span><span class="v tnum neg">${money(-pr.capUpkeep)}</span></div>`);
+  rows.push(`<div class="line"><span class="k">Product overhead</span><span class="v tnum neg">${money(-pr.fixed)}</span></div>`);
+  if (pr.rd > 0) rows.push(`<div class="line"><span class="k">Innovation</span><span class="v tnum neg">${money(-pr.rd)}</span></div>`);
+  if (pr.ads > 0) rows.push(`<div class="line"><span class="k">Advertising</span><span class="v tnum neg">${money(-pr.ads)}</span></div>`);
+  if (pr.capex > 0) rows.push(`<div class="line"><span class="k">Building factory</span><span class="v tnum neg">${money(-pr.capex)}</span></div>`);
+  if (pr.plantSale > 0) rows.push(`<div class="line"><span class="k">Selling factory space</span><span class="v tnum pos">${money(pr.plantSale)}</span></div>`);
+  if (pr.restructure > 0) rows.push(`<div class="line"><span class="k">Shutdown costs</span><span class="v tnum neg">${money(-pr.restructure)}</span></div>`);
+  rows.push(`<div class="line"><span class="k">Corporate overhead</span><span class="v tnum neg">${money(-pr.corp)}</span></div>`);
+  if (pr.interest > 0.5) rows.push(`<div class="line"><span class="k">Interest on debt</span><span class="v tnum neg">${money(-pr.interest)}</span></div>`);
+  if (isL2()) {
+    const worst = Math.min(lo.profit, hi.profit), best = Math.max(lo.profit, hi.profit);
+    rows.push(`<div class="line total range"><span class="k">Likely profit</span>
+      <span class="v tnum ${worst >= 0 ? 'pos' : best < 0 ? 'neg' : ''}">${money(worst)} to ${money(best)}</span></div>`);
+  } else {
+    rows.push(`<div class="line total"><span class="k">Projected profit</span>
+      <span class="v tnum ${pr.profit >= 0 ? 'pos' : 'neg'}">${money(pr.profit)}</span></div>`);
+  }
+  $('projection').innerHTML = rows.join('');
+
+  const w = [];
+  if (isL2()) {
+    const worst = Math.min(lo.profit, hi.profit), best = Math.max(lo.profit, hi.profit);
+    if (worst < 0 && best > 0) {
+      w.push(`<div class="warnbox warn"><span class="ic">!</span><span>
+        This plan makes money at the top of the range and loses it at the bottom.
+        You are betting on demand landing on the high side.</span></div>`);
+    }
+  }
+  /* A stockout shows up at the TOP of the demand range and unsold stock at the
+     BOTTOM, so each warning has to be checked against the scenario that produces
+     it — not both against one. */
+  const highRows = isL2() ? hi.rows : pr.rows;
+  const lowRows = isL2() ? lo.rows : pr.rows;
+  for (const r of highRows) {
+    if (r.discontinue) continue;
+    if (r.lost > 1) {
+      w.push(`<div class="warnbox bad"><span class="ic">!</span><span>
+        ${isL2() ? 'If demand lands high, you' : 'You'} could sell <b>${units(r.demand)}</b>
+        of ${r.p.name} but will only have <b>${units(r.sales)}</b>.
+        ${units(r.lost)} sales lost${r.capped ? ' — the factory is the limit, not your choice.' : '.'}
+        Stocking out also costs you 10% of next round's demand.</span></div>`);
+    }
+  }
+  for (const r of lowRows) {
+    if (r.discontinue) continue;
+    if (r.leftover > r.sales * 0.25 && r.leftover > 50) {
+      w.push(`<div class="warnbox warn"><span class="ic">!</span><span>
+        ${isL2() ? 'If demand lands low, ' : ''}<b>${units(r.leftover)}</b> units of
+        ${r.p.name} will go unsold. You pay to store them and they lose value each
+        round.</span></div>`);
+    }
+  }
+  const projCash = S.firm.cash + pr.profit;
+  if (projCash < 0) {
+    /* Quote the rate this borrowing would actually be priced at, not a headline
+       number — the whole point of a health-based rate is that you can see it
+       coming before you commit to the round that triggers it. */
+    const wouldOwe = S.firm.debt + (-projCash);
+    const after = { debt: wouldOwe, profitHistory: (S.firm.profitHistory || []).concat([pr.profit]) };
+    const rate = creditRate(after);
+    const band = creditStanding(after);
+    w.push(`<div class="warnbox bad"><span class="ic">!</span><span>
+      This plan spends <b>${money(-projCash)}</b> more than you have. You'd borrow it at
+      <b>${(rate * 100).toFixed(1)}%</b> a round — the rate for a company the lender
+      would call <b>${band.label.toLowerCase()}</b>. Past ${money(C.CREDIT_LIMIT)} of debt you're bankrupt.</span></div>`);
+  }
+  $('warnings').innerHTML = w.join('');
+  $('run-note').textContent = S.round + 1 >= S.totalRounds ? 'Final round' :
+    `${S.totalRounds - S.round - 1} rounds left after this one`;
+}
+
+function renderStats() {
+  $('level-label').textContent =
+    isL3() ? 'Shared market' : (isL2() ? 'Volatile market' : 'Practice level');
+  $('s-round').textContent = S.over ? `${S.history.length} / ${S.totalRounds}`
+    : `${S.round + 1} / ${S.totalRounds}`;
+  $('s-cash').textContent = money(S.firm.cash) + (S.firm.debt > 0 ? ` · ${money(-S.firm.debt)} debt` : '');
+  $('s-value').textContent = money(companyValue(S.firm));
+  /* What the next dollar of borrowing would cost, always visible — so the price of
+     a loan is known before the decision that needs one, not after. */
+  const band = creditStanding(S.firm);
+  $('s-credit').textContent = `${(creditRate(S.firm) * 100).toFixed(1)}% · ${band.label}`;
+  $('s-credit').title = band.note;
+}
+
+const COACH = [
+  { t: 'Round 1 — Pricing',
+    b: [`Your product is worth <b>$96.00</b> to customers right now. That's its <b>value</b>.`,
+        `Price below value and more people buy; price above it and fewer do. Roughly, <b>every 10% you cut below value wins about 20% more units</b>. Price at 1.5× value and nobody buys at all.`,
+        `Everything else is handled for you this round. Move the price slider and watch the projected profit on the right.`,
+        `<b>Expect to lose money.</b> Only 65% of the market has heard of you yet. That is normal and not a reason to panic.`] },
+  { t: 'Round 2 — How many to make',
+    b: [`Now you choose production too. This is a two-sided bet.`,
+        `Make <b>too few</b> and you lose the sales — and stocking out costs you 10% of next round's demand, because those customers went elsewhere.`,
+        `Make <b>too many</b> and you pay to store the surplus while it quietly loses value.`,
+        `Awareness is up to 90% this round.`] },
+  { t: 'Round 3 — Innovation, and the fork',
+    b: [`Innovation is now open, and it comes in two kinds. Same money, two different doors.`,
+        `<b>Product R&amp;D</b> makes it better. Quality raises your value, so you can charge more <em>and</em> reach more people. It's the stronger lever — but quality decays <b>4% every round</b>, so roughly $25–30k a round just holds your ground.`,
+        `<b>Process R&amp;D</b> makes it cheaper. It cuts your unit cost and squeezes more output from the same factory — which makes it the alternative to buying more plant.`,
+        `Both take <b>two rounds to arrive</b>. Most good players put the larger share into product R&amp;D; if you plan to compete on price, tilt further toward process.`] },
+  { t: 'Round 4 — The factory',
+    b: [`You now set your factory size directly. Building costs <b>$18 a unit</b> and arrives next round. Selling returns only <b>$7.20</b> — but it stops the upkeep straight away.`,
+        `That upkeep is the thing to watch: <b>$5 per unit of capacity every round</b>, whether you use it or not. A factory you're not filling is a slow leak.`,
+        `So the exit is deliberately lossy. Selling plant during a temporary dip is a mistake you pay for twice. Selling it when a product is genuinely in decline is one of the better moves in the game.`] },
+  { t: 'You have the whole company now',
+    b: [`Every lever is open, and you can also discontinue a product or launch a new line.`,
+        `Watch for the moment a product stops earning its keep: quality decaying, market shrinking after round 8, overhead unchanged. Shutting it down frees the overhead but costs ${'$20,000'} and you only recover 40% of the stock.`,
+        `A new line costs $180,000 and loses money while it ramps — so launch it while your first product is still strong enough to carry it.`] },
+];
+
+const TRACK_LABEL = { demand: 'demand', cost: 'unit costs', capacity: 'factory output' };
+
+function renderRivals() {
+  const host = $('rivals');
+  if (!isL3()) { host.innerHTML = ''; host.className = ''; return; }
+  const me = live(S.firm)[0];
+  const cards = [];
+  const mine = me ? `
+    <div class="rcard me">
+      <div class="nm">Your company</div><div class="tg">that's you</div>
+      <div class="rw"><span class="k">Last price</span><span class="v">${S.lastReveal ? money2(S.lastReveal.myPrice) : '—'}</span></div>
+      <div class="rw"><span class="k">Quality</span><span class="v">${me.quality.toFixed(0)}</span></div>
+      <div class="rw"><span class="k">Share</span><span class="v">${S.myLastShare ? (S.myLastShare*100).toFixed(0)+'%' : '—'}</span></div>
+      <div class="sharebar"><i style="width:${(S.myLastShare*100).toFixed(0)}%"></i></div>
+    </div>` : '';
+  cards.push(mine);
+  for (const r of S.rivals) {
+    const p = live(r.firm)[0];
+    const dead = r.firm.bankrupt || !p;
+    cards.push(`
+      <div class="rcard ${dead ? 'dead' : ''}">
+        <div class="nm">${r.label}</div><div class="tg">${dead ? 'out of business' : (r.tagline || '&nbsp;')}</div>
+        <div class="rw"><span class="k">Last price</span><span class="v">${dead ? '—' : money2(r.lastPrice)}</span></div>
+        <div class="rw"><span class="k">Quality</span><span class="v">${dead ? '—' : p.quality.toFixed(0)}</span></div>
+        <div class="rw"><span class="k">Share</span><span class="v">${dead ? '—' : (r.lastShare*100).toFixed(0)+'%'}</span></div>
+        <div class="sharebar"><i style="width:${dead ? 0 : (r.lastShare*100).toFixed(0)}%"></i></div>
+      </div>`);
+  }
+  host.className = 'rivals';
+  host.innerHTML = `<div class="hd"><span>The market</span>
+    <span>prices and shares are last round's — nobody sees this round's yet</span></div>
+    <div class="rgrid">${cards.join('')}</div>`;
+}
+
+function renderNews() {
+  const host = $('news');
+  if (!isL2() || (!S.news.length && !Object.keys(S.shocks.active).length)) {
+    host.innerHTML = ''; host.className = ''; return;
+  }
+  const items = S.news.map((n) => {
+    const good = n.kind === 'end'
+      || (n.kind !== 'end' && n.card.mult !== undefined
+          && ((n.track === 'demand' && n.card.mult > 1) || (n.track !== 'demand' && n.card.mult < 1)));
+    const cls = n.kind === 'end' ? '' : (good ? 'good' : 'bad');
+    let eff = '';
+    if (n.kind !== 'end' && n.card.mult !== undefined) {
+      const pct = Math.round((n.card.mult - 1) * 100);
+      eff = `<span class="eff">${TRACK_LABEL[n.track]} ${pct > 0 ? '+' : ''}${pct}%</span>`;
+    } else if (n.track === 'tech') {
+      eff = `<span class="eff">your quality −12%</span>`;
+    }
+    return `<div class="item ${cls}"><span class="dot"></span>
+      <span><span class="txt">${n.text}</span>${eff}</span></div>`;
+  }).join('');
+  const conds = Object.entries(S.shocks.active).map(([track, a]) => {
+    const pct = Math.round((a.card.mult - 1) * 100);
+    return `<span class="chip">${a.card.name} · ${TRACK_LABEL[track]} ${pct > 0 ? '+' : ''}${pct}%
+      · ${a.left} round${a.left === 1 ? '' : 's'} left</span>`;
+  }).join('');
+  host.className = 'news';
+  host.innerHTML = `<div class="hd">Market news</div>${items || ''}` +
+    (conds ? `<div class="conds">${conds}</div>` : '');
+}
+
+const COACH_L2 = [
+  { t: 'Volatile market',
+    b: [`Same company, same levers — two things are different.`,
+        `<b>Your forecast is now a range, not a number.</b> You get a read on demand, not a promise. Plan for the whole band: the projection on the right shows what happens at both ends.`,
+        `<b>The economy moves on its own.</b> Recessions, cost spikes, supply crunches — they arrive announced in the news panel, they last a few rounds, and they stack. Watch what is in play and how long it has left.`,
+        `The news tells you what is happening <em>now</em>. It does not predict. Nobody rings a bell at the top.`] },
+];
+
+function renderCoach() {
+  if (S.over) return;
+  if (isL3()) {
+    if (S.round === 0) {
+      $('coach').innerHTML = `<div class="title">Shared market</div>
+        <p>Same company, same levers, but now you are all selling to <b>the same customers</b>. Your share depends on three things: value for money, how good your product is, and how many people have heard of you.</p>
+        <p><b>Everyone commits blind.</b> You can see what rivals charged <em>last</em> round, never this one. Your projection assumes they hold steady — they usually won't.</p>
+        <p><b>Advertising is new.</b> It buys share rather than customers, works the same round you spend it, then fades by ${Math.round(C.AD_DECAY*100)}% a round. It's the only immediate lever you have.</p>
+        <p>A word of warning: if everyone advertises hard, everyone just gets poorer. The same is true of price cuts.</p>`;
+      return;
+    }
+    const rv = S.rivals.filter((r) => !r.firm.bankrupt && live(r.firm).length);
+    const cheapest = rv.length ? rv.reduce((a, b) => a.lastPrice < b.lastPrice ? a : b) : null;
+    const myP = S.lastReveal ? S.lastReveal.myPrice : 0;
+    const gone = S.rivals.filter((r) => r.firm.bankrupt).length;
+    let msg;
+    if (S.totalRounds - S.round <= 2) {
+      msg = `<b>R&amp;D can no longer land before the end.</b> Advertising still works though — it lands the same round, so it is the one thing still worth buying.`;
+    } else if (gone > 0 && S.round > 2) {
+      msg = `${gone === 1 ? 'A rival has' : `${gone} rivals have`} gone under. Their customers went to whoever was priced closest to them — and only about two thirds of them went anywhere at all. The market is smaller now, not just less crowded.`;
+    } else if (cheapest && myP && cheapest.lastPrice < myP * 0.9) {
+      msg = `<b>${cheapest.label}</b> is undercutting you badly. Matching them starts a price war that hurts you both — the usual answer is to be worth more, not cheaper.`;
+    } else if (S.myLastShare > 0.4) {
+      msg = `You hold <b>${(S.myLastShare*100).toFixed(0)}%</b> of the market. Watch your factory: share you cannot supply spills straight to whoever can.`;
+    } else if (S.myLastShare < 0.18) {
+      msg = `You are down to <b>${(S.myLastShare*100).toFixed(0)}%</b>. Share follows value for money, quality, and awareness — work out which of the three you are losing on before spending.`;
+    } else {
+      msg = `Prices and shares above are from last round. Everyone is committing blind this round, including them.`;
+    }
+    $('coach').innerHTML = `<div class="title">Round ${S.round + 1}</div><p>${msg}</p>`;
+    return;
+  }
+  if (isL2()) {
+    if (S.round === 0) {
+      const c = COACH_L2[0];
+      $('coach').innerHTML = `<div class="title">${c.t}</div>` + c.b.map((x) => `<p>${x}</p>`).join('');
+    } else {
+      const active = Object.values(S.shocks.active);
+      const late = S.totalRounds - S.round <= 3;
+      let msg;
+      if (late && S.round + 1 > S.totalRounds - 2) {
+        msg = `<b>R&amp;D can no longer land before the end</b> — anything spent on it now is wasted. Sell down your stock and protect your cash.`;
+      } else if (active.length >= 2) {
+        msg = `Two things are hitting at once: <b>${active.map((a) => a.card.name).join('</b> and <b>')}</b>. Stacked shocks are what actually breaks companies — one you can absorb, two at once eats the cash buffer.`;
+      } else if (active.length === 1) {
+        const a = active[0];
+        msg = `<b>${a.card.name}</b> has ${a.left} round${a.left === 1 ? '' : 's'} left. Decide whether to ride it out or trim — and remember it will lift, so gutting the company to survive two bad rounds is usually the more expensive mistake.`;
+      } else if (late) {
+        msg = `Only ${S.totalRounds - S.round} rounds left, and the market is calm. A good time to run your stock down rather than build it.`;
+      } else {
+        msg = `Calm conditions. Worth building a cash buffer now — the projection range is narrow today, and it will not stay that way.`;
+      }
+      $('coach').innerHTML = `<div class="title">Round ${S.round + 1}</div><p>${msg}</p>`;
+    }
+    return;
+  }
+  const c = COACH[Math.min(S.round, COACH.length - 1)];
+  const showTitle = S.round <= STAGE.ALL;
+  $('coach').innerHTML = showTitle
+    ? `<div class="title">${c.t}</div>` + c.b.map((x) => `<p>${x}</p>`).join('')
+    : `<div class="title">Round ${S.round + 1}</div><p>${
+        S.totalRounds - S.round <= 3
+          ? (S.round + 1 <= S.totalRounds - 2
+              ? `Only ${S.totalRounds - S.round} rounds left. Innovation takes two rounds to arrive, so this is the <b>last round where R&amp;D can still pay off</b>. After this, money spent on it is money burned.`
+              : `Only ${S.totalRounds - S.round} round${S.totalRounds - S.round === 1 ? '' : 's'} left. <b>R&amp;D can no longer land before the end</b> — anything you spend on it now is wasted. Sell down your stock and protect your cash.`)
+          : `Every lever is open. Your score at the end is cash plus what your products are still worth, so a healthy company beats a stripped one.`}</p>`;
+}
+
+/* ============================== charts ============================== */
+function niceTicks(min, max, count) {
+  if (min === max) { min -= 1; max += 1; }
+  const span = max - min;
+  const raw = span / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = (norm >= 5 ? 10 : norm >= 2 ? 5 : norm >= 1 ? 2 : 1) * mag;
+  const lo = Math.floor(min / step) * step;
+  const hi = Math.ceil(max / step) * step;
+  const out = [];
+  for (let v = lo; v <= hi + step * 0.5; v += step) out.push(v);
+  return out;
+}
+const shortMoney = (v) => {
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v < 0 ? '-' : '') + '$' + (a / 1e6).toFixed(a >= 1e7 ? 0 : 1) + 'm';
+  if (a >= 1000) return (v < 0 ? '-' : '') + '$' + Math.round(a / 1000) + 'k';
+  return (v < 0 ? '-' : '') + '$' + Math.round(a);
+};
+
+function drawCash() {
+  const svg = $('chart-cash'), tip = $('tip-cash');
+  const W = svg.clientWidth || 380, H = 190;
+  const m = { t: 8, r: 10, b: 24, l: 52 };
+  const d = S.history;
+  if (!d.length) { svg.innerHTML = ''; return; }
+  const vals = d.map((x) => x.cash);
+  const ticks = niceTicks(Math.min(0, ...vals), Math.max(...vals), 4);
+  const y0 = ticks[0], y1 = ticks[ticks.length - 1];
+  const px = (i) => m.l + (d.length === 1 ? (W - m.l - m.r) / 2
+    : (i / (d.length - 1)) * (W - m.l - m.r));
+  const py = (v) => m.t + (1 - (v - y0) / (y1 - y0)) * (H - m.t - m.b);
+
+  let g = '';
+  for (const t of ticks) {
+    g += `<line x1="${m.l}" y1="${py(t)}" x2="${W - m.r}" y2="${py(t)}"
+      stroke="var(--grid)" stroke-width="1"/>
+      <text x="${m.l - 8}" y="${py(t) + 4}" text-anchor="end" font-size="11"
+      fill="var(--muted)">${shortMoney(t)}</text>`;
+  }
+  const path = d.map((x, i) => `${i ? 'L' : 'M'}${px(i)},${py(x.cash)}`).join(' ');
+  g += `<path d="${path}" fill="none" stroke="var(--series-1)" stroke-width="2"
+    stroke-linejoin="round" stroke-linecap="round"/>`;
+  for (let i = 0; i < d.length; i++) {
+    g += `<circle cx="${px(i)}" cy="${py(d[i].cash)}" r="4" fill="var(--series-1)"
+      stroke="var(--surface-1)" stroke-width="2"/>`;
+    g += `<rect x="${px(i) - 12}" y="${m.t}" width="24" height="${H - m.t - m.b}"
+      fill="transparent" data-i="${i}" class="hit"/>`;
+  }
+  for (let i = 0; i < d.length; i++) {
+    if (d.length <= 13 || i % 2 === 0 || i === d.length - 1) {
+      g += `<text x="${px(i)}" y="${H - 6}" text-anchor="middle" font-size="11"
+        fill="var(--muted)">${d[i].round}</text>`;
+    }
+  }
+  g += `<line x1="${m.l}" y1="${H - m.b}" x2="${W - m.r}" y2="${H - m.b}"
+    stroke="var(--baseline)" stroke-width="1"/>`;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('height', H);
+  svg.innerHTML = g;
+  svg.querySelectorAll('.hit').forEach((r) => {
+    r.addEventListener('mouseenter', () => {
+      const i = +r.dataset.i;
+      tip.innerHTML = `<b>Round ${d[i].round}</b><br>Cash ${money(d[i].cash)}`;
+      tip.style.opacity = 1;
+      tip.style.left = Math.min(px(i) + 10, W - 110) + 'px';
+      tip.style.top = (py(d[i].cash) + 18) + 'px';
+    });
+    r.addEventListener('mouseleave', () => { tip.style.opacity = 0; });
+  });
+}
+
+function drawProfit() {
+  const svg = $('chart-profit'), tip = $('tip-profit');
+  const W = svg.clientWidth || 380, H = 190;
+  const m = { t: 8, r: 10, b: 24, l: 52 };
+  const d = S.history;
+  if (!d.length) { svg.innerHTML = ''; return; }
+  const vals = d.map((x) => x.profit);
+  const ticks = niceTicks(Math.min(0, ...vals), Math.max(0, ...vals), 4);
+  const y0 = ticks[0], y1 = ticks[ticks.length - 1];
+  const py = (v) => m.t + (1 - (v - y0) / (y1 - y0)) * (H - m.t - m.b);
+  const band = (W - m.l - m.r) / d.length;
+  const bw = Math.min(26, band * 0.62);
+
+  let g = '';
+  for (const t of ticks) {
+    g += `<line x1="${m.l}" y1="${py(t)}" x2="${W - m.r}" y2="${py(t)}"
+      stroke="${t === 0 ? 'var(--baseline)' : 'var(--grid)'}" stroke-width="1"/>
+      <text x="${m.l - 8}" y="${py(t) + 4}" text-anchor="end" font-size="11"
+      fill="var(--muted)">${shortMoney(t)}</text>`;
+  }
+  const zero = py(0);
+  for (let i = 0; i < d.length; i++) {
+    const cx = m.l + band * (i + 0.5);
+    const v = d[i].profit;
+    const top = v >= 0 ? py(v) : zero;
+    const h = Math.max(1, Math.abs(py(v) - zero));
+    const col = v >= 0 ? 'var(--series-1)' : 'var(--series-neg)';
+    /* 4px rounded data-end, square against the baseline */
+    const r = Math.min(4, h);
+    const path = v >= 0
+      ? `M${cx - bw/2},${top + h} L${cx - bw/2},${top + r} Q${cx - bw/2},${top} ${cx - bw/2 + r},${top}
+         L${cx + bw/2 - r},${top} Q${cx + bw/2},${top} ${cx + bw/2},${top + r} L${cx + bw/2},${top + h} Z`
+      : `M${cx - bw/2},${top} L${cx - bw/2},${top + h - r} Q${cx - bw/2},${top + h} ${cx - bw/2 + r},${top + h}
+         L${cx + bw/2 - r},${top + h} Q${cx + bw/2},${top + h} ${cx + bw/2},${top + h - r} L${cx + bw/2},${top} Z`;
+    g += `<path d="${path}" fill="${col}"/>`;
+    g += `<rect x="${cx - band/2}" y="${m.t}" width="${band}" height="${H - m.t - m.b}"
+      fill="transparent" data-i="${i}" class="hit"/>`;
+    if (d.length <= 13 || i % 2 === 0 || i === d.length - 1) {
+      g += `<text x="${cx}" y="${H - 6}" text-anchor="middle" font-size="11"
+        fill="var(--muted)">${d[i].round}</text>`;
+    }
+  }
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('height', H);
+  svg.innerHTML = g;
+  svg.querySelectorAll('.hit').forEach((r) => {
+    r.addEventListener('mouseenter', () => {
+      const i = +r.dataset.i;
+      tip.innerHTML = `<b>Round ${d[i].round}</b><br>Profit ${money(d[i].profit)}`;
+      tip.style.opacity = 1;
+      tip.style.left = Math.min(m.l + band * (i + 0.5) + 10, W - 120) + 'px';
+      tip.style.top = '10px';
+    });
+    r.addEventListener('mouseleave', () => { tip.style.opacity = 0; });
+  });
+}
+
+function renderHistoryTable() {
+  if (!S.history.length) { $('history-table').innerHTML = ''; return; }
+  const rows = S.history.map((h) => `<tr><td>${h.round}</td>
+    <td>${money(h.profit)}</td><td>${money(h.cash)}</td>
+    <td>${units(h.sales)}</td><td>${money(h.value)}</td></tr>`).join('');
+  $('history-table').innerHTML = `<table class="data">
+    <thead><tr><th>Round</th><th>Profit</th><th>Cash</th><th>Units sold</th>
+    <th>Company value</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderResults() {
+  if (!S.last) { $('results-card').hidden = true; return; }
+  $('results-card').hidden = false;
+  const r = S.last;
+  const line = (k, v, cls, sub) =>
+    `<tr class="${sub ? 'sub' : ''}"><td>${k}</td><td class="v ${cls || ''}">${v}</td></tr>`;
+  let html = '<table class="pl">';
+  for (const L of r.detail) {
+    if (L.event === 'discontinued') {
+      html += line(`${L.name} — discontinued`, `+${money(L.salvage)} stock recovered`, '', true);
+      continue;
+    }
+    html += line(`${L.name} — sold`, `${units(L.sales)} of ${units(L.demand)} wanted`, '', true);
+    if (isL2() && r.expected && r.expected[L.name]) {
+      const miss = (L.demand - r.expected[L.name]) / r.expected[L.name];
+      if (Math.abs(miss) > 0.02) {
+        html += line('&nbsp;&nbsp;your forecast was',
+          `${units(r.expected[L.name])} — ${Math.abs(miss * 100).toFixed(0)}% ${miss > 0 ? 'too low' : 'too high'}`,
+          '', true);
+      }
+    }
+    if (L.lostSales > 1) {
+      html += line(`&nbsp;&nbsp;lost to stockout`, `${units(L.lostSales)} units`, 'neg', true);
+    }
+  }
+  html += line('Revenue', money(r.revenue));
+  html += line('Everything it cost', money(-r.costs), 'neg');
+  html += `<tr class="total"><td>Round profit</td>
+    <td class="v ${r.profit >= 0 ? 'pos' : 'neg'}">${money(r.profit)}</td></tr>`;
+  html += '</table>';
+  if (isL3() && S.lastReveal) {
+    const rows = [{ name: 'You', price: S.lastReveal.myPrice, share: S.lastReveal.myShare, me: true }]
+      .concat(S.lastReveal.rivals);
+    rows.sort((a, b) => b.share - a.share);
+    html += `<div style="margin-top:14px"><h2 style="margin-bottom:8px">What everyone charged</h2>
+      <table class="pl">` + rows.map((x) => `<tr${x.me ? ' style="font-weight:650"' : ''}>
+        <td>${x.name}${x.bankrupt ? ' — went under' : ''}</td>
+        <td class="v">${money2(x.price)} · ${(x.share * 100).toFixed(0)}% share</td></tr>`).join('')
+      + `</table></div>`;
+  }
+  if (isL3() && S.inheritance) {
+    const inh = S.inheritance;
+    html += `<div class="warnbox" style="margin-top:12px"><span class="ic">!</span><span>
+      <b>${inh.name} has gone out of business.</b> About two thirds of its customers
+      found a new supplier — you picked up <b>${units(inh.myUnits)}</b> of them
+      (${(inh.myFraction * 100).toFixed(0)}% of those that moved), because they go to
+      whoever is priced closest to what they lost. The rest simply stopped buying.
+      Your share of them fades as the market settles.</span></div>`;
+  }
+  if (r.landed && r.landed.length) {
+    html += `<div class="warnbox" style="margin-top:12px"><span class="ic">✓</span><span>${
+      r.landed.map((l) => l.gain !== undefined
+        ? `Product R&amp;D landed on <b>${l.product}</b>: +${l.gain.toFixed(1)} quality.`
+        : l.efficiency !== undefined
+          ? `Process R&amp;D landed on <b>${l.product}</b>: +${l.efficiency.toFixed(1)} efficiency.`
+          : `New factory space came online for <b>${l.product}</b>: +${units(l.capacity)} units.`).join(' ')
+    }</span></div>`;
+  }
+  $('results').innerHTML = html;
+}
+
+function renderAll() {
+  renderStats();
+  renderRivals();
+  renderNews();
+  renderCoach();
+  renderProducts();
+  renderProjection();
+  renderResults();
+  const has = S.history.length > 0;
+  $('charts-card').hidden = !has;
+  if (has) { drawCash(); drawProfit(); renderHistoryTable(); }
+}
+
+/* ============================== actions ============================== */
+function runRound() {
+  applyStageDefaults();
+  const decisions = {};
+  const expectedByName = {};
+  for (const p of live(S.firm)) {
+    const d = D[p.id];
+    expectedByName[p.name] = estimateDemand(p, d.price);
+    const build = Math.max(0, d.targetCapacity - p.capacity);
+    const sell = Math.max(0, p.capacity - d.targetCapacity);
+    decisions[p.name] = {
+      price: d.price, produce: d.produce, rd: d.rd, rdProcess: d.rdProcess,
+      advertising: d.advertising || 0,
+      capex: build * C.CAPEX_PER_UNIT, sellCapacity: sell,
+      discontinue: d.discontinue,
+    };
+  }
+  let res;
+  if (isL3()) {
+    /* Everyone commits blind: the player and every bot plan against last round's
+       prices, then the market is split and nobody's plan can change. */
+    const liveRivals = S.rivals.filter((r) => !r.firm.bankrupt && live(r.firm).length);
+    const botPlans = liveRivals.map((r) => {
+      const rp = live(r.firm)[0];
+      const others = [live(S.firm)[0]].concat(
+        liveRivals.filter((x) => x !== r).map((x) => live(x.firm)[0]));
+      const otherPrices = [S.lastReveal ? S.lastReveal.myPrice : value(live(S.firm)[0]) * 0.95]
+        .concat(liveRivals.filter((x) => x !== r).map((x) => x.lastPrice));
+      const eff = humaniseBot(r.bot, r.state);
+      const myPrice = humanPrice(value(rp), eff.priceRatio, r.state.rand);
+      const guess = estimateShare(rp, myPrice, others, otherPrices, mult('demand'));
+      const plan = botDecide(r.firm, eff, guess, { capacityMult: mult('capacity') });
+      plan.price = myPrice;   // the posted price is the human-looking one
+      return plan;
+    });
+
+    // advertising lands before share is computed
+    applyAdvertising(S.firm, decisions);
+    liveRivals.forEach((r, k) => applyAdvertising(r.firm, { [live(r.firm)[0].name]: botPlans[k] }));
+
+    const myProduct = live(S.firm)[0];
+    const entries = [{ product: myProduct, price: decisions[myProduct.name].price }]
+      .concat(liveRivals.map((r, k) => ({ product: live(r.firm)[0], price: botPlans[k].price })));
+    const { demands, shares } = sharedDemands(entries, mult('demand'));
+    const avail = entries.map((e, i) => {
+      const plan = i === 0 ? decisions[myProduct.name] : botPlans[i - 1];
+      return e.product.inventory
+        + Math.min(plan.produce, effCapacity(e.product) * mult('capacity'));
+    });
+    const split = spill(demands, avail);
+
+    res = resolve(S.firm, decisions, S.round, {
+      marketMult: mult('demand'), costShock: mult('cost'), capacityMult: mult('capacity'),
+      sharedDemands: { [myProduct.name]: split[0] },
+    });
+    S.myLastShare = shares[0];
+    liveRivals.forEach((r, k) => {
+      const rp = live(r.firm)[0];
+      resolve(r.firm, { [rp.name]: botPlans[k] }, S.round, {
+        marketMult: mult('demand'), costShock: mult('cost'), capacityMult: mult('capacity'),
+        sharedDemands: { [rp.name]: split[k + 1] },
+      });
+      r.lastPrice = botPlans[k].price;
+      r.lastShare = shares[k + 1];
+      botObserve(r.state, shares[k + 1], live(r.firm).length ? live(r.firm)[0].stockoutLast : false);
+    });
+    /* A rival that just went under leaves customers behind. About two thirds of
+       them find a new supplier, and they go to whoever is priced closest to what
+       they lost — not to whoever is biggest. */
+    S.inheritance = null;
+    const prices = { [myProduct.name]: decisions[myProduct.name].price };
+    liveRivals.forEach((r, k) => { prices[live(r.firm)[0].name] = botPlans[k].price; });
+    for (let k = 0; k < liveRivals.length; k++) {
+      const r = liveRivals[k];
+      if (r.firm.bankrupt && !r.settled) {
+        const survivors = [S.firm].concat(
+          S.rivals.filter((x) => x !== r && !x.firm.bankrupt).map((x) => x.firm));
+        const res2 = distributeCustomers(r.firm, survivors, botPlans[k].price, prices);
+        const mine = res2.shares.find((x) => x.product === myProduct);
+        S.inheritance = {
+          name: r.label, orphaned: res2.orphaned,
+          myUnits: mine ? mine.units : 0, myFraction: mine ? mine.fraction : 0,
+        };
+        r.settled = true;
+      }
+    }
+    S.lastReveal = {
+      myPrice: decisions[myProduct.name].price, myShare: shares[0],
+      rivals: liveRivals.map((r, k) => ({
+        name: r.label, price: botPlans[k].price, share: shares[k + 1],
+        ad: botPlans[k].advertising, bankrupt: r.firm.bankrupt,
+      })),
+    };
+  } else {
+    res = resolve(S.firm, decisions, S.round, {
+      marketMult: mult('demand'), costShock: mult('cost'), capacityMult: mult('capacity'),
+    });
+  }
+  const sales = res.log.reduce((a, L) => a + (L.sales || 0), 0);
+  S.history.push({
+    round: S.round + 1, profit: res.profit, cash: S.firm.cash,
+    sales, value: companyValue(S.firm),
+  });
+  S.last = {
+    profit: res.profit, revenue: res.revenue, costs: res.costs,
+    detail: res.log, landed: S.pendingLanded || [],
+    expected: expectedByName,
+  };
+  S.round += 1;
+
+  if (S.firm.bankrupt || S.round >= S.totalRounds || live(S.firm).length === 0) {
+    S.over = true;
+    renderAll();
+    showGameOver();
+    return;
+  }
+  if (isL2()) S.news = shockTick(S.shocks, allFirms());
+  if (isL3()) S.rivals.forEach((r) => { if (!r.firm.bankrupt) upkeep(r.firm, S.round); });
+  S.pendingLanded = upkeep(S.firm, S.round);
+  S.last.landed = S.pendingLanded;
+  drawForecast();
+  freshDecisions();
+  renderAll();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* Final standings. In a hidden game this is the payoff: the moment you find out
+   the company you spent twelve rounds reading was a machine — or wasn't. In a
+   live session the same table would mark each seat Person or AI; here every
+   rival is AI, so what is worth revealing is which strategy each one was. */
+function standingsTable() {
+  const rows = [{ label: 'Your company', val: companyValue(S.firm),
+                  bust: S.firm.bankrupt, me: true, what: 'You' }]
+    .concat(S.rivals.map((r) => ({
+      label: r.label, val: companyValue(r.firm), bust: r.firm.bankrupt,
+      me: false, what: r.bot.strategy,
+    })));
+  rows.sort((a, b) => b.val - a.val);
+  const place = rows.findIndex((x) => x.me) + 1;
+  const body = rows.map((x, i) => `
+    <tr${x.me ? ' class="total"' : ''}>
+      <td>${i + 1}. ${x.label}${x.bust ? ' <span class="muted">(went under)</span>' : ''}</td>
+      <td class="v">${money(x.val)}</td>
+      <td class="muted" style="text-align:right;font-size:11px">${x.me ? '' : x.what}</td>
+    </tr>`).join('');
+  return `
+    <h3 style="margin:20px 0 6px">Final standings</h3>
+    <p class="muted" style="margin:0 0 8px">${place === 1
+      ? 'You won.'
+      : `You finished ${place}${['st','nd','rd'][place - 1] || 'th'} of ${rows.length}.`}
+      ${S.hidden ? 'Here is what each of them actually was.' : ''}</p>
+    <table class="pl">${body}</table>`;
+}
+
+function showGameOver() {
+  const f = S.firm;
+  const productValue = f.products.reduce((a, p) => {
+    if (!p.alive || !p.profitHistory.length) return a;
+    const recent = p.profitHistory.slice(-3);
+    const avg = recent.reduce((x, y) => x + y, 0) / recent.length;
+    return a + (avg > 0 ? 4 * avg : 0);
+  }, 0);
+  const stock = f.products.reduce((a, p) => a + p.invBook * C.SALVAGE, 0);
+  const total = companyValue(f);
+  const best = S.history.reduce((a, h) => Math.max(a, h.profit), -Infinity);
+  let verdict;
+  if (f.bankrupt) verdict = `You ran out of credit. Debt passed ${money(C.CREDIT_LIMIT)} and the bank called it in.`;
+  else if (total > 900000) verdict = `Strong result. You compounded quality and kept the factory busy.`;
+  else if (total > 500000) verdict = `Solid. A balanced game — there was probably more available from earlier innovation.`;
+  else if (total > 250000) verdict = `You finished ahead of where you started, but the company barely grew.`;
+  else verdict = `The company shrank. Most often that means innovation was underfunded and quality decayed away.`;
+
+  $('final').innerHTML = `
+    <div style="font-size:40px;font-weight:700;letter-spacing:-0.03em;margin:6px 0 2px">${money(total)}</div>
+    <div class="muted" style="margin-bottom:14px">Final company value after ${S.history.length} rounds</div>
+    <p style="margin:0 0 16px">${verdict}</p>
+    <table class="pl">
+      <tr><td>Cash</td><td class="v">${money(f.cash)}</td></tr>
+      ${f.debt > 0 ? `<tr><td>Debt</td><td class="v neg">${money(-f.debt)}</td></tr>` : ''}
+      <tr><td>Stock at salvage value</td><td class="v">${money(stock)}</td></tr>
+      <tr><td>What your products are still worth</td><td class="v">${money(productValue)}</td></tr>
+      <tr class="total"><td>Company value</td><td class="v">${money(total)}</td></tr>
+    </table>
+    ${isL3() ? standingsTable() : ''}
+    ${isL2() ? `<p class="muted" style="margin-top:12px">Seed <b>${S.seed}</b> — same seed, same market.</p>` : ''}
+    <p class="muted" style="margin-top:12px">Best round: ${money(best)}.
+      Products are valued at four times their recent profit — which is why running
+      a company into the ground to bank the cash scores badly.</p>`;
+  $('gameover').hidden = false;
+}
+
+function newGame(rounds, level, seed, nRivals, hidden) {
+  S.level = level || 1;
+  S.seed = seed || Math.floor(Math.random() * 1e9);
+  S.firm = newFirm();
+  S.firm.products.push(newProduct('Widget'));
+  S.round = 0; S.totalRounds = rounds; S.history = []; S.last = null;
+  S.over = false; S.started = true;
+  S.myLastShare = 0; S.lastReveal = null; S.inheritance = null;
+  S.rivals = [];
+  S.hidden = !!hidden;
+  if (isL3()) {
+    const seats = seatRivals(S.seed, nRivals || 3, S.hidden);
+    for (const seat of seats) {
+      const f = newFirm();
+      f.products.push(newProduct(seat.label));
+      S.rivals.push({ bot: seat.bot, label: seat.label, tagline: seat.tagline,
+                      firm: f, lastPrice: value(live(f)[0]) * 0.95, lastShare: 0,
+                      settled: false,
+                      state: newBotState(S.seed + 7919 * (S.rivals.length + 1), seat.bot) });
+    }
+    const n = S.rivals.length + 1;
+    S.myLastShare = 1 / n;
+    S.rivals.forEach((r) => { r.lastShare = 1 / n; });
+  }
+  S.shocks = isL2() ? newShockState(S.seed) : null;
+  S.news = isL2() ? shockTick(S.shocks, allFirms()) : [];
+  if (isL3()) S.rivals.forEach((r) => upkeep(r.firm, 0));
+  S.pendingLanded = upkeep(S.firm, 0);
+  drawForecast();
+  freshDecisions();
+  $('gameover').hidden = true;
+  $('setup').hidden = true;
+  renderAll();
+}
+
+/* ============================== wiring ============================== */
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (!t.dataset || !t.dataset.pid) return;
+  const pid = +t.dataset.pid, field = t.dataset.field;
+  let v = parseFloat(t.value);
+  if (isNaN(v) || v < 0) v = 0;
+  D[pid][field] = v;
+  /* keep the paired slider and number box in step */
+  document.querySelectorAll(`[data-pid="${pid}"][data-field="${field}"]`).forEach((o) => {
+    if (o !== t) o.value = v;
+  });
+  const p = live(S.firm).find((x) => x.id === pid);
+  if (field === 'price' && p) {
+    const el = document.getElementById('pr-' + pid);
+    if (el) el.textContent = (v / value(p)).toFixed(2) + '×';
+  }
+  if (field === 'targetCapacity' && p) updateCapacityHint(p);
+  renderProjection();
+  renderStats();
+});
+
+document.addEventListener('click', (e) => {
+  const kill = e.target.closest('[data-kill]');
+  if (kill) {
+    const pid = +kill.dataset.kill;
+    D[pid].discontinue = !D[pid].discontinue;
+    renderProducts(); renderProjection();
+    return;
+  }
+  const kindBtn = e.target.closest && e.target.closest('.launch-kind');
+  if (kindBtn && !kindBtn.disabled) {
+    const kind = kindBtn.dataset.kind;
+    S.firm.cash -= launchCostOf(kind);
+    const n = newLine(S.firm, KINDS[kind].label + ' line ' + (S.firm.products.length + 1), kind);
+    S.firm.products.push(n);
+    const price = value(n) * 0.95;
+    D[n.id] = { price: Math.round(price * 100) / 100,
+      produce: Math.max(0, Math.round(soloDemand(n, price))),
+      rd: 0, rdProcess: 0, targetCapacity: Math.round(n.capacity), discontinue: false };
+    renderAll();
+    return;
+  }
+  if (e.target.id === 'run' && !S.over) runRound();
+  if (e.target.id === 'restart' || e.target.id === 'again') {
+    $('gameover').hidden = true; $('setup').hidden = false;
+  }
+  if (e.target.id === 'theme-toggle') {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    e.target.textContent = next === 'dark' ? 'Light' : 'Dark';
+    if (S.history.length) { drawCash(); drawProfit(); }
+  }
+  const choice = e.target.closest('.choice');
+  if (choice) {
+    choice.parentElement.querySelectorAll('.choice')
+      .forEach((c) => c.setAttribute('aria-pressed', 'false'));
+    choice.setAttribute('aria-pressed', 'true');
+  }
+  if (choice && choice.parentElement.id === 'level-choices') {
+    $('rival-pick').hidden = choice.dataset.level !== '3';
+  }
+  if (e.target.id === 'start') {
+    const lvl = document.querySelector('#level-choices .choice[aria-pressed="true"]');
+    const rds = document.querySelector('#round-choices .choice[aria-pressed="true"]');
+    const rvs = document.querySelector('#rival-choices .choice[aria-pressed="true"]');
+    const hid = document.querySelector('#reveal-choices .choice[aria-pressed="true"]');
+    newGame(+(rds ? rds.dataset.rounds : 12), +(lvl ? lvl.dataset.level : 1),
+            null, +(rvs ? rvs.dataset.rivals : 3), hid ? hid.dataset.hidden === '1' : false);
+  }
+});
+
+window.addEventListener('resize', () => {
+  if (S.history.length) { drawCash(); drawProfit(); }
+});
+
+/* Match the toggle label to the OS preference on first load. */
+if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  document.documentElement.setAttribute('data-theme', 'dark');
+  $('theme-toggle').textContent = 'Light';
+}
+</script>
+</body>
+</html>

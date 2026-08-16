@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CEO — live session</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:#fcfcfb; --page:#f9f9f7;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --border:rgba(11,11,11,0.10);
+    --series-1:#2a78d6; --series-neg:#e34948;
+    --good:#0ca30c; --critical:#d03b3b; --warning:#fab219; --good-text:#006300;
+    --lock:#f0efec; --radius:10px;
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --surface-1:#1a1a19; --page:#0d0d0d;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --border:rgba(255,255,255,0.10);
+    --series-1:#3987e5; --series-neg:#e66767;
+    --good-text:#0ca30c; --lock:#232322;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--text-primary);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:22px 18px 80px}
+  h1{font-size:22px;letter-spacing:-0.02em;margin:0}
+  h2{font-size:17px;letter-spacing:-0.01em;margin:0 0 10px}
+  h3{font-size:14px;margin:0 0 6px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted)}
+  p{margin:0 0 10px}
+  .muted{color:var(--muted);font-size:13px}
+  a{color:var(--series-1)}
+  header{display:flex;align-items:center;justify-content:space-between;
+    gap:12px;margin-bottom:18px;flex-wrap:wrap}
+  .chip{font-size:12px;border:1px solid var(--border);border-radius:99px;
+    padding:3px 10px;color:var(--text-secondary);background:var(--surface-1)}
+  .card{background:var(--surface-1);border:1px solid var(--border);
+    border-radius:var(--radius);padding:16px 18px;margin-bottom:14px}
+  button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface-1);color:var(--text-primary);padding:8px 14px}
+  button:hover{border-color:var(--muted)}
+  button.primary{background:var(--text-primary);color:var(--page);border-color:transparent;
+    font-weight:600;padding:10px 18px}
+  button.primary:disabled{opacity:0.45;cursor:not-allowed}
+  button.ghost{padding:6px 10px;font-size:13px}
+  .choices{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 6px}
+  .choice{text-align:left;padding:9px 13px;min-width:96px}
+  .choice[aria-pressed="true"]{border-color:var(--text-primary);
+    box-shadow:inset 0 0 0 1px var(--text-primary)}
+  .choice .n{font-weight:650;font-size:14px}
+  .choice .d{font-size:11.5px;color:var(--muted);max-width:210px}
+  .choice.kind{max-width:250px;align-self:stretch}
+  .choice.kind .d{max-width:230px}
+  .choice.off{opacity:0.45;cursor:not-allowed}
+  label{display:block;font-size:12.5px;color:var(--text-secondary);margin-bottom:3px}
+  input[type=text],input[type=number]{font:inherit;width:100%;padding:8px 10px;
+    border-radius:8px;border:1px solid var(--border);background:var(--page);
+    color:var(--text-primary)}
+  input:focus{outline:2px solid var(--series-1);outline-offset:-1px}
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .row>*{flex:1 1 190px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:820px){.grid2{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--grid)}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:600}
+  td.v,th.v{text-align:right;font-variant-numeric:tabular-nums}
+  tr.me td{font-weight:650}
+  .pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;
+    border:1px solid var(--border);color:var(--muted)}
+  .pill.in{color:var(--good-text);border-color:var(--good)}
+  .pill.out{color:var(--warning);border-color:var(--warning)}
+  .pill.dead{color:var(--critical);border-color:var(--critical)}
+  .big{font-size:34px;font-weight:700;letter-spacing:-0.03em}
+  .pos{color:var(--good-text)} .neg{color:var(--series-neg)}
+  .bar{height:5px;background:var(--grid);border-radius:99px;overflow:hidden;margin-top:4px}
+  .bar i{display:block;height:100%;background:var(--series-1)}
+  .err{border-color:var(--critical);color:var(--critical)}
+  .news{border-left:3px solid var(--warning);padding-left:11px;margin:8px 0;font-size:13.5px}
+  .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:22px;
+    letter-spacing:0.18em;font-weight:700}
+  .share{display:flex;gap:6px;align-items:center}
+  .share input{font-family:ui-monospace,monospace;font-size:12.5px}
+  .hidden{display:none}
+  .lede{font-size:15px;color:var(--text-secondary);max-width:60ch}
+</style>
+</head><body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>CEO <span class="muted" style="font-weight:400">— live session</span></h1>
+      <div class="muted" id="sub">One round a day. Everyone commits blind.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="chip hidden" id="gamechip"></span>
+      <button class="ghost" id="theme">Dark</button>
+    </div>
+  </header>
+  <div id="app"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const money = (x) => (x < 0 ? '-$' : '$') + Math.abs(Math.round(x)).toLocaleString('en-US');
+const money2 = (x) => '$' + (+x).toFixed(2);
+const pct = (x) => (x == null ? '—' : (x * 100).toFixed(0) + '%');
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* Identity lives in the browser. No accounts, no passwords: the host sends a link,
+   you name your company, and the token that comes back is you. Losing it is the
+   one real failure mode, so the join screen shows the personal link to keep. */
+const KEY = 'ceo.live.v1';
+const readAll = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+const remember = (code, token, name) => {
+  const all = readAll(); all[code] = { token, name, at: Date.now() };
+  try { localStorage.setItem(KEY, JSON.stringify(all)); } catch {}
+};
+const tokenFor = (code) => (readAll()[code] || {}).token || null;
+
+const S = { code: null, token: null, view: null, cfg: null, busy: false, error: null, tab: 'orders' };
+
+async function api(path, body) {
+  const opt = body
+    ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
+    : {};
+  const res = await fetch('/api/' + path, opt);
+  const data = await res.json().catch(() => ({ error: 'The server sent something unreadable.' }));
+  if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+  return data;
+}
+
+function setBusy(b) { S.busy = b; render(); }
+async function guard(fn) {
+  S.error = null; setBusy(true);
+  try { await fn(); } catch (e) { S.error = e.message; }
+  setBusy(false);
+}
+
+/* ------------------------------------------------------------------ setup */
+function screenHome() {
+  const saved = Object.entries(readAll()).sort((a, b) => b[1].at - a[1].at).slice(0, 4);
+  const L = S.cfg ? S.cfg.limits : { seats: { min: 3, max: 6, default: 4 }, rounds: { min: 8, max: 14, default: 10 } };
+  const seatBtns = [];
+  for (let n = L.seats.min; n <= L.seats.max; n++) {
+    seatBtns.push(`<button class="choice" data-seats="${n}" aria-pressed="${n === L.seats.default}">
+      <div class="n">${n} companies</div></button>`);
+  }
+  const roundBtns = [8, 10, 12, 14].filter((r) => r >= L.rounds.min && r <= L.rounds.max)
+    .map((r) => `<button class="choice" data-rounds="${r}" aria-pressed="${r === L.rounds.default}">
+      <div class="n">${r} rounds</div><div class="d">${r} days</div></button>`).join('');
+  const presets = S.cfg ? Object.entries(S.cfg.presets).map(([k, p]) =>
+    `<button class="choice" data-preset="${k}" aria-pressed="${k === 'standard'}">
+      <div class="n">${esc(p.label)}</div><div class="d">${esc(p.note)}</div></button>`).join('') : '';
+
+  return `
+  <div class="card">
+    <h2>Start a game</h2>
+    <p class="lede">You invite your friends with a link. Empty seats are filled by
+      AI companies, and nobody — including you — is told which is which until the
+      last round is scored.</p>
+    <div class="row" style="margin:14px 0 4px">
+      <div><label for="hostname">Your company name</label>
+        <input id="hostname" type="text" maxlength="28" placeholder="Ravensworth &amp; Co"></div>
+      <div><label for="closehour">Rounds close each day at (UTC)</label>
+        <input id="closehour" type="number" min="0" max="23" value="18"></div>
+    </div>
+    <h3 style="margin-top:14px">How many companies</h3>
+    <div class="choices" id="seatchoice">${seatBtns.join('')}</div>
+    <h3 style="margin-top:12px">How long</h3>
+    <div class="choices" id="roundchoice">${roundBtns}</div>
+    <p class="muted" style="margin:2px 0 10px">Everyone can see the end date — knowing when
+      the game stops is what makes the last few rounds a real decision. Games run
+      ${L.rounds.min}–${L.rounds.max} rounds; past that a single product runs out of road.</p>
+    <h3>Difficulty</h3>
+    <div class="choices" id="presetchoice">${presets}</div>
+    <button class="primary" id="create" style="margin-top:12px">Create the game</button>
+  </div>
+
+  <div class="card">
+    <h2>Join a game</h2>
+    <p class="muted" style="margin-bottom:10px">Someone sent you a six-character code.</p>
+    <div class="row">
+      <div><label for="joincode">Game code</label>
+        <input id="joincode" type="text" maxlength="6" placeholder="ABC123" style="text-transform:uppercase"></div>
+      <div><label for="joinname">Your company name</label>
+        <input id="joinname" type="text" maxlength="28" placeholder="Sableworth Ltd"></div>
+    </div>
+    <button class="primary" id="join" style="margin-top:12px">Join</button>
+  </div>
+
+  ${saved.length ? `<div class="card"><h2>Your games</h2>
+    ${saved.map(([c, v]) => `<div style="display:flex;justify-content:space-between;
+      align-items:center;padding:6px 0;border-bottom:1px solid var(--grid)">
+      <span><b>${esc(v.name)}</b> <span class="muted">in game ${c}</span></span>
+      <button class="ghost" data-resume="${c}">Open</button></div>`).join('')}
+    </div>` : ''}
+
+  <p class="muted">Practising on your own? The <a href="/">single-player levels</a>
+    teach every lever this game uses.</p>`;
+}
+
+function screenLobby(v) {
+  const link = location.origin + '/g/' + v.code;
+  const waiting = v.seatCount - v.joined.length;
+  /* Arriving on an invitation is the main way anyone reaches this page, so the
+     first thing someone without a seat needs is the way to take one. */
+  const takeSeat = v.you ? '' : `
+  <div class="card">
+    <h2>You have been invited</h2>
+    <p class="lede">${esc(v.joined.map((p) => p.name).join(', '))}
+      ${v.joined.length === 1 ? 'is' : 'are'} waiting to start a ${v.totalRounds}-round game.
+      ${waiting > 0 ? `There ${waiting === 1 ? 'is 1 seat' : `are ${waiting} seats`} left.`
+        : 'Every seat is taken.'}</p>
+    ${waiting > 0 ? `
+      <div style="max-width:320px;margin-top:10px">
+        <label for="joinname">Name your company</label>
+        <input id="joinname" type="text" maxlength="28" placeholder="Sableworth Ltd">
+        <input id="joincode" type="hidden" value="${v.code}">
+      </div>
+      <button class="primary" id="join" style="margin-top:12px">Take a seat</button>
+      <p class="muted" style="margin-top:8px">You keep this name across games.</p>`
+      : `<p class="muted">Ask whoever invited you to make room, or start your own game.</p>`}
+  </div>`;
+  return takeSeat + `
+  <div class="card">
+    <h2>${v.you ? 'Waiting to start' : 'The game so far'}</h2>
+    <p class="muted">Send this to the people you want in the game.</p>
+    <div class="code" style="margin:8px 0 4px">${v.code}</div>
+    <div class="share" style="max-width:520px">
+      <input type="text" id="sharelink" readonly value="${esc(link)}">
+      <button class="ghost" id="copy">Copy</button>
+    </div>
+    <h3 style="margin-top:18px">In the game</h3>
+    <table><tbody>
+      ${v.joined.map((p) => `<tr><td>${esc(p.name)}</td>
+        <td class="v"><span class="pill in">joined</span></td></tr>`).join('')}
+      ${Array.from({ length: waiting }, () => `<tr><td class="muted">Empty seat</td>
+        <td class="v"><span class="pill">AI company if nobody takes it</span></td></tr>`).join('')}
+    </tbody></table>
+    <p class="muted" style="margin-top:12px">${v.seatCount} companies · ${v.totalRounds} rounds ·
+      one round a day, closing at ${String(v.closeHour).padStart(2, '0')}:00 UTC ·
+      ${esc(v.preset)} difficulty</p>
+    ${v.isHost
+      ? `<button class="primary" id="start" style="margin-top:6px">Start the game${waiting ? ` (${waiting} seat${waiting > 1 ? 's' : ''} become AI)` : ''}</button>`
+      : `<p class="muted" style="margin-top:6px">The host starts the game when everyone is in.</p>`}
+  </div>`;
+}
+
+/* ----------------------------------------------------------------- playing */
+function countdown(iso) {
+  if (!iso) return '';
+  const ms = new Date(iso) - Date.now();
+  if (ms <= 0) return 'closing now';
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return h >= 1 ? `closes in ${h}h ${m}m` : `closes in ${m}m`;
+}
+
+function marketTable(v) {
+  return `<table>
+    <thead><tr><th>Company</th><th class="v">Last price</th><th class="v">Quality</th><th class="v">Lines</th>
+      <th class="v">Share</th><th class="v">This round</th></tr></thead>
+    <tbody>${v.market.map((m) => `
+      <tr class="${m.you ? 'me' : ''}">
+        <td>${esc(m.name)}${m.you ? ' <span class="muted">(you)</span>' : ''}
+          <div class="bar"><i style="width:${((m.lastShare || 0) * 100).toFixed(0)}%"></i></div></td>
+        <td class="v">${m.out ? '—' : money2(m.lastPrice || 0)}</td>
+        <td class="v">${m.out ? '—' : (m.quality || 0).toFixed(0)}</td>
+        <td class="v">${m.out ? '—' : (m.lineCount > 1 ? m.lineCount + ' lines' : '1')}</td>
+        <td class="v">${m.out ? '—' : pct(m.lastShare)}</td>
+        <td class="v">${m.out ? '<span class="pill dead">out of business</span>'
+          : m.filed === null ? '<span class="pill">—</span>'
+          : m.filed ? '<span class="pill in">filed</span>' : '<span class="pill out">not yet</span>'}</td>
+      </tr>`).join('')}</tbody></table>`;
+}
+
+function creditCard(y) {
+  const c = y.credit;
+  const tone = c.rate < 0.055 ? 'in' : c.rate < 0.115 ? '' : c.rate < 0.16 ? 'out' : 'dead';
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Borrowing</h2>
+      <span class="pill ${tone}">${esc(c.label)} — ${(c.rate * 100).toFixed(1)}% a round</span>
+    </div>
+    <p class="muted" style="margin:8px 0 10px">${esc(c.note)}
+      Rates rise with how much of your credit line you have drawn, and again if the
+      business behind it is losing money.</p>
+    <table><tbody>
+      <tr><td>Cash</td><td class="v">${money(y.cash)}</td></tr>
+      <tr><td>Owed</td><td class="v ${c.drawn > 0 ? 'neg' : ''}">${money(c.drawn)}</td></tr>
+      <tr><td>Still available to borrow</td><td class="v">${money(c.headroom)}</td></tr>
+      ${c.drawn > 0 ? `<tr><td>Interest this round</td><td class="v neg">${money(-c.costPerRound)}</td></tr>` : ''}
+      <tr class="total"><td>The bank calls it in past</td><td class="v">${money(c.limit)}</td></tr>
+    </tbody></table>
+    <div class="bar" style="margin-top:8px"><i style="width:${Math.min(100, (c.drawn / c.limit) * 100).toFixed(0)}%;
+      background:${c.rate < 0.08 ? 'var(--series-1)' : 'var(--series-neg)'}"></i></div>
+  </div>`;
+}
+
+function lineForm(p, K, i) {
+  const d = p.orders || {
+    price: Math.round(p.value),
+    produce: Math.round(Math.max(0, Math.min(p.lastDemand || E_DEMAND_GUESS, p.effCapacity) - p.inventory)),
+    rd: 30000, rdProcess: 10000, advertising: 0, targetCapacity: Math.round(p.capacity),
+    discontinue: false,
+  };
+  const id = (k) => `f_${i}_${k}`;
+  const f = (k, label, val, hint, step) => `
+    <div><label for="${id(k)}">${label}</label>
+      <input id="${id(k)}" type="number" step="${step || 1}" min="0" value="${Math.round(val * 100) / 100}">
+      <div class="muted" style="font-size:11.5px;margin-top:2px">${hint}</div></div>`;
+  return `
+  <div class="card" data-line="${esc(p.name)}">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">${esc(p.label)}</h2>
+      <span class="muted">${esc(p.kindLabel || 'Hardware')} · quality ${p.quality.toFixed(0)} ·
+        ${p.physical ? `${Math.round(p.inventory)} in stock · ` : 'nothing to warehouse · '}
+        ${p.age < 2 ? 'still ramping up' : p.age >= 8 ? 'past its best' : 'established'}</span>
+    </div>
+    <div class="row" style="margin-top:10px">
+      ${f('price', 'Price', d.price, `Worth ${money2(p.value)} to a buyer.`, 0.5)}
+      ${f('produce', 'Units to make', d.produce, `Room for ${Math.round(p.effCapacity)}. ${money2(p.unitCost)} each.`)}
+    </div>
+    <div class="row" style="margin-top:12px">
+      ${f('rd', 'Product R&amp;D — make it better', d.rd, `Lands in ${K.RD_DELAY} rounds.`, 1000)}
+      ${f('rdProcess', 'Process R&amp;D — make it cheaper', d.rdProcess, `Also raises output.`, 1000)}
+    </div>
+    <div class="row" style="margin-top:12px">
+      ${f('advertising', 'Advertising', d.advertising, `Works now, fades ${Math.round(K.AD_DECAY * 100)}% a round.`, 1000)}
+      ${f('targetCapacity', p.physical ? 'Factory size' : 'Capacity to serve', d.targetCapacity,
+           p.physical
+             ? `Now ${Math.round(p.capacity)}. ${money2(K.CAPEX_PER_UNIT)} a unit to build.`
+             : `Now ${Math.round(p.capacity)}. Cheap to hold — there is no factory standing idle.`, 50)}
+    </div>
+    <label style="margin-top:10px;display:flex;gap:7px;align-items:center;font-size:13px">
+      <input type="checkbox" id="${id('discontinue')}" ${d.discontinue ? 'checked' : ''} style="width:auto">
+      Discontinue this line — sell the stock and the plant, stop the fixed costs
+    </label>
+  </div>`;
+}
+
+const E_DEMAND_GUESS = 1300;
+
+function ordersForm(v) {
+  const y = v.you, K = y.constants;
+  const lines = y.products.map((p, i) => lineForm(p, K, i)).join('');
+  const kinds = (y.kinds || []).map((k) => `
+    <button class="choice kind ${k.affordable ? '' : 'off'}" data-kind="${k.id}"
+      aria-pressed="${k.id === (y.wantsLaunchKind || 'hardware')}" ${k.affordable ? '' : 'disabled'}>
+      <div class="n">${esc(k.label)} <span class="muted">${money(k.cost)}</span></div>
+      <div class="d">${esc(k.blurb)}</div>
+      <div class="d" style="margin-top:3px">${k.affordable
+        ? (k.borrowing > 0
+            ? `You would borrow ${money(k.borrowing)} of it — that raises your rate.`
+            : 'You can pay for this out of cash.')
+        : 'Out of reach right now.'}</div>
+    </button>`).join('');
+  return `
+  <div class="card">
+    <h2>Your orders for round ${v.round + 1}</h2>
+    ${y.filed ? `<p class="muted"><span class="pill in">filed</span>
+      You can change these until the round closes.</p>` : ''}
+    ${y.autoRounds ? `<p class="muted">Rounds filed automatically for you so far: ${y.autoRounds}.
+      If you miss a deadline your last orders simply repeat.</p>` : ''}
+    ${y.products.length > 1 ? `<p class="muted">You are running ${y.products.length} lines.
+      They compete with each other as well as with everyone else.</p>` : ''}
+  </div>
+  ${lines}
+  <div class="card">
+    <h2>A new product line</h2>
+    <p class="muted">Costs ${money(y.launchCost)} and starts trading next round. It carries
+      over what your company already knows, so it does not start from scratch — but it
+      ramps slowly and adds fixed costs from day one. What kind of thing it is
+      changes nearly everything about its cost.</p>
+    ${y.products.length >= y.maxProducts
+      ? `<p class="muted">You are already running the maximum of ${y.maxProducts}.</p>`
+      : y.canLaunch
+        ? `<div class="choices" id="kindchoice" style="margin:10px 0 12px">${kinds}</div>
+           <label style="display:flex;gap:7px;align-items:center;font-size:13.5px">
+             <input type="checkbox" id="f_launch" ${y.wantsLaunch ? 'checked' : ''} style="width:auto">
+             Launch a line of the kind selected above, this round</label>
+           <p class="muted" style="margin-top:8px">Launching early, while your first line is
+             still finding its feet, is how companies go under. It pays once the first one is
+             mature enough to carry it.</p>`
+        : `<p class="muted">Not available: a launch has to leave you enough credit to survive
+             the new line's first rounds, and right now none of them would.</p>`}
+  </div>
+  <div class="card">
+    <button class="primary" id="file">${y.filed ? 'Update my orders' : 'File my orders'}</button>
+  </div>`;
+}
+
+function lastRound(v) {
+  if (!v.history.length) return '';
+  const h = v.history[v.history.length - 1];
+  const mine = h.results.find((r) => r.seatId === (v.you && v.you.seatId));
+  return `
+  <div class="card">
+    <h2>Round ${h.round}</h2>
+    ${h.news && h.news.length ? h.news.map((n) => `<div class="news">${esc(n.text)}</div>`).join('') : ''}
+    ${h.launched && h.launched.length ? h.launched.map((l) =>
+      `<div class="news">${esc(l.name)} opened a new ${esc((l.kindLabel || '').toLowerCase())} line.</div>`).join('') : ''}
+    ${h.inherited && h.inherited.length ? h.inherited.map((i) =>
+      `<div class="news">${esc(i.name)} went out of business. About two thirds of its
+        customers found a new supplier — they went to whoever was priced closest to it.</div>`).join('') : ''}
+    ${mine ? `
+      <div class="big ${mine.profit >= 0 ? 'pos' : 'neg'}">${money(mine.profit)}</div>
+      <div class="muted" style="margin-bottom:10px">your profit${mine.auto ? ' — filed automatically from your last orders' : ''}</div>
+      <table><tbody>
+        <tr><td>You sold</td><td class="v">${Math.round(mine.sales)} units at ${money2(mine.price)}</td></tr>
+        <tr><td>People wanted</td><td class="v">${Math.round(mine.demand)} units</td></tr>
+        <tr><td>Your share</td><td class="v">${pct(mine.share)}</td></tr>
+        <tr><td>Revenue</td><td class="v">${money(mine.revenue)}</td></tr>
+        ${mine.interest > 0 ? `<tr><td>Interest at ${(mine.rate * 100).toFixed(1)}%</td>
+          <td class="v neg">${money(-mine.interest)}</td></tr>` : ''}
+        <tr><td>Costs</td><td class="v neg">${money(-mine.costs)}</td></tr>
+        <tr class="me"><td>Cash now</td><td class="v">${money(mine.cash)}</td></tr>
+      </tbody></table>` : ''}
+    <h3 style="margin-top:16px">What everyone charged</h3>
+    <table><thead><tr><th>Company</th><th class="v">Price</th><th class="v">Share</th><th class="v">Advertising</th></tr></thead>
+      <tbody>${h.results.map((r) => `<tr class="${r.seatId === (v.you && v.you.seatId) ? 'me' : ''}">
+        <td>${esc(r.name)}${r.bankrupt ? ' <span class="pill dead">out</span>' : ''}</td>
+        <td class="v">${money2(r.price)}</td><td class="v">${pct(r.share)}</td>
+        <td class="v">${money(r.advertising)}</td></tr>`).join('')}</tbody></table>
+  </div>`;
+}
+
+function screenPlaying(v) {
+  const y = v.you;
+  const waiting = v.waitingOn.length;
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Round ${v.round + 1} of ${v.totalRounds}</h2>
+      <div class="muted">${countdown(v.deadline)}${waiting
+        ? ` · waiting on ${v.waitingOn.map(esc).join(', ')}`
+        : ' · everyone has filed'}</div>
+    </div>
+    <p class="muted" style="margin:8px 0 12px">Prices and shares below are <b>last round's</b>.
+      Nobody can see this round's until it closes.</p>
+    ${marketTable(v)}
+  </div>
+  ${y && !y.bankrupt ? creditCard(y) : ''}
+  ${y && y.products && y.products.length && !y.bankrupt ? ordersForm(v)
+    : y ? `<div class="card"><h2>You are out of the game</h2>
+        <p class="muted">Your debt passed the limit and the bank called it in. You can still
+        watch the rest of the game and see the reveal at the end.</p></div>`
+    : `<div class="card"><h2>You are watching</h2>
+        <p class="muted">This game has already started, so there is no seat for you — but you
+        can follow it, and you will see who was who at the end.
+        <a href="/g/">Start your own game</a>.</p></div>`}
+  ${lastRound(v)}`;
+}
+
+function screenOver(v) {
+  const rows = v.market.slice().sort((a, b) => b.finalValue - a.finalValue);
+  const mine = rows.findIndex((r) => r.you);
+  return `
+  <div class="card">
+    <h2>Game over</h2>
+    ${mine >= 0 ? `<div class="big">${['1st', '2nd', '3rd', '4th', '5th', '6th'][mine]}</div>
+      <div class="muted" style="margin-bottom:12px">of ${rows.length} companies</div>` : ''}
+    <p class="lede">Here is who everyone actually was.</p>
+    <table><thead><tr><th>#</th><th>Company</th><th class="v">Final value</th><th>What it was</th></tr></thead>
+      <tbody>${rows.map((m, i) => `<tr class="${m.you ? 'me' : ''}">
+        <td>${i + 1}</td>
+        <td>${esc(m.name)}${m.out ? ' <span class="pill dead">went under</span>' : ''}</td>
+        <td class="v">${money(m.finalValue)}</td>
+        <td class="muted">${m.isBot ? esc(m.strategy || 'an AI company') : 'a person'}</td>
+      </tr>`).join('')}</tbody></table>
+    <p class="muted" style="margin-top:14px">Companies are valued at cash, stock at salvage,
+      plus four times what the products still earn — which is why running one into the
+      ground to bank the cash scores badly.</p>
+    <button class="primary" id="home" style="margin-top:6px">Start another game</button>
+  </div>
+  ${lastRound(v)}`;
+}
+
+/* ------------------------------------------------------------------ render */
+function render() {
+  const app = $('app');
+  const v = S.view;
+  $('gamechip').classList.toggle('hidden', !S.code);
+  if (S.code) $('gamechip').textContent = 'Game ' + S.code;
+  let html = '';
+  if (S.error) html += `<div class="card err"><b>${esc(S.error)}</b></div>`;
+  if (!v) html += screenHome();
+  else if (v.status === 'lobby') html += screenLobby(v);
+  else if (v.status === 'over') html += screenOver(v);
+  else html += screenPlaying(v);
+  app.innerHTML = html;
+  if (S.busy) app.style.opacity = '0.6'; else app.style.opacity = '1';
+}
+
+/* --------------------------------------------------------------- behaviour */
+const pressed = (host) => {
+  const el = document.querySelector(`#${host} .choice[aria-pressed="true"]`);
+  return el ? el.dataset : {};
+};
+
+document.addEventListener('click', (e) => {
+  const c = e.target.closest('.choice');
+  if (c && c.parentElement.classList.contains('choices')) {
+    c.parentElement.querySelectorAll('.choice').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+    c.setAttribute('aria-pressed', 'true');
+    return;
+  }
+  const t = e.target;
+
+  if (t.id === 'theme') {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+    t.textContent = dark ? 'Dark' : 'Light';
+    return;
+  }
+  if (t.id === 'copy') {
+    const el = $('sharelink'); el.select();
+    navigator.clipboard.writeText(el.value).then(() => { t.textContent = 'Copied'; });
+    return;
+  }
+  if (t.dataset.resume) { open(t.dataset.resume); return; }
+  if (t.id === 'home') { S.code = null; S.token = null; S.view = null; history.pushState({}, '', '/g/'); render(); return; }
+
+  if (t.id === 'create') {
+    /* Read every field BEFORE guard() runs — it re-renders to show the busy
+       state, which rebuilds this screen and resets the buttons. Reading inside
+       the callback silently gave every game the default settings. */
+    const opts = {
+      hostName: $('hostname').value.trim(),
+      seats: +(pressed('seatchoice').seats || 4),
+      rounds: +(pressed('roundchoice').rounds || 10),
+      preset: pressed('presetchoice').preset || 'standard',
+      closeHour: +($('closehour').value || 18),
+    };
+    guard(async () => {
+      const r = await api('create', opts);
+      const name = opts.hostName;
+      S.code = r.code; S.token = r.token; S.view = r.view;
+      remember(r.code, r.token, name);
+      history.pushState({}, '', '/g/' + r.code);
+    });
+    return;
+  }
+  if (t.id === 'join') {
+    const code = $('joincode').value.trim().toUpperCase();
+    const name = $('joinname').value.trim();
+    guard(async () => {
+      const r = await api('join', { code, name });   // read above, before the re-render
+      S.code = r.code; S.token = r.token; S.view = r.view;
+      remember(r.code, r.token, name);
+      history.pushState({}, '', '/g/' + r.code);
+    });
+    return;
+  }
+  if (t.id === 'start') {
+    guard(async () => { S.view = (await api('start', { code: S.code, token: S.token })).view; });
+    return;
+  }
+  if (t.id === 'file') {
+    /* Same hazard as create: snapshot every field before the busy re-render. */
+    const num = (id) => +(($(id) || {}).value || 0);
+    const products = {};
+    (S.view.you.products || []).forEach((p, i) => {
+      products[p.name] = {
+        price: num(`f_${i}_price`), produce: num(`f_${i}_produce`),
+        rd: num(`f_${i}_rd`), rdProcess: num(`f_${i}_rdProcess`),
+        advertising: num(`f_${i}_advertising`),
+        targetCapacity: num(`f_${i}_targetCapacity`),
+        discontinue: !!($(`f_${i}_discontinue`) || {}).checked,
+      };
+    });
+    const launch = !!(($('f_launch') || {}).checked);
+    const picked = document.querySelector('#kindchoice .choice[aria-pressed="true"]');
+    const launchKind = picked ? picked.dataset.kind : 'hardware';
+    guard(async () => {
+      S.view = (await api('submit',
+        { code: S.code, token: S.token, decisions: { products, launch, launchKind } })).view;
+    });
+  }
+});
+
+async function refresh() {
+  if (!S.code) return;
+  try {
+    const r = await api('state?code=' + encodeURIComponent(S.code) +
+      (S.token ? '&token=' + encodeURIComponent(S.token) : ''));
+    S.view = r.view; render();
+  } catch (e) { S.error = e.message; render(); }
+}
+
+async function open(code) {
+  S.code = code.toUpperCase();
+  S.token = tokenFor(S.code);
+  history.pushState({}, '', '/g/' + S.code);
+  await guard(refresh);
+}
+
+/* A game code in the URL is how an invitation arrives. */
+async function boot() {
+  try { S.cfg = await api('config'); } catch {}
+  const m = location.pathname.match(/\/g\/([A-Za-z0-9]{6})/);
+  if (m) { await open(m[1]); } else { render(); }
+  /* One round a day means nothing changes in seconds — but a friend filing while
+     you have the page open should show up without a reload. */
+  setInterval(() => { if (S.code && !S.busy) refresh(); }, 25000);
+  setInterval(() => {
+    const v = S.view;
+    if (v && v.status === 'playing') {
+      const el = document.querySelector('.card .muted');
+      if (el && el.textContent.includes('closes in')) render();
+    }
+  }, 60000);
+}
+
+if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  document.documentElement.setAttribute('data-theme', 'dark');
+  $('theme').textContent = 'Light';
+}
+window.addEventListener('popstate', boot);
+boot();
+</script>
+</body></html>
