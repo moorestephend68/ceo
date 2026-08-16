@@ -3,8 +3,12 @@
    Rounds normally close when the next player opens the page after the deadline —
    that keeps the game moving without depending on a schedule. But a game where
    everyone has lost interest for a day would otherwise sit frozen, so this sweeps
-   hourly and closes anything overdue. It is idempotent: shouldResolve is false
-   for a game that has already been settled. */
+   often and closes anything overdue. It is idempotent: shouldResolve is false for
+   a game that has already been settled.
+
+   Every five minutes rather than hourly, because a game can now run a round every
+   five minutes — an hourly backstop would leave a fast game frozen for most of an
+   hour if everyone closed their tab mid-round. */
 
 import { getStore } from '@netlify/blobs';
 import * as G from '../../lib/game.mjs';
@@ -36,4 +40,4 @@ export default async () => {
   console.log(`tick: ${scanned} live games, ${closed} rounds closed, ${finished} finished`);
 };
 
-export const config = { schedule: '@hourly' };
+export const config = { schedule: '*/5 * * * *' };

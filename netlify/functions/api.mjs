@@ -56,7 +56,7 @@ export default async (req) => {
 
   try {
     if (route === 'config') {
-      return json({ presets: G.PRESETS, limits: G.LIMITS });
+      return json({ presets: G.PRESETS, limits: G.LIMITS, cadences: G.CADENCES });
     }
 
     if (route === 'create' && req.method === 'POST') {

@@ -148,9 +148,13 @@ function screenHome() {
     seatBtns.push(`<button class="choice" data-seats="${n}" aria-pressed="${n === L.seats.default}">
       <div class="n">${n} companies</div></button>`);
   }
-  const roundBtns = [8, 10, 12, 14].filter((r) => r >= L.rounds.min && r <= L.rounds.max)
+  const CAD = (S.cfg && S.cfg.cadences) || {};
+  const cadBtns = Object.entries(CAD).map(([id, c]) =>
+    `<button class="choice kind" data-cadence="${id}" aria-pressed="${id === '15m'}">
+      <div class="n">${esc(c.label)}</div><div class="d">${esc(c.note)}</div></button>`).join('');
+  const roundBtns = [8, 10, 12, 16, 20].filter((r) => r >= L.rounds.min && r <= L.rounds.max)
     .map((r) => `<button class="choice" data-rounds="${r}" aria-pressed="${r === L.rounds.default}">
-      <div class="n">${r} rounds</div><div class="d">${r} days</div></button>`).join('');
+      <div class="n">${r} rounds</div></button>`).join('');
   const presets = S.cfg ? Object.entries(S.cfg.presets).map(([k, p]) =>
     `<button class="choice" data-preset="${k}" aria-pressed="${k === 'standard'}">
       <div class="n">${esc(p.label)}</div><div class="d">${esc(p.note)}</div></button>`).join('') : '';
@@ -161,19 +165,22 @@ function screenHome() {
     <p class="lede">You invite your friends with a link. Empty seats are filled by
       AI companies, and nobody — including you — is told which is which until the
       last round is scored.</p>
-    <div class="row" style="margin:14px 0 4px">
-      <div><label for="hostname">Your company name</label>
-        <input id="hostname" type="text" maxlength="28" placeholder="Ravensworth &amp; Co"></div>
-      <div><label for="closehour">Rounds close each day at (UTC)</label>
-        <input id="closehour" type="number" min="0" max="23" value="18"></div>
+    <div style="max-width:340px;margin:14px 0 4px">
+      <label for="hostname">Your company name</label>
+      <input id="hostname" type="text" maxlength="28" placeholder="Ravensworth &amp; Co">
     </div>
     <h3 style="margin-top:14px">How many companies</h3>
     <div class="choices" id="seatchoice">${seatBtns.join('')}</div>
-    <h3 style="margin-top:12px">How long</h3>
+    <h3 style="margin-top:14px">How long is a round</h3>
+    <div class="choices" id="cadencechoice">${cadBtns}</div>
+    <div id="closehour-wrap" class="hidden" style="max-width:260px;margin:8px 0 4px">
+      <label for="closehour">…closing each day at (UTC, 0–23)</label>
+      <input id="closehour" type="number" min="0" max="23" value="18">
+    </div>
+    <h3 style="margin-top:14px">How many rounds</h3>
     <div class="choices" id="roundchoice">${roundBtns}</div>
-    <p class="muted" style="margin:2px 0 10px">Everyone can see the end date — knowing when
-      the game stops is what makes the last few rounds a real decision. Games run
-      ${L.rounds.min}–${L.rounds.max} rounds; past that a single product runs out of road.</p>
+    <p class="muted" style="margin:2px 0 10px">Everyone can see when the game ends — knowing
+      that is what makes the last few rounds a real decision.</p>
     <h3>Difficulty</h3>
     <div class="choices" id="presetchoice">${presets}</div>
     <button class="primary" id="create" style="margin-top:12px">Create the game</button>
@@ -241,8 +248,11 @@ function screenLobby(v) {
         <td class="v"><span class="pill">AI company if nobody takes it</span></td></tr>`).join('')}
     </tbody></table>
     <p class="muted" style="margin-top:12px">${v.seatCount} companies · ${v.totalRounds} rounds ·
-      one round a day, closing at ${String(v.closeHour).padStart(2, '0')}:00 UTC ·
-      ${esc(v.preset)} difficulty</p>
+      a round every ${esc((v.cadenceLabel || 'day').toLowerCase())}${v.cadenceMinutes >= 1440
+        ? `, closing at ${String(v.closeHour).padStart(2, '0')}:00 UTC` : ''} ·
+      ${esc(v.preset)} difficulty${v.cadenceMinutes < 1440
+        ? ` · about ${Math.round(v.totalRounds * v.cadenceMinutes / 60) || '<1'} hours end to end`
+        : ''}</p>
     ${v.isHost
       ? `<button class="primary" id="start" style="margin-top:6px">Start the game${waiting ? ` (${waiting} seat${waiting > 1 ? 's' : ''} become AI)` : ''}</button>`
       : `<p class="muted" style="margin-top:6px">The host starts the game when everyone is in.</p>`}
@@ -250,13 +260,20 @@ function screenLobby(v) {
 }
 
 /* ----------------------------------------------------------------- playing */
+/* At a day the seconds are noise; at five minutes they are the whole tension. */
 function countdown(iso) {
   if (!iso) return '';
   const ms = new Date(iso) - Date.now();
   if (ms <= 0) return 'closing now';
-  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
-  return h >= 1 ? `closes in ${h}h ${m}m` : `closes in ${m}m`;
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (h >= 1) return `closes in ${h}h ${m}m`;
+  if (m >= 5) return `closes in ${m}m`;
+  return `closes in ${m}:${String(sec).padStart(2, '0')}`;
 }
+
+/* How urgent the clock is, for the header and how hard we poll. */
+const isFast = () => S.view && S.view.cadenceMinutes && S.view.cadenceMinutes <= 60;
 
 function marketTable(v) {
   return `<table>
@@ -435,7 +452,9 @@ function screenPlaying(v) {
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
       <h2 style="margin:0">Round ${v.round + 1} of ${v.totalRounds}</h2>
-      <div class="muted">${countdown(v.deadline)}${waiting
+      <div class="muted" id="clock" data-rest="${esc(waiting
+        ? ' · waiting on ' + v.waitingOn.join(', ')
+        : ' · everyone has filed')}">${countdown(v.deadline)}${waiting
         ? ` · waiting on ${v.waitingOn.map(esc).join(', ')}`
         : ' · everyone has filed'}</div>
     </div>
@@ -485,6 +504,9 @@ function render() {
   const v = S.view;
   $('gamechip').classList.toggle('hidden', !S.code);
   if (S.code) $('gamechip').textContent = 'Game ' + S.code;
+  $('sub').textContent = v && v.cadenceLabel
+    ? `A round every ${v.cadenceLabel.toLowerCase()}. Everyone commits blind.`
+    : 'You choose how long a round lasts. Everyone commits blind.';
   let html = '';
   if (S.error) html += `<div class="card err"><b>${esc(S.error)}</b></div>`;
   if (!v) html += screenHome();
@@ -506,6 +528,11 @@ document.addEventListener('click', (e) => {
   if (c && c.parentElement.classList.contains('choices')) {
     c.parentElement.querySelectorAll('.choice').forEach((x) => x.setAttribute('aria-pressed', 'false'));
     c.setAttribute('aria-pressed', 'true');
+    /* a fixed hour of the day means nothing when a round lasts five minutes */
+    if (c.parentElement.id === 'cadencechoice') {
+      const w = $('closehour-wrap');
+      if (w) w.classList.toggle('hidden', c.dataset.cadence !== '1d');
+    }
     return;
   }
   const t = e.target;
@@ -533,7 +560,8 @@ document.addEventListener('click', (e) => {
       seats: +(pressed('seatchoice').seats || 4),
       rounds: +(pressed('roundchoice').rounds || 10),
       preset: pressed('presetchoice').preset || 'standard',
-      closeHour: +($('closehour').value || 18),
+      cadence: pressed('cadencechoice').cadence || '15m',
+      closeHour: +(($('closehour') || {}).value || 18),
     };
     guard(async () => {
       const r = await api('create', opts);
@@ -603,16 +631,23 @@ async function boot() {
   try { S.cfg = await api('config'); } catch {}
   const m = location.pathname.match(/\/g\/([A-Za-z0-9]{6})/);
   if (m) { await open(m[1]); } else { render(); }
-  /* One round a day means nothing changes in seconds — but a friend filing while
-     you have the page open should show up without a reload. */
-  setInterval(() => { if (S.code && !S.busy) refresh(); }, 25000);
+  /* How often to check depends entirely on how fast the game is: a daily round
+     changes nothing in a minute, a five-minute round changes everything. */
+  let lastPoll = 0;
+  setInterval(() => {
+    if (!S.code || S.busy) return;
+    const gap = isFast() ? 6000 : 25000;
+    if (Date.now() - lastPoll < gap) return;
+    lastPoll = Date.now();
+    refresh();
+  }, 2000);
+  /* and repaint the clock itself, so the countdown actually counts down */
   setInterval(() => {
     const v = S.view;
-    if (v && v.status === 'playing') {
-      const el = document.querySelector('.card .muted');
-      if (el && el.textContent.includes('closes in')) render();
-    }
-  }, 60000);
+    if (!v || v.status !== 'playing' || S.busy) return;
+    const el = document.getElementById('clock');
+    if (el) el.textContent = countdown(v.deadline) + el.dataset.rest;
+  }, 1000);
 }
 
 if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
