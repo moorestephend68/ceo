@@ -354,10 +354,17 @@ function creditCard(y) {
 /* Orders being typed, keyed by product name, plus the engine objects rebuilt from
    what the server sent. Held apart from the view so that typing does not trigger a
    re-render — the form keeps focus, and only the projection repaints. */
-const D = { orders: {}, firm: null, rivals: [], launch: false, launchKind: 'hardware' };
+const D = { orders: {}, firm: null, rivals: [], launch: false, launchKind: 'hardware',
+            round: -1, code: null };
 
 function hydrateFirm(v) {
   if (!v.you || !v.you.firmState) { D.firm = null; return; }
+  /* Only take the server's version of what you intend when the round actually
+     changes. Re-reading it on every render meant the six-second poll quietly
+     un-ticked the launch box a moment after it was ticked — the intent lives here
+     until it is filed, and the server has nothing newer to say about it. */
+  const fresh = v.round !== D.round || v.code !== D.code;
+  if (fresh) { D.orders = {}; D.round = v.round; D.code = v.code; }
   /* Products come back as plain JSON; the engine only ever reads fields off them,
      so they work as-is once the arrays are real arrays. */
   D.firm = {
@@ -385,8 +392,12 @@ function hydrateFirm(v) {
     };
   }
   D.orders = seen;
-  D.launch = !!v.you.wantsLaunch;
-  D.launchKind = v.you.wantsLaunchKind || 'hardware';
+  if (fresh) {
+    D.launch = !!v.you.wantsLaunch;
+    D.launchKind = v.you.wantsLaunchKind || 'hardware';
+  }
+  /* A line you can no longer afford cannot stay armed. */
+  if (D.launch && !v.you.canLaunch) D.launch = false;
 }
 
 /* What this product is likely to sell, given what rivals charged last round.
