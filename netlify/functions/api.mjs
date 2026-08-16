@@ -5,6 +5,7 @@
 
 import { getStore } from '@netlify/blobs';
 import * as G from '../../lib/game.mjs';
+import { syncMarker } from '../../lib/schedule.mjs';
 
 const STORE = 'ceo-games';
 const key = (code) => `game/${String(code).toUpperCase()}`;
@@ -27,7 +28,12 @@ async function load(code) {
   return (await store().get(key(code), { type: 'json' })) || null;
 }
 
-const save = (game) => store().setJSON(key(game.code), game);
+/* Saving also keeps the game's due-marker current, so the sweep can find work
+   without reading every game. */
+async function save(game) {
+  await syncMarker(store(), game);
+  await store().setJSON(key(game.code), game);
+}
 
 /* Rounds close on their own. Rather than relying only on the scheduled function,
    every request that touches a game first asks whether its clock has run out —

@@ -8,36 +8,52 @@
 
    Every five minutes rather than hourly, because a game can now run a round every
    five minutes — an hourly backstop would leave a fast game frozen for most of an
-   hour if everyone closed their tab mid-round. */
+   hour if everyone closed their tab mid-round.
+
+   It reads one list of due-markers rather than every game on the site, so its cost
+   scales with how many rounds are actually overdue, not with how many games have
+   ever been played. See lib/schedule.mjs. */
 
 import { getStore } from '@netlify/blobs';
 import * as G from '../../lib/game.mjs';
+import { dueCodes, syncMarker } from '../../lib/schedule.mjs';
 
 const STORE = 'ceo-games';
 const store = () => getStore({ name: STORE, consistency: 'strong' });
 
 export default async () => {
   const now = new Date().toISOString();
-  const { blobs } = await store().list({ prefix: 'game/' });
-  let closed = 0, scanned = 0, finished = 0;
+  const s = store();
+  const due = await dueCodes(s, now);
+  let closed = 0, gone = 0;
 
-  for (const b of blobs) {
+  for (const { code, key } of due) {
     let game;
     try {
-      game = await store().get(b.key, { type: 'json' });
+      game = await s.get(`game/${code}`, { type: 'json' });
     } catch { continue; }
-    if (!game || game.status !== 'playing') continue;
-    scanned += 1;
+    if (!game) {
+      /* the marker outlived its game — tidy it away */
+      await s.delete(key).catch(() => {});
+      gone += 1;
+      continue;
+    }
     let changed = false;
     while (game.status === 'playing' && G.shouldResolve(game, now)) {
       G.resolveRound(game, now);
       closed += 1;
       changed = true;
     }
-    if (game.status === 'over') finished += 1;
-    if (changed) await store().setJSON(b.key, game);
+    if (changed) {
+      await syncMarker(s, game);
+      await s.setJSON(`game/${code}`, game);
+    } else {
+      /* not actually due after all — re-point the marker at the real deadline */
+      await syncMarker(s, game);
+    }
   }
-  console.log(`tick: ${scanned} live games, ${closed} rounds closed, ${finished} finished`);
+
+  console.log(`tick: ${due.length} overdue, ${closed} rounds closed, ${gone} stale markers`);
 };
 
 export const config = { schedule: '*/5 * * * *' };
