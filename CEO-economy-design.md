@@ -1,0 +1,1740 @@
+# CEO — Economy Design
+
+Reference spec for the game's economic engine. Every formula and constant here has
+been run through a simulator; the balance figures in §10 are measured output, not
+estimates.
+
+---
+
+## 1. Design principles
+
+**One engine, three levels.** Levels 1–3 run identical math. Only the *inputs*
+change: whether shocks fire, whether the demand forecast is noisy, and whether
+rivals share your market. Nothing a player learns in practice becomes false later.
+
+**Legibility first.** A player should be able to reason their way to a good
+decision, then check their reasoning against the result. Every formula is linear
+or a single exponent — no black boxes.
+
+**Every lever has an interior optimum.** For price, production, R&D, and capacity,
+both "too little" and "too much" lose money. There is no lever you simply max out.
+This was tested, not assumed (§10).
+
+**Two-sided punishment.** Under-produce and you lose sales plus future customers.
+Over-produce and you pay to hold and write down stock. The same is true of pricing,
+R&D, and capacity. Every decision is a real decision.
+
+---
+
+## 2. State
+
+**Each product carries:**
+
+| Field | Meaning |
+|---|---|
+| `quality` | Index; 100 = market baseline expectation. Drives both price and reach. |
+| `age` | Rounds since launch. Controls awareness ramp and maturity decline. |
+| `inventory` / `inv_book` | Unsold units and their book value. |
+| `cum_units` | Lifetime production — drives the learning curve. |
+| `capacity` | Max units producible per round. |
+| `rd_pipeline` | R&D spend in flight, with the round it lands. |
+
+**Each company carries:** `cash`, `debt`, and its list of products.
+
+---
+
+## 3. Round structure
+
+The order matters more than any single formula. It must be exactly this:
+
+**Phase A — Upkeep.** Matured R&D lands. Purchased capacity comes online. Quality
+decays 4%. Held inventory is written down 10%.
+
+**Phase B — Decide.** The player sees the *post-upkeep* state and sets price,
+production, R&D, capex, and any discontinuations.
+
+**Phase C — Resolve.** Demand is computed, sales allocated, costs charged, cash
+updated.
+
+> **This ordering is load-bearing.** In an early build R&D landed *after* the
+> player had already set price, so they were pricing against a quality number the
+> engine had already changed. Decisions were quietly made on stale information.
+> The player must always decide on the state they can see.
+
+---
+
+## 4. Demand
+
+### Value
+
+A product's value is what the market thinks it's worth:
+
+```
+value = $100 × (quality / 100)
+```
+
+### Price response (solo levels)
+
+```
+price_multiplier = max(0, 1 + 2.0 × (1 − price / value))
+```
+
+Legible enough to state in the UI: **every 10% you price below value wins about
+20% more units.** Price at 150% of value and demand hits exactly zero.
+
+### The demand pool
+
+```
+pool = 2000 × ramp × decline × (quality/100)^0.6 × market_shock
+```
+
+- `ramp` — 0.65 in a product's first round, 0.90 in its second, 1.0 after.
+  New products are not yet known.
+- `decline` — from age 8 onward, ×0.92 per round. Products get tired.
+- `(quality/100)^0.6` — **quality grows your market, not just your margin.**
+  Without this term R&D only lets you charge more for the same volume, which made
+  innovation a weak lever in testing. With it, R&D compounds.
+- If you stocked out last round, the pool is ×0.90. Customers who couldn't buy
+  from you don't all come back.
+
+```
+demand = pool × price_multiplier
+```
+
+---
+
+## 5. Costs
+
+**Unit cost** falls with cumulative experience (Wright's law, ~8% per doubling):
+
+```
+unit_cost = $45 × max(0.60, (cum_units / 2000)^−0.12) × cost_shock
+```
+
+**Fixed costs:**
+
+- Product overhead: **$40,000** per product per round.
+- Capacity upkeep: **$5.00 per unit of capacity per round**, used or not.
+- Corporate overhead: **$25,000 × (live products)^1.30**.
+
+> The exponent on corporate overhead is what stops portfolio sprawl. Without it,
+> launching another product was unconditionally correct at every point in the game.
+> Running four lines is disproportionately harder than running one.
+
+**Inventory:** holding costs 22% of book value per round, and stock is written
+down a further 10% per round as it ages. Salvage on discontinuation is 40%.
+
+---
+
+## 6. Innovation — two kinds
+
+Innovation splits into two channels that compete for the same budget.
+
+**Product R&D — make it better.**
+
+```
+Δquality = 1.5 × √(spend / 1000) × (100 / current_quality)
+```
+
+**Process R&D — make it cheaper.**
+
+```
+Δefficiency = 1.5 × √(spend / 1000) × (100 / current_efficiency)
+
+unit_cost multiplier    = max(0.55, 100 / efficiency)
+effective capacity      = capacity × (efficiency / 100)^0.5
+```
+
+Both arrive **two rounds later**. Quality decays 4% per round; efficiency decays
+2% (input costs drift, but your factory doesn't forget).
+
+Each has the same three properties — diminishing (square root), harder as you
+climb (the `100/x` term), and delayed. The difference is what they buy:
+
+| | Product R&D | Process R&D |
+|---|---|---|
+| Raises | what you can charge | your margin at any price |
+| Also | grows your reach (`quality^0.6`) | grows throughput (`efficiency^0.5`) |
+| Substitutes for | nothing | buying more factory |
+
+> **Process R&D needed a second job.** In the first version it only cut unit cost,
+> and every pricing strategy — premium, balanced, and discount — wanted the exact
+> same 20% of budget in it, even when process R&D was made four times stronger.
+> That is because quality does double duty (price *and* reach) while cost reduction
+> did only one. Giving process R&D a throughput effect finally separated the
+> strategies.
+
+**Even so, the split differentiates strategies only modestly.** Measured optimum
+is **15% process** for a premium player and **30%** for a discount player. It is a
+real decision — a discount player who puts nothing into process loses 39% of
+company value — but it tilts a strategy rather than defining it. Zero total R&D
+remains fatal: it returns roughly **break-even against a $940k balanced result.**
+
+---
+
+## 7. Capacity — cheap to build, expensive to hold
+
+| | |
+|---|---|
+| Build | **$18 per unit**, arrives **next round** |
+| Hold | **$5.00 per unit per round**, used or not |
+| Sell | returns **$7.20 per unit** (40%), effective **immediately** |
+| Floor | you cannot sell below **400 units** |
+
+The asymmetry is the whole design. Capacity is cheap to acquire and expensive to
+keep, so the mistake is not building too slowly — it's holding a factory you have
+stopped filling. And because the exit only returns 40% of what you paid, escaping
+costs you real money.
+
+**This rebalance is what made capacity a decision.** Under the old numbers
+($30 to build, $2.50 to hold, no exit) the gap between playing capacity well and
+badly was **5%** — you could ignore the lever entirely and still play well. Now it
+is **12%**.
+
+**Selling is a genuine skill with a genuine trap.** Measured against never
+selling:
+
+| | Sell whenever capacity runs ahead of demand | Sell only once the product is in structural decline |
+|---|---|---|
+| 12 rounds | **−7%** | **+3%** |
+| 16 rounds | −3% | **+9%** |
+| 20 rounds | +4% | **+21%** |
+
+Selling into a temporary dip costs you twice — once on the 60% you lose at sale,
+again when you rebuy at full price. Selling into a real decline is one of the
+strongest moves available. Same button, opposite outcomes, and telling the two
+apart is the skill.
+
+---
+
+## 8. Cash, debt, and scoring
+
+Start with **$250,000** (host-configurable). Losses draw on a credit line up to
+**$200,000** at 5% per round. Exceed it and you're bankrupt.
+
+**Final score:**
+
+```
+company value = cash − debt + (inventory × 0.40)
+              + Σ 4 × (average profit of each live product over its last 3 rounds)
+```
+
+The multiple on recent product profit is what stops end-game asset-stripping. A
+company handed over healthy is worth more than one drained to cash.
+
+> **One accounting note for whoever builds this.** The engine charges the *full
+> cost of everything produced* against the round, while per-product profit is
+> recorded against *units actually sold*. So the sum of product profits does not
+> equal company profit in any round where inventory changes. Both numbers are
+> correct — one is cash, one is accrual — but never show them side by side as if
+> they should reconcile. The practice level presents a single cash-basis P&L for
+> exactly this reason, and it ties out to the penny.
+
+---
+
+## 9. Worked example — Round 1
+
+Verified against the engine; the check line reconciles exactly. Note this example
+predates the capacity rebalance — capacity upkeep here is the old $2.50/unit. The
+shape of the round is unchanged; only that line moves.
+
+```
+Start: quality 100 | cash $250,000 | capacity 2,200 | inventory 0
+
+PHASE A — upkeep
+  quality decays 4%                                    ->    96.0
+  value       = $100 × (96.0/100)                      =  $96.00
+  unit cost   = $45 × (2000/2000)^-0.12                =  $45.00
+  demand pool = 2000 × 0.65 ramp × (96.0/100)^0.6      = 1,268.5 units
+
+PHASE B — decide: price $91.20 (0.95 × value), R&D $45,000, produce to forecast
+  price multiplier = 1 + 2.0 × (1 − 91.20/96.00)       =  1.1000
+  forecast demand  = 1,268.5 × 1.1000                  = 1,395.4 units
+
+PHASE C — resolve
+  units sold                                               1,395.4
+  revenue           1,395.4 × $91.20                  $  127,260.50
+  cost of goods     1,395.4 × $45.00                  $  -62,793.01
+  capacity upkeep   2,200 × $2.50                     $   -5,500.00
+  product overhead                                    $  -40,000.00
+  R&D                                                 $  -45,000.00
+  corporate overhead (1 product)                      $  -25,000.00
+  ----------------------------------------------------------------
+  ROUND PROFIT                                        $  -51,032.51
+  cash                                                $  198,967.49
+
+  The $45,000 of R&D buys +10.1 quality, arriving in round 3.
+```
+
+**Round 1 loses money by design.** Awareness is at 65% and the R&D just funded
+won't land for two rounds. This is the single biggest trap for new players — see
+§14.
+
+---
+
+## 10. Levels
+
+| | Level 1 — Practice | Level 2 — Volatile | Level 3 — Shared market |
+|---|---|---|---|
+| Rivals | none | none | all players, one market |
+| Shocks | none | full deck | full deck |
+| Forecast | exact | ±15% band | ±15% band |
+| Levers | unlock one per round | all open from round 1 | all open from round 1 |
+| Resolves | on button press | on button press (solo) | on button press vs bots |
+| Teaches | how the machine works | planning under uncertainty | reading other people |
+| Status | **built** | **built** | **built** — bot rivals, advertising, and the exit/loyalty rules; networked play still needs a server |
+
+All three levels ship as one page with the mode chosen at setup — same engine,
+same code path, different inputs. Games are seeded and the seed is shown at the
+end, so the same market can be replayed.
+
+**The bots are a tier, not a stand-in.** Each level removes a different kind of
+certainty: Level 1 removes none (learn the machine), Level 2 removes certainty
+about the world, Level 3-with-bots removes certainty about other people *while
+keeping them legible* — Valu-Line always undercuts, Meridian always charges more
+and is worth it. That consistency is what lets a player learn what undercutting
+actually does before facing someone unpredictable. Live play removes the last
+certainty.
+
+> **Consequence for the eventual multiplayer build: bots should fill empty seats in
+> live sessions, not sit in a separate mode.** Two humans and two bots is a real
+> four-company market, not a compromise — and it solves the thing that kills most
+> multiplayer games, which is not having enough people online at the same moment.
+> The bot policy already runs on the same information a human gets, so a seat is a
+> seat either way.
+
+**Level 3 information rules.** After each round the player sees every rival's
+price, quality and market share. They never see a rival's cash, spending or plans,
+and never see this round's prices before committing. The bots plan on exactly the
+same basis — each estimates its own share assuming every rival repeats last
+round's price. Nobody has an information advantage.
+
+### The shock deck (Levels 2 and 3)
+
+Three independent tracks, so a recession and a cost spike can bite at once.
+
+| Track | Event | Effect | Rounds | Chance/round |
+|---|---|---|---|---|
+| Demand | Recession | ×0.70 | 3 | 20% for one demand event |
+| | Consumer boom | ×1.30 | 2 | |
+| | Category trend | ×1.25 | 3 | |
+| | Demand slump | ×0.80 | 2 | |
+| Cost | Input cost spike | ×1.35 | 2 | 16% |
+| | Tariffs | ×1.20 | 3 | |
+| | Commodity glut | ×0.85 | 2 | |
+| Capacity | Supply crunch | ×0.65 | 2 | 12% |
+| | Logistics strike | ×0.75 | 2 | |
+| — | Technology leap | all quality ×0.88 | instant | 8% |
+
+Duration matters more than magnitude. A one-round dip is absorbable; a three-round
+recession while you're carrying inventory is what actually kills companies.
+
+### Shared market (Level 3)
+
+**Re-measured from scratch** after the capacity rebalance, the R&D split and
+throughput. The previous figures were taken on constants that no longer exist.
+
+Each firm's pull on customers — three kinds of buyer:
+
+```
+attractiveness = (value/price)^2.3          ← bargain hunters (value for money)
+               × (value/avg_value)^3.2      ← quality seekers (want the best)
+               × (1 + awareness/100)^0.8    ← people who have heard of you
+share          = attractiveness / Σ all attractiveness
+```
+
+Total category demand still uses a much lower elasticity than share does, so a
+price cut mostly steals customers rather than creating them:
+
+```
+category_demand = Σ pools × max(0, 1 + 0.8 × (1 − avg_price / avg_value))
+```
+
+**The price equilibrium moved.** `SHARE_BETA` had to rise from 2.1 to **2.3**: at
+the old value, best replies pointed upward from every direction and prices drifted
+without limit. At 2.3 they converge inward on **0.98× value** from both sides.
+Cheaper capacity and process R&D had quietly made high pricing more attractive.
+
+**`QUALITY_PULL` had to rise from 1.8 to 3.2 to make premium play viable.** At 1.8 a
+quality-led firm lost 14-36 to a balanced one and no parameterisation rescued it.
+Isolating one variable at a time showed why: *premium **pricing** was the killer,
+not the premium product.* Pricing at 0.94 was even (26-24); pricing at 1.02 lost
+11-39. Every other premium trait — heavier product R&D, leaner capacity, lower ad
+spend — was neutral.
+
+The fix is clean because the two constants turn out to do separate jobs.
+`SHARE_BETA` governs how hard price competition bites; `QUALITY_PULL` governs what
+a quality edge is worth. Raising the latter to 3.2 brought premium to 27-23 **and
+left the price equilibrium pinned at 0.98 from every direction.** Past 4.0 premium
+becomes dominant (33-17, then 41-9), so 3.2 is the balance point.
+
+> A fix that was proposed and abandoned before testing: making the quality term
+> absolute (`value/100`) rather than relative (`value/avg_value`). It cannot work —
+> share is a *normalised* ratio, so a divisor common to every firm cancels out
+> entirely. The two forms produce identical shares.
+
+**Advertising is a share term, never a demand term** (§13 explains why). Awareness
+decays **55% per round** — it is rented, not owned — and is capped at 80.
+
+```
+awareness += 8.0 × √(spend/1000)
+```
+
+`AD_GAMMA` of **0.8** was chosen as the gentlest setting that still produces a
+proper prisoner's dilemma. Measured over three firms:
+
+| Everyone spends | Each firm ends with |
+|---|---|
+| $0 | **$743k** |
+| $20k/round | $281k |
+| $40k/round | bankrupt |
+
+Yet abstaining while rivals spend $20k costs you 62% of your value, and the best
+reply is always **$10–20k — never more**. So it is individually compulsory,
+collectively destructive, and self-limiting. Exactly the shape a price war has.
+
+**Every lever stays interior in competition**, checked against a live field:
+
+| Lever | Optimum in the shared market |
+|---|---|
+| Price | a band of 0.94–1.02× value; tighter with more players |
+| R&D total | $60k/round — zero is bankruptcy |
+| Process share | 15% |
+| Capacity | 0.95× forecast — both over and under punished |
+| Advertising | $10–20k/round |
+
+**Five viable identities**, measured over 150 five-way games with shocks:
+
+| Bot | Wins | Character |
+|---|---|---|
+| Premium | 32% | Highest quality, top-of-band pricing, buys little attention |
+| Balanced | 31% | Middle of everything |
+| Discounter | 21% | Cheap and high-volume, process-heavy R&D |
+| Marketer | 9% | Average product, heavy advertising — and 17% bankruptcy |
+| Operator | 7% | Lean plant, cost leadership |
+
+**Stockouts spill.** Demand you can't fill passes to rivals with stock, so
+advertising past your capacity actively funds your competitors.
+
+---
+
+## 11. What testing showed
+
+Tens of thousands of simulated company-rounds. Headline results:
+
+**Every lever has an interior optimum.** Re-measured after the capacity rebalance
+and the R&D split:
+
+| Lever | Too little | Optimum | Too much |
+|---|---|---|---|
+| Price | 0.80× → $707k | **0.88–0.95× value** | 1.10× → $653k |
+| Production | 0.85× → $229k | **1.05× forecast** | 1.40× → $858k |
+| R&D (total) | $0 → −$6k | **$45–60k/round** | $120k → $459k |
+| R&D (process share) | 0% → $766k | **15–30%** | 75% → $322k |
+| Capacity | 1.0× → $895k | **1.1× forecast** | 2.0× → $829k |
+
+**No dominant strategy.** In a 360-combination sweep of price, production, R&D and
+capacity policy, 74 landed within 10% of the best result — many viable paths, no
+knife-edge. Best $1.11M, median $835k, worst $288k.
+
+**Prices converge instead of spiralling.** Best replies point inward from both
+directions and settle at 0.95–1.02× value. No race to the bottom, no runaway
+escalation.
+
+**Distinct identities are all playable.** Head-to-head over 60 games each, a
+scale-led player beats a balanced one 32–28, and a properly-funded low-price
+player beats balanced 46–14. Quality-led play is viable but currently the weakest
+of the three (§12).
+
+**Strategies that should lose, do.** A no-R&D company returns ~15% of a balanced
+one and goes bankrupt in 41% of competitive games.
+
+**The market scales.** Average company value stays in a $510k–$672k band from 2 to
+8 players. Nothing breaks at either end.
+
+**Launch timing is a real skill.** Over 16 rounds, launching a second product at
+round 6 returns $1.51M and at round 8 returns $1.46M. Launching at round 1 returns
+only $673k — *far worse than never launching* ($1.09M) — because it starves your
+first product during its ramp. Launching at round 12 ($908k) is also worse than
+never. The window is real, and it is roughly rounds 6–8 of a 16-round game.
+
+---
+
+## 12. Known soft spots
+
+Honest list of what still needs work:
+
+**Two-player games skew aggressive.** The 0.95× equilibrium holds with three or
+more firms. Heads-up, undercutting is stronger, because you take share from one
+opponent instead of diluting it across several. Consider a slightly lower
+`QUALITY_PULL` for two-player sessions, or set a three-player minimum for
+Level 3.
+
+**Quality-led play is the weakest viable identity** — 7 wins in 100 five-way
+games versus 38 for balanced. It works, but wants either a stronger `QUALITY_PULL`
+or cheaper R&D at high quality to be a genuine peer. The process/product R&D split
+helps a little by giving discount play its own engine, but it tilts strategies
+rather than defining them (§6).
+
+**The shared-market figures in this section predate the capacity rebalance and the
+R&D split.** Price equilibrium, share allocation, and the archetype tournament were
+all measured on the earlier constants. The solo numbers above have been re-measured;
+Level 3 needs a re-run before those claims can be trusted again.
+
+**Over-production is punished far more gently than under-production.** Producing
+1.5× forecast costs about 6% of company value; producing 0.7× costs 88%. Directionally
+right — real firms face this asymmetry — but the gap is wide enough that
+"when in doubt, make extra" is close to free. If you want the quantity decision to
+bite, raise the holding cost or tighten capacity.
+
+**Bankruptcy is rare for careful players** (0–2% under the full shock deck). The
+test bots throttle spending as cash falls; humans typing numbers into a box will
+bust considerably more often. Worth re-checking against real playtest data before
+tuning the shock deck harder.
+
+
+---
+
+## 13. Levers considered — advertising and news
+
+Both were built and measured rather than argued about. Keeping the results here so
+they don't get re-litigated.
+
+### Advertising — tested twice, rejected both times
+
+Two designs were built and measured against a balanced player worth **$936k**
+with no advertising:
+
+**Design A — advertising buys extra demand** (an awareness stock that decays 55%
+per round). Return per dollar spent, by phase:
+
+| Spent during | Return per $1 |
+|---|---|
+| The launch ramp | **−$1.51** |
+| Maturity | +$0.16 |
+| Decline | +$0.33 |
+| Every round | −$0.30 |
+
+Nothing clears $1. The best constant spend was a **narrow band around $10k/round**,
+which is exactly the "flat tax you set once and stop thinking about" failure mode —
+and above $35k/round it goes sharply negative.
+
+**Design B — advertising accelerates a new product's awareness ramp** (pulls the
+0.65 / 0.90 launch multipliers toward 1.0, does nothing afterwards). Worse:
+**−$2.54 to −$4.37 per dollar** at every level tested.
+
+It also damaged levers that already worked. With advertising on, optimal price
+moved from 0.88× to 1.02× and cutting price became catastrophic (0.80× fell from
+$707k to $267k), because advertising and price cuts are substitutes — once you've
+bought demand, you harvest it with high prices. Optimal R&D also fell from $45k to
+$30k.
+
+### Why it fails, and when it would work
+
+**This economy has no demand shortage that money can fix.** Demand already runs
+ahead of what you can build for most of the game — that's why capacity binds and
+why stockouts are the main punishment. Advertising pushes on the side of the
+equation that was never the constraint. Design A's own trace shows it plainly:
+demand 3,152, units sold 2,185. It bought customers the factory couldn't serve,
+and stockouts then cost 10% of the following round's demand.
+
+Worse, the launch ramp — intuitively the right moment to advertise — is precisely
+when a company is most cash-poor and most capacity-constrained. That is why buying
+demand there scores worst of all.
+
+**Decision: advertising belongs in Level 3, not here.** In a shared market, buying
+demand is really taking share from a rival, and the only tool currently available
+for that is cutting price — which the design deliberately makes mutually
+destructive. A non-price way to fight for share is a genuine gap in Level 3. It is
+not a gap in solo play, where there is nobody to take share from.
+
+**Build it as a share term, not a demand term.** That is the whole lesson of the
+failed tests: adding to the demand pool pushes on a constraint that isn't binding.
+Level 3 already splits share three ways, so advertising slots in as a third
+channel:
+
+```
+attractiveness = (value/price)^2.1        ← bargain hunters
+               × (value/avg_value)^1.8    ← quality seekers
+               × (1 + awareness/100)^γ    ← people who have simply heard of you
+```
+
+That makes advertising do something none of the other levers do: move share
+without touching price or waiting two rounds. It should still be *rented* —
+awareness decaying fast (~55%/round) is what stops it becoming a permanent tax,
+and what makes sustaining it a real cost.
+
+Two things to respect when tuning γ. Stockouts already spill demand to rivals, so
+advertising past your capacity actively **funds your competitors** — that
+interaction is a feature and should be left sharp. And an advertising war has the
+same prisoner's-dilemma shape as a price war: if everyone spends, shares barely
+move and everyone is poorer. That is worth preserving rather than balancing away.
+
+Tune it as part of the Level 3 rebuild, not as a bolt-on — the shared-market
+figures are stale anyway (§12), so the equilibrium has to be re-measured with
+advertising in the model from the start.
+
+
+### News headlines — keep them, but as narration, not prediction
+
+Headlines over the Level 2 shock deck were built and measured two ways: some
+precede a real shock by two rounds, some are pure noise and look identical. The
+design question was what fraction should be true.
+
+**The answer turned out not to matter.** Value of acting on the news, over 200
+games at each setting:
+
+| Headlines true | Ignore them | Hedge | React hard |
+|---|---|---|---|
+| 50% | $627,725 | $648,594 | $591,512 |
+| 70% | $628,093 | $642,039 | $599,881 |
+| 90% | $624,644 | $637,307 | $604,759 |
+| **100%** | $634,287 | **$654,696** | $625,891 |
+
+Hedging beats ignoring by 2–3% — **and by the same 2–3% whether headlines are
+coin flips or perfectly reliable.** Perfect foreknowledge of every shock, two
+rounds early, is worth almost nothing. The same test on the biggest and slowest
+commitment in the game — delaying a $180k product launch when a downturn is
+signalled — returned +1.6% at 100% reliability and +3.0% at 50%, which is to say
+noise.
+
+**Four reasons the information has no cash value here:**
+
+1. **The forecast already shows live shocks.** Once a recession is running, the
+   player sees the smaller demand number. Advance warning only helps decisions
+   with lead time, and those are the small ones.
+2. **The lead-time lever is capacity**, worth 12% of outcome variance. Playing it
+   slightly better at the margin is worth very little.
+3. **Speculative stockpiling is priced out.** Holding costs 22% plus 10%
+   obsolescence — 32% per round — against a cost spike of +35% for two rounds.
+   Producing early to dodge a cost rise is almost exactly break-even. The
+   inventory rules cancel the benefit precisely.
+4. **Shocks are temporary and multiplicative.** They do no permanent damage that
+   foreknowledge could have prevented.
+
+**So build headlines, but point them at the present.** Narrating a shock that is
+*already happening* turns an invisible number change into a legible event —
+"Consumer confidence slips for a third month" instead of demand quietly dropping
+30%. That is worth a great deal for comprehension and atmosphere, costs nothing to
+balance, and carries no risk of teaching players to trade on information that
+cannot pay. Ship the headline copy; drop the leading indicator.
+
+**If you wanted prediction to matter**, the economy would have to change to make
+it pay — cheaper inventory so stockpiling works, or a long-lead irreversible
+commitment worth protecting. Both mean rebalancing levers that currently work, for
+a mechanic worth 3%.
+
+**And as with advertising, the gap is in Level 3.** News about the *economy* is
+already in your forecast. News about *rivals* is not — their capacity, their
+pricing, their launches are the one thing a player genuinely cannot see. A
+headline that leaks a competitor's move has real value precisely because no other
+part of the interface can tell you.
+
+---
+
+## 14. What this means for the interface
+
+The math only works if the player can see it. Four things the UI has to do:
+
+**Show the ramp, or players will kill healthy products.** A product's first two
+rounds lose money by design. In testing, a "shut it down after two losing rounds"
+rule euthanised every product in its infancy and cost 89% of company value
+($1.09M down to $120k). The
+product panel needs to say **"Launching — awareness 65%"**, not just show red.
+
+**Show R&D in flight.** "$45,000 arriving round 3, +10 quality" must be visible
+every round until it lands, or the player will forget they bought it and buy again.
+
+**Show the forecast as a band, not a number.** In Levels 2–3 demand is uncertain
+by ±15%. Displaying a single number teaches players to trust a figure the engine
+will not honour.
+
+**Name the binding constraint.** "You could sell 2,600 — you can only make 2,200"
+is the single most actionable line the game can print.
+
+---
+
+## 15. Suggested host settings
+
+| Setting | Quick | Standard | Long haul |
+|---|---|---|---|
+| Rounds | 8 | 12 | 20 |
+| Starting cash | $300k | $250k | $200k |
+| Starting products | 1 | 1 | 1 |
+| Players (L3) | 3–4 | 3–6 | 4–8 |
+
+Total rounds should always be **visible to everyone**. Knowing the game ends at
+round 12 is what makes the late-game choice — milk the existing line, or gamble on
+innovation that may not land in time — an actual decision.
+
+### Difficulty dials — deliberately unused
+
+The game is hard on purpose: every lever punishes both directions, payoffs arrive
+two rounds after the commitment, and fixed costs are high enough that passivity
+bleeds. That is the design, and it is staying. Recording the dials here so nobody
+has to rediscover them if that decision is ever revisited.
+
+| Dial | Current | Softer | Effect |
+|---|---|---|---|
+| Starting cash | $250,000 | $350,000 | Room to absorb two or three early mistakes |
+| Product overhead | $40,000/round | $30,000/round | Wider margins; passivity bleeds more slowly |
+| R&D delay | 2 rounds | 1 round (practice only) | Mistakes surface before they compound |
+| Credit limit | $200,000 | $300,000 | Later bankruptcy, more chance to recover |
+
+Change these in Practice mode alone if they are ever changed — Levels 2 and 3 were
+balanced against the current values, and every measured figure in this document
+assumes them.
+
+**Two things worth separating: hard and opaque.** The difficulty is intentional.
+The opacity is not, and it is the cheaper thing to fix if the game ever needs to
+feel more welcoming:
+
+- **No sense of scale.** Every slider starts at zero with no indication of what a
+  normal value looks like, so a new player cannot tell whether R&D means $5,000 or
+  $500,000. A quiet "most players spend $45–60k here" under each lever would remove
+  the guesswork without removing the decision.
+- **No positive signal.** The interface warns about stockouts and unsold stock but
+  never says a round went well. That absence makes the game read as harder than it
+  actually is — a player doing fine has no way to know it.
+
+---
+
+## 16. Live sessions — design notes for the multiplayer build
+
+Not built. This is the spec as it stands, recorded so the decisions already made
+don't have to be re-argued.
+
+### Hosting
+
+A player starts a session and sets its rules. Others join. Bots fill any seat that
+stays empty (§10).
+
+| Setting | Expose how | Why |
+|---|---|---|
+| Number of players | **3–6, default 4** | See below — measured, not guessed |
+| Number of rounds | Free, 8–20 | Visible to everyone — it's what makes the endgame a decision |
+| Starting cash | **Preset or bounded** | A difficulty dial, not a preference |
+| Bankruptcy threshold | **Preset or bounded** | Same |
+
+> **Starting cash and the credit limit are the two constants the whole economy was
+> balanced against.** A host who sets starting cash to $50,000 produces a game
+> where no strategy works, and the people who suffer are the players who joined,
+> not the host who chose it. Offer named presets — Standard, Forgiving, Brutal —
+> with custom values clamped to a sane band. Never a free text box.
+
+### How many players
+
+**Minimum 3, sweet spot 4–5, cap at 6.**
+
+Measured how much a player's own choices move their own outcome, 100 seeds per
+point:
+
+| Players | Pricing | R&D | Advertising | Bankruptcies per game |
+|---|---|---|---|---|
+| 2 | 40% | 108% | 104% | 0.25 |
+| 3 | 29% | 127% | 136% | 0.15 |
+| 4 | 16% | 122% | 107% | 0.30 |
+| 5 | 17% | 125% | 129% | 0.45 |
+| 6 | 11% | 125% | 122% | 0.65 |
+| 8 | 27%* | 134% | 122% | **1.02** |
+
+**Player count erodes *pricing* power specifically, not agency overall.** Price acts
+relative to the field, and one firm's weight in the field average shrinks as the
+field grows. R&D and advertising act on your own product and your own awareness —
+absolute effects — so they stay decisive at every size. Nobody becomes a passenger;
+they just stop being able to move the market on price alone.
+(*The 8-player pricing figure is inflated by frequent bankruptcies, where price
+affects survival rather than share.)
+
+So the cap is about **carnage and legibility, not agency**. At eight players a
+company dies every game on average, the winner-to-loser gap reaches 6.7×, and a
+player reads eight rival cards while everyone waits on the slowest person. Being
+eliminated in round 7 and watching is not a game.
+
+**Why not 2:** it works, and it gives the most pricing power, but it is a duel
+rather than a market — no third party to absorb a price war, and heads-up play
+skews aggressive because undercutting takes share from exactly one opponent (§12).
+Three is where structure appears: someone can go premium while another goes cheap.
+
+**Why 4–5 is best:** winner diversity peaks at five, where all five archetypes win
+games. At three the field is too small for that variety.
+
+> Measured against bots, which are consistent. A field of humans will be swingier,
+> and the likely effect is to push the comfortable maximum *down*, not up. Worth
+> re-checking against real sessions before raising the cap.
+
+### Standing orders — the mechanic that decides whether this works
+
+Every turn-based multiplayer game lives or dies on what happens when somebody
+doesn't submit. The answer:
+
+- **If you don't submit, last round's orders repeat.** It keeps the game moving, it
+  is realistic (a company making no new decisions carries on as before), and it
+  lets a new player set something sensible and let a few rounds ride.
+- **A round resolves when everyone has submitted, or when the host's clock runs
+  out — whichever comes first.** A timer alone punishes fast players; waiting for
+  everyone alone lets one absent person freeze the game.
+
+### Hidden bots
+
+**Sessions seat five. Empty seats are filled by bots, and players are not told
+which companies are which until the game ends.**
+
+An opponent you are unsure about is worth studying in a way a labelled bot never
+is — and it makes the empty-lobby problem disappear rather than merely solving it.
+Three requirements:
+
+**1. The bots have to stop being obviously mechanical.** Built and measured — see
+*Making the bots pass* below.
+
+**2. Presentation splits by tier.** Built — see *Labelled and hidden* below.
+
+**3. Disclose the presence, never the identity.** The lobby should say plainly that
+empty seats are filled by AI companies and that nobody learns which until the end.
+That keeps the whole mystery intact while removing any chance a player feels
+cheated when the reveal lands. It costs nothing.
+
+**The end-of-game reveal** shows final standings and, alongside each company,
+whether it was a person or a bot. That is the payoff — and "I was sure Kestrel was
+a human" is the moment worth designing for.
+
+> **Open question: what an eliminated player does.** At five players roughly half of
+> games see someone go bankrupt (§16, 0.45 per game). A bot going under is fine. A
+> human knocked out in round 7 is a spectator for the rest of the session. Decide
+> whether they keep a seat at the table — even just to watch and see the reveal —
+> or get some other role.
+
+### Making the bots pass — built and measured
+
+The bots were fixed parameter sets: Valu-Line priced at exactly 0.92× value every
+round, spent the same money every round, never overreacted, never erred. The
+assumption going in was that the giveaway would be a *frozen price*. It was not.
+
+**Fixed bots already moved their price — $3.78 a round on average**, because price
+is derived from value and value climbs as R&D lands. A player watching the price
+column would have seen it drifting upward the whole game and concluded nothing.
+
+**The actual tell was the decimals.** A ratio times a value produces $88.32,
+$84.79, $90.19 — numbers no human types. Over a measured run, fixed bots produced
+**0% whole-dollar prices**. People price at $95, $100, occasionally $107.50.
+
+Four behaviours were added, each removing one tell without changing what the
+personality *is*:
+
+| Tell | Behaviour added |
+|---|---|
+| Prices with cents | Snap to $5 (30%), whole dollars (50%), half-dollars (20%) |
+| Position never moves | Mean-reverting drift on the price ratio, ±0.07 max, ×0.84 decay |
+| Never reacts | Share below 14% shades price down; above 34% takes margin; a stockout raises price |
+| Never errs | 9% chance a round, 3-round cooldown: over-order 1.35×, skip R&D entirely, panic-buy ads 2.2×, overbuild the factory 1.45× |
+
+Spending is also jittered (±14% R&D, ±18% ads, ±5% production, ±4% capacity
+headroom) and snapped to round figures — $40,000, not $40,600.
+
+**Measured in the built game**, four rivals over a full run:
+
+```
+Valu-Line     $90.00  $85.00  $91.00  $95.00  $105.00 $107.00 $111.00 $114.50 $117.00
+Meridian      $100.00 $95.00  $100.00 $112.00 $115.50 $121.00 $127.50 $134.00 $140.00
+Brightwell    $95.00  $90.00  $97.00  $103.00 $108.00 $115.00 $116.50 $120.00 $125.00
+Kestrel Works $95.00  $90.00  $95.00  $100.00 $107.00 $110.00 $113.00 $114.00 $117.00
+```
+
+89% whole-dollar prices, mean move $4.97, zero identical repeats. That reads as
+four people making judgement calls.
+
+**Balance survived.** 200 games each, five personalities, before and after:
+
+| | Discounter | Premium | Marketer | Operator | Balanced | Bankruptcies/game |
+|---|---|---|---|---|---|---|
+| Fixed | 33.5% | 28.0% | 4.0% | 13.0% | 21.5% | 0.45 |
+| Humanised | 30.5% | 33.0% | 9.5% | 10.0% | 17.0% | 0.60 |
+
+The spread narrowed slightly — noise costs the sharpest strategies a little and
+gives the weakest one (Marketer, 4% → 9.5%) room. Bankruptcies rose from 0.45 to
+0.60 a game, which is the mistakes doing their job. No personality became
+dominant or non-viable.
+
+**One caveat.** The humanisation layer uses a seeded PRNG per bot and is *not*
+covered by the Python↔JavaScript parity test — only the core economy is, and that
+is unchanged (verified again after the port: max divergence 1e-06, which is the
+6-decimal rounding in the test harness). Bot behaviour is reproducible within a
+seed but is not cross-language identical, which is fine because bots are decided
+client-side in solo play and would be decided server-side in a live session.
+
+### Labelled and hidden — built
+
+Humanising behaviour removes the tells a player could *measure*. It does nothing
+about the ones they can simply *read*. "Valu-Line — cheap and everywhere" is not a
+clue, it is a confession, and no amount of price jitter survives it.
+
+So presentation is now a choice at setup, on Level 3 only:
+
+| | Labelled | Hidden |
+|---|---|---|
+| Names | Valu-Line, Meridian, Brightwell… | Drawn from a 25-name pool in the style players pick from |
+| Tagline | Shown | Absent |
+| Which personalities | First *n*, always the same order | Shuffled from the seed |
+| Seat order | Fixed | Shuffled |
+| Reveal | — | Final standings name each strategy |
+
+Shuffling matters as much as the names do. If hidden mode had kept `BOTS.slice(0, n)`,
+a player who ran one labelled game would know seat 1 is always the discounter, and
+the whole disguise would come off in a single round.
+
+**Verified by sweeping the rendered page**, every round, for all five bot names,
+all five taglines and the blurb text: **zero leaks in hidden mode**, all present in
+labelled mode. The coach line that names a rival who is undercutting you now uses
+the display label, so it works in both.
+
+**Final standings were missing entirely** and are now built — every company ranked
+by value, your own row highlighted, and in a hidden game a strategy label against
+each rival: *"Premium — charge more, out-innovate"*. That table is the payoff, and
+it did not exist before this pass.
+
+Labelled stays the default. It is the better teacher, and the point of the
+practice tier is to make the five strategies legible before anyone has to identify
+one blind. Hidden is the rehearsal for live play.
+
+**Still open for live sessions:** in a real session the reveal has to say *person or
+AI*, not just which strategy — the seat model is there, but there are no human
+seats to mark yet.
+
+### Persistent identity
+
+Players create a company name once and keep it across games. Because it is stable,
+it is free to carry a record: games played, best company value, win rate, and which
+identity they tend to play. A light progression system that costs almost nothing.
+
+This implies the profile lives server-side rather than on the device, so it
+survives switching machines. And if sessions are joinable by strangers, names need
+basic filtering and a uniqueness rule — cheap up front, awkward to retrofit.
+
+### What still has to be decided
+
+- **Synchronous or asynchronous.** A twenty-minute game in one sitting and a game
+  where a round resolves once a day are both viable, but they want different round
+  timers, different notification behaviour, and possibly different round counts.
+- **What players see about each other mid-game.** Level 3's rule against bots —
+  prices, quality and share revealed only after a round — should carry over
+  unchanged. It is what makes committing blind meaningful.
+
+---
+
+## 17. Buyouts — tested, and why the obvious version does not work
+
+The proposal: a player heading for bankruptcy can be bought out by a rival.
+Built into the simulator and measured over 400 paired games (same seeds,
+acquisitions on and off).
+
+### The snowball fear was unfounded — it runs the other way
+
+| | With buyouts | Without |
+|---|---|---|
+| Winner's margin over 2nd place | **56%** | 63% |
+| Round-6 leader goes on to win | **46%** | 51% |
+
+Buyouts *compress* the field and make an early lead slightly **less** decisive.
+There is no runaway.
+
+### The real problem: nobody would ever buy
+
+| Variant | Deals | Buyer better off | Median change to buyer |
+|---|---|---|---|
+| Run the acquired line | 90 | **7%** | −$212,950 |
+| Shut it down for scrap | 106 | 12% | −$130,468 |
+| Shut it down, earlier trigger | 139 | 12% | −$110,154 |
+| Only before round 8 | **0** | — | — |
+
+Buying a distressed rival made the buyer worse off **88–93% of the time**.
+
+Three findings behind that:
+
+**Distress never happens early.** Restricting deals to before round 8 produced
+*zero* deals in 400 games. Companies here survive comfortably and then fail late —
+so an acquisition always lands with no runway left to fix anything.
+
+**Corporate overhead is not the culprit.** The obvious fix was synergy — let an
+acquired line be absorbed rather than run as a separate business. Removing the
+overhead escalation *entirely* moved the buyer's success rate from 7% to 6%, and
+at high synergy more buyers went bankrupt, not fewer.
+
+**What you are actually buying is an ongoing loss plus its debt.** A distressed
+company is losing money every round; that does not stop when it changes hands. Its
+recoverable assets are worth ~$25k against ~$70k of debt. No structural relief on
+the buyer's side fixes an asset that is underwater by construction.
+
+### The version that would work
+
+Make it **the seller's decision, not the buyer's.** A company heading for
+bankruptcy can accept a buyout at a formula price and exit with that as its final
+score — from the market, not from a rival who has to want it.
+
+That keeps everything the idea was for:
+
+- a failing player exits with a number instead of a seat to watch from
+- "sold the company" becomes a legitimate ending rather than a loss
+- and it creates a genuinely hard decision for the seller — **take the offer now,
+  or spend two more rounds trying to recover and risk getting nothing** — which is
+  exactly the kind of choice the rest of the game is made of
+
+What it drops is the part the measurements say cannot work: requiring a rival to
+find a distressed company attractive. They never will, and they are right not to.
+
+### Two tracks: the market buys companies, players buy assets
+
+**Sell to the market (a bot buyer) — always available.** Formula price, debt
+cleared, the seller exits with that as their final score. This track has to exist
+precisely because the measurements say a rival will almost never want a distressed
+company. The exit cannot depend on someone else's appetite.
+
+**Sell to a player — available when someone genuinely wants it.** Rare by design.
+A dramatic option should be rare.
+
+What changes hands differs by track, and that is the important part:
+
+| | Sold to the market | Sold to a player |
+|---|---|---|
+| What transfers | the whole company | assets: capacity, stock, or a product line |
+| The debt | cleared from proceeds | **stays with the seller** |
+| Seller afterwards | out, holding the payment | still playing, holding cash and their debt |
+
+**There is already a bargaining range in the economy, and it was not put there on
+purpose.** Capacity costs **$18** to build and returns **$7.20** as scrap. Any
+price between those makes both sides better off — the seller beats scrapping, the
+buyer beats building. About $10.80 per unit of genuine surplus to divide, arising
+directly from the build/scrap asymmetry that makes overbuilding punishing (§7).
+
+**A product line is the bigger prize.** Quality, efficiency, awareness and
+cumulative volume have no scrap value at all. A buyer picking up a product at
+quality 130 acquires something that would have cost them roughly $200k and six
+rounds of R&D to build. That is where a player-to-player deal is genuinely worth
+doing — and it leaves the seller holding their debt and an empty shell, which is a
+desperate and interesting move if they have a second line to survive on, and simply
+the end if they do not.
+
+> **Untested, and it matters:** distress never arrives before round 8 (measured
+> above), so by the time a sale is obvious there is rarely runway left for a buyer
+> to profit. If player-to-player deals are meant to actually happen, they probably
+> need to be open to *healthy* companies too — a voluntary sale rather than a
+> distressed one. That is a different mechanic and should be measured on its own
+> before it is built.
+
+### Player-to-player deals — and how they differ from Monopoly
+
+Offers can run in both directions: post an asking price for one of your own lines,
+or bid unsolicited for someone else's. Whole companies go to the market (above);
+players trade lines and assets.
+
+**The structural question is whether an asset is worth different amounts to
+different buyers.** If everyone values it identically, trading is haggling over a
+known number — Monopoly. Measured by handing the same product line, free, to each
+of three rivals at mid-game across 101 games:
+
+| Buyer | Median gain | Positive in |
+|---|---|---|
+| Premium | +$8,202 | 54% of games |
+| Balanced | +$9,547 | 51% |
+| Operator | +$13,006 | 56% |
+| **Spread between best and worst buyer** | **$62,481** | — |
+
+The medians are nearly identical across archetypes while the spread is large, which
+means **value is situational, not typological.** There is no rule to learn like
+"operators always want lines" — it depends on your capacity position, your quality
+gap, how many rounds are left and what the market is doing. A bid is a judgment
+call made under uncertainty, and roughly half of them would be wrong.
+
+**Three rules do the anti-Monopoly work:**
+
+1. **Sealed bids, resolved with the round.** Offers are submitted alongside normal
+   orders and settle when the round settles. No separate negotiation phase, so the
+   game cannot stall — the failure mode that actually ruins Monopoly — and it works
+   asynchronously.
+2. **Accept or decline, but never accept a lower bid.** A seller may refuse
+   everything; if they accept, it is the highest offer. This is what kills
+   kingmaking: a company cannot be handed to a friend cheaply, or dumped to spite
+   the leader.
+3. **A price floor at computed asset value**, so a sale cannot be used to move money
+   around under cover of a trade.
+
+Combined with incomplete information — nobody sees a rival's cash or unit costs —
+bidding is closer to poker than to property trading: you are guessing what the line
+is worth to *them* as well as to you.
+
+> **Expect this to be rare.** Even given away free, a product line was worth having
+> only about half the time. Once a buyer is paying, most bids should be low and most
+> deals should not happen. That is the right shape for a dramatic option, but it
+> should not be built expecting heavy use.
+
+### Voluntary sales of healthy companies — they work, but the timing is degenerate
+
+Unlike distressed sales, a healthy line *is* worth buying. Measured across 14-round
+games by comparing what a buyer would gain against what the seller gives up by
+leaving:
+
+| Sale round | Buyer's max willingness to pay | Seller gives up | Deal possible |
+|---|---|---|---|
+| 3 | $5,478 | $126,162 | 11% |
+| 5 | $59,373 | $132,079 | 19% |
+| 7 | $77,035 | $68,605 | **41%** |
+| 9 | $55,532 | $17,300 | **63%** |
+| 11 | $169,836 | $39,893 | **88%** |
+
+**Both sides want to trade late, and that is the problem.** The seller's
+reservation price falls as the game shortens — fewer rounds of profit left to give
+up — while the buyer's willingness to pay *rises*. Left alone, every deal in the
+game would happen in the last two or three rounds, which is precisely when an
+acquisition has no time to matter strategically. It becomes a score transfer, not a
+decision.
+
+**The cause is mostly structural, not a scoring bug.** My first guess was the
+terminal multiple (4× recent profit) transferring with the asset, so I tested a
+holding period. It barely helped: requiring three rounds of ownership changed
+nothing at all, and requiring four only cut the round-11 figure from $168,738 to
+$92,173 — still the highest of any round. The dominant effect is simpler: **an
+acquired line carries ongoing corporate overhead, and buying late means paying it
+for fewer rounds while receiving the same asset at scoring.** Buying at round 5
+costs about nine rounds of escalated overhead; buying at round 11 costs three.
+
+**The fix is a deadline, not a holding period: no deals in the final third of the
+game.** That removes the degenerate endgame entirely and leaves a genuine window —
+roughly rounds 4 to 9 of 14 — where a deal is viable 20–60% of the time and has to
+actually play out. A trade becomes a bet on the rest of the game rather than a
+purchase of someone else's final score.
+
+> This is the only trading mechanic of the three tested that produces real deals at
+> a strategically interesting moment. Distressed rival-to-rival sales never pay
+> (§17); late voluntary sales pay for the wrong reason. **A bounded window on
+> voluntary sales of healthy lines is the one worth building.**
+
+### When a firm exits, the market barely moves
+
+Measured by removing a healthy firm at round 7 and comparing survivors against the
+same game where it stayed:
+
+| Survivor's… | Change |
+|---|---|
+| Market share | **+9.0 percentage points** |
+| Demand per round | +15 units |
+| Final company value | **+$6,825** |
+
+Share concentrates and the pie shrinks by almost exactly the same amount, because
+each firm contributes its own demand pool (§10). The two cancel.
+
+**Consequence: driving a rival out of business gains you nothing.** There is no
+predatory pricing, no war of attrition, no reason to push a wounded competitor over
+the edge. That is defensible — a category with more players genuinely is bigger,
+since they collectively create awareness and variety — but it is a choice, not an
+accident, and it should be made deliberately.
+
+> **The lever, if elimination should pay:** make the category pool scale
+> sublinearly with the number of firms — `MARKET_BASE × n^0.7` rather than
+> `MARKET_BASE × n`. Then losing a firm shrinks the pie less than it concentrates
+> share, and survivors genuinely gain. One constant. It would make the game meaner
+> and invite pile-ons; measure before adopting.
+
+### The actual trading window is narrower than "not the final third"
+
+Setting the buyer's willingness to pay against what the seller gives up by leaving:
+
+| Round | Buyer offers up to | Seller requires | Zone of agreement |
+|---|---|---|---|
+| 3 | $5,478 | $94,080 | none |
+| 5 | $59,373 | $79,595 | **none** |
+| 7 | $77,035 | $54,003 | **$23,000** |
+| 9 | $55,532 | $32,874 | **$22,000** |
+| 11 | $169,836 | ~$40,000 | large, but degenerate (§17) |
+
+**The real window in a 14-round game is roughly rounds 7 to 9 — about the 50–65%
+mark.** Before it, sellers rationally refuse; after it, deals become endgame score
+transfers. Bound the mechanic to that band rather than merely excluding the final
+third.
+
+**Selling out and coasting is a legitimate, sensibly-priced strategy.** The cost of
+leaving declines steadily and predictably as the game shortens, so a player who
+sells is making a real judgement about their prospects rather than exploiting a
+loophole. Their score locks at the sale price and they can watch the rest.
+
+### The new entrant — and the one constant that blocks it
+
+Proposal: a company offered for sale that nobody buys goes to a bot, and an
+aggressive new technology company enters in its place. Tested at round 7 of 14.
+
+**A newcomer is a gift to the survivors, not a threat.** Entering at baseline
+quality it finishes on −$83,212 while survivors gain 72–83%. It arrives at quality
+100 against incumbents at 130+, sits in the awareness ramp, and funds R&D that
+cannot land in time — while contributing a full demand pool to a market it cannot
+compete for.
+
+Giving it a genuine technology advantage was the obvious fix, and it does not work
+either:
+
+| Entrant quality | Wins the game | Effect on survivors |
+|---|---|---|
+| 0.95× market | 4% | **+73%** |
+| 1.05× market | **26%** (a fair share of wins) | **+42%** |
+| 1.10× market | 53% | +23% |
+| 1.25× market | 100% | −3% |
+| 1.30× market | 100% | −8% |
+
+**At a fair win rate the entrant is still a 42% windfall for everyone else, and to
+stop being a windfall it has to win essentially every game.** There is no setting
+in between.
+
+### Both problems are the same problem
+
+An exit barely moves the market, and an entrant is a gift, for one shared reason:
+**each firm contributes its own demand pool**, so the category grows and shrinks
+with the number of competitors. Adding a handicapped firm expands the pie by more
+than its slice; removing one shrinks it by as much as it concentrates.
+
+> **The single fix: scale the category pool sublinearly with firm count.**
+> `MARKET_BASE × n^0.7` rather than `MARKET_BASE × n`.
+>
+> - An exit then shrinks the pie **less** than it concentrates share → eliminating a
+>   rival pays, and predatory play becomes a real strategy
+> - An entrant then grows the pie **less** than it takes share → a newcomer is a
+>   genuine threat at a fair strength
+>
+> One constant corrects both. **It is load-bearing and should be tested before
+> either mechanic is built** — every balance figure in §10 assumes the current
+> linear pool, so the whole shared market would need re-measuring afterwards.
+
+### The n^0.7 pool — tested, and rejected
+
+Scaling the category pool sublinearly with firm count was the proposed single fix
+for both the inert-exit and gift-entrant problems. Built and measured.
+
+**It does what it was meant to do.** Eliminating a rival went from worth **+2%** to
+worth **+36%** to the survivors. Predatory play becomes a real strategy.
+
+**It did not fix the entrant**, because that was never the same problem. A
+replacement keeps the field at the same size, so pool scaling never engages. A weak
+newcomer is good for its rivals and a strong one is bad for them; there is no
+neutral setting, and there was never going to be. *(The right comparison for an
+entrant is not "the rival stayed" but "the seat sat empty" — and against that
+benchmark a newcomer at 1.05× market quality is close to neutral while still
+winning a fair 25% of games. That version is fine and needs no structural change.)*
+
+**And it broke the shared market.** Re-tuning `SHARE_BETA` from 2.3 to 2.9 restored
+a convergent price equilibrium, but everything downstream came apart:
+
+| | Before | After |
+|---|---|---|
+| Best price | interior at 0.98 | **0.88 — bottom of range, no interior optimum** |
+| Best capacity | 0.95× forecast | **1.35× — pushed to the top** |
+| Best advertising | $10–20k | **$0 — the lever is dead** |
+| Discounter win rate | 21% | **72%** |
+| Premium / Marketer | 32% / 9% | **4% / 0%**, with 25 and 28 bankruptcies |
+
+Five viable identities collapsed to one.
+
+**The bias is structural, not mis-tuned.** A smaller pie per firm makes taking share
+from rivals matter more than growing the category — which mechanically rewards
+undercutting. Another tuning cycle might claw some of it back, but it would be
+fighting the change rather than fixing it.
+
+> **Verdict: not adopted. Reverted to the linear pool.** The goal was "exits should
+> matter," and that does not require restructuring how the market scales. A targeted
+> alternative worth testing instead: when a firm leaves, redistribute its recent
+> share to the survivors as a **one-off transition**, decaying over two or three
+> rounds. That makes an exit felt without touching the equilibrium, the lever
+> optima, or the archetype balance — all of which the structural version destroys.
+
+### What actually works: a one-round offer, then the customers are shared out
+
+The proposal — a sale is offered for a single round; if no player takes it, the
+company leaves and its customers distribute to everyone still playing. Built and
+measured.
+
+**It makes a departure matter, at the right size.**
+
+| | Survivors gain |
+|---|---|
+| Current model (customers simply vanish) | +2% |
+| Customers inherited permanently | **+178%** — a runaway |
+| **Customers inherited, fading 30% per round** | **+23%** |
+
+Permanent inheritance is far too strong. A **30% decay** leaves an exit clearly
+felt without handing the game to whoever was nearest.
+
+**And unlike the `n^0.7` pool, it costs nothing elsewhere.** Run across 250 games
+on both builds, the inheritance version was **identical in all 250** — because
+`inherited` stays at zero until an exit occurs, so the demand calculation is
+unchanged in every game where nobody leaves. Archetype win rates confirm it:
+32/28/24/10/5 with inheritance against 33/28/24/10/5 without, and the winner's
+margin moved from 100% to 97%.
+
+**No re-tuning required.** The equilibrium, the lever optima and the bot balance
+were all measured in games without exits, and those games are bit-identical.
+
+> **Built and shipped.** The exit rules are live in Level 3: a failed rival's
+> customers redistribute by price similarity, only 65% of them move, and the
+> advantage fades 30% a round. The player is told what they inherited and why.
+>
+> **This is the version to build.** It delivers what the structural change was
+> meant to deliver — a departure that the survivors actually feel — while touching
+> nothing that was already tuned. The difference is that it fires on an *event*
+> rather than altering the standing shape of the market.
+
+**Mechanic as specified:**
+
+1. A company puts itself up for sale. The offer stands for **one round**.
+2. Any rival may bid (sealed; highest bid wins; a floor prevents nominal transfers).
+3. If a bid is accepted, the line transfers and the seller exits with the payment.
+4. If nobody bids, the company leaves anyway — the seller takes the market's
+   formula price, and its customers are shared among the survivors in proportion to
+   their size, fading 30% per round thereafter.
+
+The one-round window is what keeps it moving: no haggling across rounds, no
+stalling, and the seller knows before offering that they are leaving either way.
+
+### The market and a rival are not the same buyer — and the price must reflect that
+
+Measured from one surviving player's point of view when a rival leaves at round 7:
+
+| What happens | That player's final value | |
+|---|---|---|
+| Nobody bids; the market takes it | $320,960 | baseline |
+| **They buy the line themselves** | **$143,978** | **−55%** |
+| **A different rival buys it** | **$405,984** | **+26%** |
+
+**At the price the formula was setting, buying is a trap and the best available
+outcome is watching a rival fall into it.** A buyer pays cash, takes on escalated
+corporate overhead, and is weakened by the purchase — which is worth more to
+everyone else than the customer windfall they forgo.
+
+Taken at face value that kills the mechanic: nobody would ever bid. But the cause
+is the pricing formula, not the design. **The market was offering $170,316 while a
+rival's genuine willingness to pay at that round is $77,035** (§17). Setting the
+market price at assets *plus four times recent profit* makes the market the highest
+bidder by construction, so every seller takes it and no rival ever competes.
+
+**The market must be a floor, not a competitor:**
+
+| Buyer | Price | What it means |
+|---|---|---|
+| The market (bot) | **assets only, ≈$20k** | Low, guaranteed, always available |
+| A rival | negotiated, **$54–77k** | Above the floor, below their own valuation |
+
+That separation makes the two paths mean different things:
+
+- **A healthy company only ever sells to a rival.** The floor is far below what
+  continuing is worth to it ($54k at round 7), so absent a real bid it simply keeps
+  playing. No forced exit.
+- **A distressed company takes the floor**, because $20k beats a continuation worth
+  less than nothing.
+- **Customer redistribution therefore fires on failure, not on trade** — which is
+  the right place for it. A company that sold to a rival is still being served by
+  that line; a company that folded is not.
+
+> The general lesson, worth remembering for any auction added later: **if the
+> guaranteed outside option is priced above what bidders would pay, bidding becomes
+> a curse and the auction never happens.** The floor has to sit below the lowest
+> genuine valuation, not above the highest.
+
+### Grounding the exit rules in what actually happens
+
+The redistribution rate had been tuned by feel. Checked against the empirical
+record, and the evidence changes two things.
+
+**Not all of a dead company's customers find a new home.** When Spirit Airlines
+liquidated in May 2026 it took **1.8 million seats off the May calendar overnight**,
+and Frontier — the main carrier picking up its routes — could not backfill
+**60,000 daily passengers**. Capacity constrains absorption; stranded demand simply
+goes unserved. The retail evidence points the same way: a warehouse-club study
+found only **30%** of a closed store's sales transferred to nearby locations, and a
+large mass-merchandiser study found competitors gained **negligibly** when a rival
+closed — most spending either moved within the same chain or stopped.
+
+> **Change made: `INHERIT_SHARE = 0.65`.** Only about two-thirds of a departed
+> firm's demand redistributes; the rest evaporates. That moves the survivors' gain
+> from +23% to **+15%**, and it encodes something true — *a market shrinks when a
+> company dies.*
+
+**The advantage fades, and the timescale matches.** The mass-merchandiser study
+tracked spending elevated in months 2–5 after a closure and back to baseline by
+months 6–11. At a round per quarter, `INHERIT_DECAY = 0.30` leaves roughly 70% of
+the advantage gone after four rounds — the same shape.
+
+**Survivors also gain pricing power, which the model already produces.** After
+Spirit's exit, fares rose **15–25% on every route where it had held double-digit
+share**, with individual routes spiking far higher — LAS–DFW went from $39 to $124
+in 48 hours. Delta, American and United quietly dropped the aggressive Basic
+Economy pricing they had only been running to match Spirit. In the game this
+emerges without a special rule: one fewer competitor in the share denominator means
+less price pressure on everyone left.
+
+**And the capacity constraint is already modelled correctly.** Demand a survivor
+cannot supply spills to whoever can (§10) — which is precisely the Frontier
+situation, where the demand existed but the seats did not.
+
+Sources: [Impact of Competitor Store Closures on a Major Retailer](https://journals.sagepub.com/doi/10.1111/poms.13574) ·
+[How Consumers Respond to Retail Store Closures (MSI)](https://thearf-org-unified-admin.s3.amazonaws.com/MSI_Report_23-135.pdf) ·
+[Airfares after the Spirit liquidation](https://247wallst.com/investing/2026/05/07/airfares-skyrocket-as-much-as-218-on-spirit-airlines-busiest-routes-within-just-48-hours-of-its-may-2-liquidation/)
+
+### Loyalty: orphaned customers go to the closest substitute, not the biggest survivor
+
+The redistribution was weighting by size. The evidence says that is wrong.
+
+**When Spirit Airlines failed, every carrier that absorbed its routes was a
+low-cost carrier** — JetBlue (11 destinations out of Fort Lauderdale), Breeze
+(Atlantic City, where Spirit had held ~75% of traffic), Frontier (13 former Spirit
+routes) and Allegiant. **None of it went to Delta, American or United**, who had
+far more capacity and were sitting on the same routes. JetBlue went further and ran
+a **status match for Spirit's loyalty members** — actively courting the orphaned
+base rather than waiting for it.
+
+The academic work says the same thing in general terms. Research on brand
+"afterlife" finds consumers **retain loyalty to a brand after it dies and channel
+that attachment toward substitutes**, with which competitor captures them varying
+by local conditions — they go somewhere specific, not everywhere evenly. The
+retail study likewise found the customers most likely to follow were the *most
+frequent* ones, not the most casual.
+
+> **Change made: redistribution is now weighted by price-position similarity, at
+> `INHERIT_AFFINITY = 12.0`.** Calibrated against the Spirit outcome — when a
+> budget firm fails, the nearest-priced survivor takes **71%** of its orphaned
+> customers and the premium player takes **6%**:
+>
+> | Affinity | Budget rival | Mid-market | Premium |
+> |---|---|---|---|
+> | 0 (by size) | 33% | 33% | 33% |
+> | 4 | 47% | 32% | 21% |
+> | **12** | **71%** | **22%** | **6%** |
+> | 16 | 80% | 17% | 3% |
+
+**What this adds to the game:** positioning near a weak rival becomes a bet on
+inheriting their customers when they fold. A premium player watching a discounter
+die gains almost nothing; the other discounter gains a great deal. That is a real
+strategic consideration nobody designed in — it falls straight out of matching the
+evidence.
+
+> Measured honestly: at the weaker setting the effect on final outcomes was
+> invisible (a $30 difference on $45,000 of gains). At 12.0 the split is decisive,
+> but the *outcome* effect is still modest because only 65% of one firm's demand is
+> in play and it decays 30% a round. It shapes **who** benefits far more than **how
+> much** — which is the right emphasis, and matches the airline case where the
+> question was never whether traffic moved but which carriers got it.
+
+Sources: [US carriers move to fill Spirit routes](https://www.aerotime.aero/articles/us-low-cost-carriers-fill-spirit-routes-shutdown) ·
+[Brand afterlife: transference to alternate brands following corporate failure](https://experts.arizona.edu/en/publications/brand-afterlife-transference-to-alternate-brands-following-corpor/) ·
+[How Consumers Respond to Retail Store Closures (MSI)](https://thearf-org-unified-admin.s3.amazonaws.com/MSI_Report_23-135.pdf)
+
+
+---
+
+## 18. Live sessions — built
+
+§16 was the design. This is what was built, and the four things that turned out
+differently once it was running.
+
+### Shape
+
+A host creates a game, gets a six-character code and a share link, and sends it to
+friends. Empty seats fill with hidden bots at kick-off. **One round a day**: a
+round closes when everyone still playing has filed, or when the host's clock runs
+out — whichever comes first.
+
+No accounts. Naming your company gets you a token in your browser, and that token
+is you. It is the right trade for a game you play with people you already know,
+and the one real failure mode — clearing your browser data mid-game — is worth
+naming rather than engineering around.
+
+| Piece | What it does |
+|---|---|
+| `lib/engine.mjs` | Generated from `engine.js`, so the server runs byte-identical economy code to the browser |
+| `lib/game.mjs` | Every rule. Pure functions, injected clock, no network |
+| `netlify/functions/api.mjs` | create · join · start · submit · state |
+| `netlify/functions/tick.mjs` | Hourly sweep for rounds nobody opened |
+| Netlify Blobs | One JSON object per game. A finished 5-company season is ~48 KB |
+
+**Rounds mostly close without the schedule.** Any request that touches a game
+first asks whether its clock has run out, so the next player to open the page
+triggers the round. The hourly function is the backstop for a game everyone has
+forgotten, not the mechanism. That removes the usual async-game failure where the
+scheduler is the only thing that can advance play.
+
+**The clock is injected everywhere**, which is why a twelve-day game can be tested
+in twelve milliseconds. `test/season.mjs` plays a full season — three humans, two
+bots, one player who files every round, one who forgets twice, one who vanishes
+after round two — and asserts on standing orders, bankruptcy, redistribution and
+the reveal.
+
+### What testing changed
+
+**1. The shock generator could not be saved.** `newShockState` returned a closure.
+In the solo game that is fine — it never leaves the tab. On a server the game is
+written to storage between every single request, and `JSON.stringify` silently
+drops functions, so the first player to load a saved game would have crashed the
+round. Shock state is now a seed and a call count that rebuilds the stream.
+
+**2. A technology leap only hit one company.** `shockTick(S, firm)` applied the
+quality hit to whichever single firm was passed. In the solo game that was always
+*the player* — so the bots were quietly immune to the one shock that hurts most.
+In a live game it would have been one randomly chosen company. It now takes a list
+and hits everyone. **This was a bug in the shipped solo game too, found only
+because the server forced the question of which firm to pass.**
+
+**3. The host's settings were being thrown away.** The client read the seat count,
+round count and difficulty *inside* the async handler — after the busy-state
+re-render had rebuilt the form and reset every button. Every game was created with
+defaults no matter what the host picked. Two other handlers had the same shape.
+Found by a two-browser test that asserted the lobby showed what was chosen.
+
+**4. The invitation link had no way to accept it.** Opening a share link showed the
+lobby, the seat list and the game settings, and no join form — because the join
+form lived on the home screen. The single most common way anyone reaches this
+product was a dead end. Also found only by driving a real browser.
+
+### How many seats, and how long — measured
+
+24 seasons per cell, all seats playing competent policies (`test/seats.mjs`):
+
+| Seats | 8 rounds, median company | 12 rounds, median | Bankruptcies at 12 |
+|---|---|---|---|
+| 3 | $276k | $157k | 0.13 |
+| 4 | $288k | $196k | 0.17 |
+| 5 | $276k | $177k | 0.25 |
+| 6 | $284k | $193k | 0.38 |
+
+**Seat count barely matters** — each seat brings its own customers as well as its
+own $65k of fixed cost, so the market grows with the table. §16's 3–6 holds, and
+for a better reason than the one originally given.
+
+**Length matters enormously, and it exposed a real gap.** From $250k of starting
+cash, an 8-round game ends around $280k and a 12-round game around $180k. The
+difference is the product decline that begins at round 8 — and in the solo levels
+the answer to a maturing product is to *launch a new one*. **Live sessions give
+each company one product and no launch button**, so a long game has no answer to
+its own decline. Rather than ship a default that grinds everyone down, the range
+is 8–14 rounds, default 10.
+
+### The honest limitations
+
+- **One product per company.** The launch lever exists in the solo game and not
+  here. It is the single biggest gap, and it is what would make 20-round seasons
+  work. Everything needed for it is already in the engine.
+- **Last write wins.** Netlify Blobs has no compare-and-swap. Two people filing in
+  the same second could clobber one another. With five friends and a daily round
+  the exposure is small, but it is real and it is not solved.
+- **Nothing tells you a round has closed.** No email, no push. The group chat is
+  the notification channel. That is a genuine design position for a game played
+  with friends, not an oversight — but it is a position, not a fact.
+- **The bot layer is not parity-tested.** The economy is verified against Python to
+  1e-06; bot humanisation is JavaScript only. Bots are decided server-side, so this
+  costs nothing today.
+
+---
+
+## 19. Borrowing, and launching in live sessions
+
+Two additions that turned out to be the same feature: a new product line usually
+has to be borrowed for, and borrowing is priced on how healthy the company looks.
+
+### The rate
+
+Anchored to what borrowing actually costs. As of 13 August 2026 investment-grade
+corporate paper trades around 1% over treasuries, all US high yield at 271 basis
+points, and CCC-and-lower at **10.24%** — roughly a tenfold span from sound to
+distressed. The curve reproduces that shape:
+
+```
+rate = 4%  +  10% × leverage^1.4  +  5% × impairment × exposure     (capped 22%)
+```
+
+- **Leverage** is how much of the credit line is drawn, raised to 1.4 so the first
+  quarter is nearly free and the last quarter is punishing. That is what makes
+  borrowing early to fund something a different decision from borrowing late to
+  cover a loss.
+- **Impairment** is the average of the last three rounds' profit, as a fraction of
+  an $80,000 loss.
+- **Exposure** scales the loss penalty by leverage. Without it, a brand-new company
+  with $190,000 in the bank was rated *Stretched* in round one purely for the
+  ordinary cost of starting up. A company that owes nothing is not distressed
+  however its quarter went.
+
+| Situation | Rate | Called |
+|---|---|---|
+| No debt, losing while ramping | 5.0% | Strong |
+| Small overdraft, losing | 5.5% | Sound |
+| Half the line drawn, profitable | 7.3% | Sound |
+| Deep in, losing | 12.9% | Strained |
+| At the limit, bleeding | 18.7% | Distressed |
+
+**It makes a crisis harder to survive, by a measured amount.** A company dropped to
+60% of its credit line with a losing record, then played well: bankruptcy rises
+from 58% to 71% (crisis at round 4), 46% to 54% (round 6), and 33% to 46%
+(round 8). Recovery stays possible in every case — the rate raises the stakes, it
+does not replace the decision. `RATE_LEVERAGE` is the dial if that is too sharp.
+
+**It caught a bug in the solo game.** The practice level promises an exact
+projection, and the projection was computing interest at the flat constant while
+the engine charged the real rate — so it quietly understated costs for any company
+carrying debt. Both now use `creditRate`.
+
+### Launching, and why it needed three attempts
+
+The first version required the $180,000 in cash. Measured over 24 seasons at four
+companies, a player had that much spare in **fewer than one game in eight** — so
+the answer to a maturing product effectively did not exist.
+
+Allowing it to be borrowed made it available and **fatal: 96% bankruptcy**. The
+affordability test was wrong. It asked "can this be paid for" when the question is
+"can the ramp be survived" — a new line costs about **$87,500 a round more than the
+round before it** (its own $40,000 fixed cost, $36,500 of extra corporate overhead
+from `CORP_SCALING`, $11,000 of plant upkeep) and takes two rounds to reach full
+demand. A firm that borrowed most of its line to launch met that round with nothing
+left to draw and died two rounds later. `LAUNCH_RESERVE` now requires $135,000 of
+room to remain after paying.
+
+A new line also **inherits the company's know-how** — 85% of its best product's
+quality, 90% of its efficiency. A product starting at quality 100 against
+incumbents at 130 cannot get share, for exactly the reason §17 found a new entrant
+cannot. Unlike a quality gift to an outsider this scales with the launcher, so it
+has no "no setting in between" problem. It is also simply true: a second product
+from an established company is not a startup's product.
+
+### Where launching stands — measured, and not flattering
+
+24 seasons per cell, four companies, launching at the stated round versus never:
+
+| Game length | Never | Launch r2 | Launch r7 | Launch r11 |
+|---|---|---|---|---|
+| 12 rounds | $229k, 0% bust | $197k, 17% | $223k, 0% | — |
+| 16 rounds | $224k, 8% bust | $197k, 17% | $224k, 8% | $198k, 8% |
+| 20 rounds | $224k, 8% bust | $197k, 17% | $224k, 8% | $198k, 8% |
+
+**Launching is survivable but still costs about $27,000 of median company value and
+roughly doubles the chance of going under.** No timing was found where it reliably
+wins. The structural reason is in the numbers above: $87,500 a round of new fixed
+cost against roughly $46,000 of gross margin while the line ramps. It pays back
+only if the line reaches maturity in a market that has not moved on.
+
+Two honest readings, and both are defensible:
+
+1. **It is a real bet that usually does not come off**, which is a legitimate thing
+   for a business game to contain — the lever exists, the cost is visible, and a
+   player who takes it against a maturing product in a thinning market may be right
+   where the median is not.
+2. **It is not yet worth taking**, and the constants to move are `PRODUCT_FIXED`
+   ($40,000 a round for a second line is heavy) or `RAMP` (two rounds at 65% and
+   90% is a long time to carry it).
+
+`CORP_SCALING` was tested as the culprit and is not: flattening it from 1.30 to
+1.00 changed the outcome by less than $5,000.
+
+### And the cap on game length was wrong
+
+The 8–14 range in §18 was set because a single product runs out of road. With the
+current constants that is not what the numbers say — **never launching, a 20-round
+game ends at $224k against a 12-round game's $229k**. The decline plateaus rather
+than compounding. The cap can go back up whenever the interface is ready to present
+a longer game; it is a settings change, not an economy one.
+
+### What a player sees
+
+- **Solo:** a permanent readout in the header — `7.3% · Sound` — and, when a plan
+  would overdraw, the warning quotes the rate *that plan* would be charged rather
+  than a headline number.
+- **Live:** a Borrowing card showing the standing, the rate, what is drawn, what is
+  left, and this round's interest, with a bar that turns red as the line fills. The
+  launch checkbox states how much would be borrowed before it is ticked.
+
+Sources: [ICE BofA CCC & Lower US High Yield OAS](https://fred.stlouisfed.org/series/BAMLH0A3HYC) ·
+[US High Yield credit spread (OAS)](https://convextrade.com/metrics/bamlh0a0hym2)
+
+---
+
+## 20. What kind of thing you make
+
+Every constant in §5 through §7 describes one business: a manufactured physical
+good. Materials in each unit, a factory that costs money standing idle, a
+warehouse, stock that rots on the shelf, and a Wright's-law learning curve that
+only means anything if you are physically building things.
+
+| Constant | What it assumes |
+|---|---|
+| `UNIT_COST0` 45 | materials and labour in every single unit |
+| `LEARN_EXP` −0.12 | you get better at *making* it the more you make |
+| `CAPACITY0` / `CAPEX_PER_UNIT` / `CAPACITY_UPKEEP` | a factory, which costs $5 a unit a round whether it runs or not |
+| `HOLDING` 0.22 / `OBSOLESCENCE` 0.10 | a warehouse, and stock that loses value in it |
+| `SALVAGE` 0.40 | unsold stock is a physical thing, so it can be dumped |
+
+Software has none of that. Nor does a commodity behave like deep tech. So a launch
+now picks what kind of thing the new line is.
+
+### The four kinds
+
+Multipliers on the baseline, which means **`hardware` is exactly the economy every
+figure in this document was measured against** — nothing already balanced moves. A
+company always starts with a hardware product; the choice is made when launching.
+
+| | Up front | Per unit | Factory | Stock | Research | Ages |
+|---|---|---|---|---|---|---|
+| **Hardware** | $180,000 | $45.00 | yes, full | yes | baseline | baseline |
+| **Software** | $180,000 | $4.05 | none worth the name | none | 1.15× | **1.6× faster** |
+| **Commodity** | **$70,200** | $27.90 | small | yes | **0.45×** | 0.7× slower |
+| **Deep tech** | $207,000 | $51.75 | yes, full | yes | **1.7×**, one round later | baseline |
+
+Software's fixed cost is **1.75× hardware's** — no factory, but the people are
+expensive — and its quality decays 60% faster, which is the software business in
+two numbers. Commodity is a third of the price to start and research barely moves
+it. Deep tech costs more of everything and takes an extra round to land, but
+research compounds at 1.7×.
+
+**Know-how carries across, but not for free.** A new line inherits 85% of the
+company's best quality and 90% of its efficiency — *if it is the same kind of
+thing*. Across kinds it carries only 60% of that. A factory's process learning is
+worth much less to a software product, and without that discount "launch a
+different kind" would be a free reset into whichever kind is currently strongest.
+
+Verified against the Python engine across all four kinds over a full product life:
+**zero divergence.**
+
+### A correction to §19
+
+§19 concluded that launching costs about $27,000 of median value and never pays.
+**That was wrong, and the error was in the measurement, not the game.** The median
+was taken over all 24 seasons — but in most of them the launch never happened,
+because it was unaffordable. Averaging in two dozen seasons where nothing occurred
+buried the effect of the handful where it did, which is also why hardware and
+software appeared to produce identical results.
+
+Measured over **only the seasons where a launch actually happened**, against the
+same company never launching:
+
+| Kind | Launch round 3 | Launch round 6 | Launch round 9 |
+|---|---|---|---|
+| Hardware | 2 of 24 could afford | 3 of 24 | **+$190k**, 0% bust, 9/24 |
+| Software | 2 of 24 | 3 of 24 | **+$177k**, 0% bust, 9/24 |
+| Commodity | **−$414k, 58% bust** | −$228k, 29% bust | **+$134k**, 5% bust, 22/24 |
+| Deep tech | 2 of 24 | 0 of 24 | **+$303k**, 0% bust, 4/24 |
+
+Three things fall out of that table, and none of them were designed in:
+
+**Timing is the whole decision.** Launching in round 3 is close to suicide —
+commodity, the only kind cheap enough to do it early, loses $414,000 and goes under
+in 58% of seasons. The same choice in round 9, once the first line is mature enough
+to carry it, is worth between $134,000 and $303,000. The lever is not good or bad;
+it is early or late.
+
+**Cheap to start is not cheap.** Commodity is the only kind almost anyone can
+afford (22 of 24 seasons) and it has the *worst* payoff of the four. Its $70,200
+price tag buys a line that cannot be innovated — research at 0.45× — so it competes
+on price forever in a market where share follows quality at an exponent of 3.2.
+
+**Deep tech pays best and is hardest to reach.** Only 4 of 24 companies could
+afford it even at round 9, and those that could gained the most. That is the right
+shape for the expensive option, and it took a correction to get there: at its
+original $261,000 it was reachable in 1 season out of 24 — a lever nobody could ever
+pull is not a choice, it is decoration.
+
+### What is still not settled
+
+The kinds are balanced against each other only at the launch decision. Nobody has
+measured a *company* built around software from round one, because §20 deliberately
+kept the starting product uniform. If the starting kind ever becomes a choice, every
+figure in §10 and §11 needs re-measuring — the shared market, the five bot
+personalities and the price equilibrium were all derived with four identical
+manufacturers in the market.

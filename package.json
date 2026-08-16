@@ -1,0 +1,13 @@
+{
+  "name": "ceo-live",
+  "private": true,
+  "type": "module",
+  "description": "CEO — live sessions. Serverless backend for asynchronous multiplayer.",
+  "scripts": {
+    "test": "node test/season.mjs && node test/api.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0",
+    "@netlify/functions": "^3.0.0"
+  }
+}
