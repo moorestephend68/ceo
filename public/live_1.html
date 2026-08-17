@@ -1,0 +1,2364 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CEO — live session</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:#fcfcfb; --page:#f9f9f7;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --border:rgba(11,11,11,0.10);
+    --series-1:#2a78d6; --series-neg:#e34948;
+    --good:#0ca30c; --critical:#d03b3b; --warning:#fab219; --good-text:#006300;
+    --lock:#f0efec; --radius:10px;
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --surface-1:#1a1a19; --page:#0d0d0d;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --border:rgba(255,255,255,0.10);
+    --series-1:#3987e5; --series-neg:#e66767;
+    --good-text:#0ca30c; --lock:#232322;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--text-primary);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:22px 18px 80px}
+  h1{font-size:22px;letter-spacing:-0.02em;margin:0}
+  h2{font-size:17px;letter-spacing:-0.01em;margin:0 0 10px}
+  h3{font-size:14px;margin:0 0 6px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted)}
+  p{margin:0 0 10px}
+  .muted{color:var(--muted);font-size:13px}
+  a{color:var(--series-1)}
+  header{display:flex;align-items:center;justify-content:space-between;
+    gap:12px;margin-bottom:18px;flex-wrap:wrap}
+  .chip{font-size:12px;border:1px solid var(--border);border-radius:99px;
+    padding:3px 10px;color:var(--text-secondary);background:var(--surface-1)}
+  .card{background:var(--surface-1);border:1px solid var(--border);
+    border-radius:var(--radius);padding:16px 18px;margin-bottom:14px}
+  button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface-1);color:var(--text-primary);padding:8px 14px}
+  button:hover{border-color:var(--muted)}
+  button.primary{background:var(--text-primary);color:var(--page);border-color:transparent;
+    font-weight:600;padding:10px 18px}
+  button.primary:disabled{opacity:0.45;cursor:not-allowed}
+  button.ghost{padding:6px 10px;font-size:13px}
+  .choices{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 6px}
+  .choice{text-align:left;padding:9px 13px;min-width:96px}
+  .choice[aria-pressed="true"]{border-color:var(--text-primary);
+    box-shadow:inset 0 0 0 1px var(--text-primary)}
+  .choice .n{font-weight:650;font-size:14px}
+  .choice .d{font-size:11.5px;color:var(--muted);max-width:210px}
+  .choice.kind{max-width:250px;align-self:stretch}
+  .choice.kind .d{max-width:230px}
+  .choice.off{opacity:0.45;cursor:not-allowed}
+  label{display:block;font-size:12.5px;color:var(--text-secondary);margin-bottom:3px}
+  input[type=text],input[type=number]{font:inherit;width:100%;padding:8px 10px;
+    border-radius:8px;border:1px solid var(--border);background:var(--page);
+    color:var(--text-primary)}
+  input:focus{outline:2px solid var(--series-1);outline-offset:-1px}
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .row>*{flex:1 1 190px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:820px){.grid2{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--grid)}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:600}
+  td.v,th.v{text-align:right;font-variant-numeric:tabular-nums}
+  tr.me td{font-weight:650}
+  .pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;
+    border:1px solid var(--border);color:var(--muted)}
+  .pill.in{color:var(--good-text);border-color:var(--good)}
+  .pill.out{color:var(--warning);border-color:var(--warning)}
+  .pill.dead{color:var(--critical);border-color:var(--critical)}
+  .big{font-size:34px;font-weight:700;letter-spacing:-0.03em}
+  .pos{color:var(--good-text)} .neg{color:var(--series-neg)}
+  .bar{height:5px;background:var(--grid);border-radius:99px;overflow:hidden;margin-top:4px}
+  .bar i{display:block;height:100%;background:var(--series-1)}
+  .err{border-color:var(--critical);color:var(--critical)}
+  .news{border-left:3px solid var(--warning);padding-left:11px;margin:8px 0;font-size:13.5px}
+  .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:22px;
+    letter-spacing:0.18em;font-weight:700}
+  .share{display:flex;gap:6px;align-items:center}
+  .share input{font-family:ui-monospace,monospace;font-size:12.5px}
+  .hidden{display:none}
+  .lede{font-size:15px;color:var(--text-secondary);max-width:60ch}
+  .ctrl{padding:10px 0;border-bottom:1px solid var(--grid)}
+  .ctrl:last-child{border-bottom:none}
+  .ctrl .lab{display:flex;justify-content:space-between;align-items:baseline;
+    gap:10px;margin-bottom:5px;flex-wrap:wrap}
+  .ctrl .name{font-weight:600;font-size:13.5px}
+  .ctrl .hint{font-size:11.5px;color:var(--muted)}
+  .ctrl .row{display:flex;gap:10px;align-items:center}
+  .ctrl .row input[type=range]{flex:1 1 auto;min-width:120px;accent-color:var(--series-1)}
+  .ctrl .row input[type=number]{width:118px;flex:0 0 auto;text-align:right;
+    font-variant-numeric:tabular-nums}
+  .proj{position:sticky;top:12px}
+  .proj .line{display:flex;justify-content:space-between;gap:12px;
+    font-size:13px;padding:3px 0}
+  .proj .line .k{color:var(--text-secondary)}
+  .proj .line .v{font-variant-numeric:tabular-nums}
+  .proj .line.total{border-top:1px solid var(--baseline,var(--border));
+    margin-top:6px;padding-top:7px;font-weight:700;font-size:15px}
+  .proj .sec{font-size:11px;text-transform:uppercase;letter-spacing:0.06em;
+    color:var(--muted);margin:10px 0 2px}
+  .warnbox{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;
+    border-radius:8px;padding:8px 10px;margin-top:8px;line-height:1.45}
+  .warnbox .ic{font-weight:700}
+  .warnbox.bad{background:rgba(208,59,59,0.10);color:var(--critical)}
+  .warnbox.warn{background:rgba(250,178,25,0.13);color:var(--text-primary)}
+  .warnbox.ok{background:rgba(12,163,12,0.10);color:var(--good-text)}
+  .layout{display:grid;grid-template-columns:1fr 330px;gap:14px;align-items:start}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.proj{position:static}}
+</style>
+</head><body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>CEO <span class="muted" style="font-weight:400">— live session</span></h1>
+      <div class="muted" id="sub">One round a day. Everyone commits blind.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="chip hidden" id="gamechip"></span>
+      <button class="ghost" id="theme">Dark</button>
+    </div>
+  </header>
+  <div id="app"></div>
+</div>
+
+<script>
+/* CEO — economy engine (JS port of ceo_engine.py).
+   Practice level uses the solo path: no shocks, no rivals, exact forecast. */
+
+const C = {
+  ELASTICITY: 2.0,
+  VALUE_REF: 100.0,
+  QUALITY_REACH: 0.60,
+  QUALITY_DECAY: 0.04,
+  RD_K: 1.5,
+  RD_DELAY: 2,
+  UNIT_COST0: 45.0,
+  LEARN_REF: 2000.0,
+  LEARN_EXP: -0.12,
+  LEARN_FLOOR: 0.60,
+  HOLDING: 0.22,
+  OBSOLESCENCE: 0.10,
+  SALVAGE: 0.40,
+  STOCKOUT_PEN: 0.90,
+  PRODUCT_FIXED: 40000.0,
+  CORP_FIXED: 25000.0,
+  CORP_SCALING: 1.30,
+  CAPACITY0: 2200.0,
+  CAPEX_PER_UNIT: 18.0,
+  CAPACITY_UPKEEP: 5.0,
+  CAPACITY_RESALE: 0.40,
+  CAPACITY_FLOOR: 400.0,
+  RD_K_PROC: 1.5,
+  EFFICIENCY_DECAY: 0.02,
+  EFFICIENCY_FLOOR: 0.55,
+  THROUGHPUT_EXP: 0.50,
+  LAUNCH_COST: 180000.0,
+  MAX_PRODUCTS: 3,           // more than three lines is bookkeeping, not strategy
+  /* A second line from an established company is not a startup's product. It
+     carries the firm's accumulated know-how, which is both realistic and the only
+     thing that makes launching survivable: a fresh product at quality 100 against
+     incumbents at 130 cannot get share, for exactly the reason a new entrant
+     cannot (§17). Unlike a raw quality gift to an outsider, this scales with the
+     launcher — a strong company's second line starts strong, a weak one's does
+     not — so it does not have the "no setting in between" problem. */
+  /* A launch must leave enough credit behind to survive the ramp. Without this the
+     affordability test passed on paper and killed the company two rounds later:
+     it would let a firm borrow most of its line to launch, then meet a ramp round
+     that costs ~$87,000 more than the one before it with nothing left to draw. */
+  LAUNCH_RESERVE: 135000.0,
+  LINE_QUALITY_INHERIT: 0.85,
+  LINE_EFFICIENCY_INHERIT: 0.90,
+  MARKET_BASE: 2000.0,
+  MATURITY_ROUND: 8,
+  DECLINE: 0.08,
+  RAMP: [0.65, 0.90],
+  CREDIT_LIMIT: 200000.0,
+  /* Borrowing is priced on how healthy the company looks, the way it is in the
+     real market. As of August 2026 investment-grade paper trades around 1% over
+     treasuries, all high yield around 2.7%, and CCC-and-lower at 10.2% — roughly
+     a tenfold span from sound to distressed. These numbers reproduce that shape
+     around the flat 5% the economy was originally balanced at. */
+  INTEREST: 0.05,            // retained: the rate a debt-free company would pay
+  RATE_BASE: 0.04,           // a company with no debt and profits behind it
+  RATE_LEVERAGE: 0.10,       // ...rising with how much of the credit line is used
+  RATE_LEVERAGE_EXP: 1.40,   // slowly at first, then quickly
+  RATE_LOSSES: 0.05,         // ...and again if the business is losing money
+  RATE_LOSS_REF: 80000.0,    // a loss this size counts as fully impaired
+  RATE_LOSS_FLOOR: 0.20,     // ...but losses only bite in proportion to what is owed
+  RATE_MAX: 0.22,            // the point past which nobody would lend at all
+  RESTRUCTURE: 20000.0,
+  /* --- shared market (Level 3) --- */
+  SHARE_BETA: 2.3,        // share sensitivity to value-for-money
+  QUALITY_PULL: 3.2,      // ...and to raw quality
+  AD_GAMMA: 0.8,          // ...and to awareness
+  CATEGORY_ELAST: 0.8,    // cheap prices barely grow the category; they steal share
+  AD_K: 8.0,
+  AD_DECAY: 0.55,         // awareness is rented, not owned
+  AD_AWARE_CAP: 80.0,
+  /* --- what happens when a company leaves the market --- */
+  INHERIT_SHARE: 0.65,     // only this much of its demand finds a new home
+  INHERIT_DECAY: 0.30,     // and the advantage fades this fast
+  INHERIT_AFFINITY: 12.0,  // customers go to whoever is priced closest to what they lost
+};
+
+/* ==================== what kind of thing you make ====================
+   Every constant above describes a manufactured physical good: materials in each
+   unit, a factory that costs money standing idle, a warehouse, stock that rots,
+   and a learning curve. That is one kind of business, not all of them. Software
+   has no factory and nothing to warehouse but expensive people and a short shelf
+   life; a commodity is quick and cheap and cannot be innovated into a premium;
+   deep tech costs more of everything and pays back only if the research lands.
+
+   These are multipliers on the baseline, so `hardware` is exactly the economy
+   every figure in the design doc was measured against — nothing already balanced
+   moves. A company always starts with a hardware product; the kind is chosen when
+   launching a new line. */
+
+const KINDS = {
+  hardware: {
+    label: 'Hardware',
+    blurb: 'Materials in every unit and a factory to build them. Gets cheaper the more you make.',
+    launch: 1.00, fixed: 1.00, unitCost: 1.00, learn: 1.00,
+    capacity: 1.00, upkeep: 1.00, inventory: 1.00,
+    rdLeverage: 1.00, rdDelay: 0, decay: 1.00,
+  },
+  software: {
+    label: 'Software',
+    blurb: 'No factory, nothing to warehouse, almost nothing per copy — but the people cost a fortune and it goes stale fast.',
+    launch: 1.00, fixed: 1.75, unitCost: 0.09, learn: 0.15,
+    capacity: 3.00, upkeep: 0.20, inventory: 0.00,
+    rdLeverage: 1.15, rdDelay: 0, decay: 1.60,
+  },
+  commodity: {
+    label: 'Commodity',
+    blurb: 'Cheap and quick to start. Thin margins, and research barely moves it.',
+    launch: 0.39, fixed: 0.65, unitCost: 0.62, learn: 1.00,
+    capacity: 0.80, upkeep: 0.90, inventory: 1.00,
+    rdLeverage: 0.45, rdDelay: 0, decay: 0.70,
+  },
+  deeptech: {
+    label: 'Deep tech',
+    blurb: 'Slow, dear and complicated to build — but research compounds hard once it lands.',
+    launch: 1.15, fixed: 1.38, unitCost: 1.15, learn: 1.00,
+    capacity: 1.00, upkeep: 1.00, inventory: 1.00,
+    rdLeverage: 1.70, rdDelay: 1, decay: 1.00,
+  },
+};
+
+const kindOf = (p) => KINDS[(p && p.kind) || 'hardware'] || KINDS.hardware;
+const launchCostOf = (kind) => C.LAUNCH_COST * (KINDS[kind] || KINDS.hardware).launch;
+
+let _pid = 0;
+function newProduct(name, kind) {
+  return {
+    id: ++_pid,
+    name,
+    quality: 100.0,
+    age: 0,
+    inventory: 0.0,
+    invBook: 0.0,
+    cumUnits: C.LEARN_REF,
+    kind: KINDS[kind] ? kind : 'hardware',
+    capacity: C.CAPACITY0 * (KINDS[kind] || KINDS.hardware).capacity,
+    alive: true,
+    efficiency: 100.0,   // higher = cheaper to build and more output per plant
+    awareness: 0.0,      // advertising stock: pulls SHARE, never demand
+    inherited: 0.0,      // customers picked up from a company that left
+    rdPipeline: [],      // {lands, dq, spend}
+    procPipeline: [],    // {lands, de, spend}
+    pendingCapacity: 0.0,
+    stockoutLast: false,
+    profitHistory: [],
+  };
+}
+
+function newFirm(cash) {
+  return { cash: cash === undefined ? 250000.0 : cash, debt: 0.0, products: [],
+           bankrupt: false, profitHistory: [] };
+}
+
+const live = (firm) => firm.products.filter((p) => p.alive);
+
+/* What this company pays to borrow, and what to call it.
+
+   Two things move it, and both are things a player can see coming: how much of
+   the credit line is already drawn, and whether the business behind the debt is
+   making money. Leverage is superlinear — the first quarter of the line is nearly
+   free, the last quarter is punishing — which is what makes borrowing early to
+   fund something that pays off a genuinely different decision from borrowing late
+   to cover a loss. */
+function creditRate(firm, creditLimit) {
+  const limit = creditLimit === undefined ? C.CREDIT_LIMIT : creditLimit;
+  const lev = Math.max(0, Math.min(1, firm.debt / Math.max(1, limit)));
+  const hist = firm.profitHistory || [];
+  const recent = hist.slice(-3);
+  const avg = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
+  const impaired = avg < 0 ? Math.min(1, -avg / C.RATE_LOSS_REF) : 0;
+  /* Losses are charged in proportion to how much is already drawn. A lender
+     prices your ability to repay what you owe — and a company that owes nothing
+     is not distressed no matter how its quarter went. Without this, a brand new
+     company was rated Stretched in round one purely for the ordinary cost of
+     starting up. */
+  const exposure = Math.min(1, C.RATE_LOSS_FLOOR + lev);
+  const rate = C.RATE_BASE
+    + C.RATE_LEVERAGE * Math.pow(lev, C.RATE_LEVERAGE_EXP)
+    + C.RATE_LOSSES * impaired * exposure;
+  return Math.min(C.RATE_MAX, rate);
+}
+
+/* Plain language for the same thing. Players should not have to learn a ratings
+   scale to understand that the bank has gone cold on them. */
+function creditStanding(firm, creditLimit) {
+  const r = creditRate(firm, creditLimit);
+  if (r < 0.055) return { label: 'Strong', note: 'Lenders like the look of you.' };
+  if (r < 0.080) return { label: 'Sound', note: 'Normal terms.' };
+  if (r < 0.115) return { label: 'Stretched', note: 'Borrowing is getting expensive.' };
+  if (r < 0.160) return { label: 'Strained', note: 'The bank is charging you for the risk.' };
+  return { label: 'Distressed', note: 'You are paying penalty rates on every dollar owed.' };
+}
+
+const value = (p) => C.VALUE_REF * (p.quality / 100.0);
+
+function unitCost(p, costShock) {
+  const shock = costShock === undefined ? 1.0 : costShock;
+  const k = kindOf(p);
+  const f = Math.max(C.LEARN_FLOOR, Math.pow(p.cumUnits / C.LEARN_REF, C.LEARN_EXP * k.learn));
+  const eff = Math.max(C.EFFICIENCY_FLOOR, 100.0 / Math.max(p.efficiency, 1.0));
+  return C.UNIT_COST0 * k.unitCost * f * eff * shock;
+}
+
+/* Process R&D raises throughput as well as cutting cost, so it is a genuine
+   alternative to buying more plant. */
+function effCapacity(p) {
+  return p.capacity * Math.pow(p.efficiency / 100.0, C.THROUGHPUT_EXP);
+}
+
+function demandPool(p, marketMult) {
+  const mm = marketMult === undefined ? 1.0 : marketMult;
+  const ramp = p.age < C.RAMP.length ? C.RAMP[p.age] : 1.0;
+  let decline = 1.0;
+  if (p.age >= C.MATURITY_ROUND) {
+    decline = Math.pow(1 - C.DECLINE, p.age - C.MATURITY_ROUND + 1);
+  }
+  const reach = Math.pow(p.quality / 100.0, C.QUALITY_REACH);
+  let pool = (C.MARKET_BASE + p.inherited) * ramp * decline * reach * mm;
+  if (p.stockoutLast) pool *= C.STOCKOUT_PEN;
+  return pool;
+}
+
+const priceMultiplier = (price, val) =>
+  Math.max(0.0, 1 + C.ELASTICITY * (1 - price / val));
+
+const soloDemand = (p, price, marketMult) =>
+  demandPool(p, marketMult) * priceMultiplier(price, value(p));
+
+/* ---------------- PHASE A ---------------- */
+function upkeep(firm, roundNo) {
+  const landed = [];
+  for (const p of live(firm)) {
+    const due = p.rdPipeline.filter((r) => r.lands <= roundNo);
+    const gain = due.reduce((a, r) => a + r.dq, 0);
+    if (gain > 0) landed.push({ product: p.name, gain });
+    p.quality += gain;
+    p.rdPipeline = p.rdPipeline.filter((r) => r.lands > roundNo);
+    const dueP = p.procPipeline.filter((r) => r.lands <= roundNo);
+    const gainE = dueP.reduce((a, r) => a + r.de, 0);
+    if (gainE > 0) landed.push({ product: p.name, efficiency: gainE });
+    p.efficiency += gainE;
+    p.procPipeline = p.procPipeline.filter((r) => r.lands > roundNo);
+    const capAdded = p.pendingCapacity;
+    p.capacity += p.pendingCapacity;
+    p.pendingCapacity = 0.0;
+    if (capAdded > 0) landed.push({ product: p.name, capacity: capAdded });
+    p.quality *= 1 - C.QUALITY_DECAY * kindOf(p).decay;
+    p.efficiency *= 1 - C.EFFICIENCY_DECAY;
+    p.awareness *= 1 - C.AD_DECAY;
+    p.inherited *= 1 - C.INHERIT_DECAY;
+    p.invBook *= 1 - C.OBSOLESCENCE * kindOf(p).inventory;
+  }
+  return landed;
+}
+
+/* Advertising buys awareness the same round it is spent, and awareness feeds
+   SHARE — so in a shared market it has to land before demand is split. The caller
+   runs this for every firm first, which keeps the ordering identical to Python. */
+function applyAdvertising(firm, decisions) {
+  for (const p of live(firm)) {
+    const ad = (decisions[p.name] || {}).advertising || 0;
+    if (ad > 0) {
+      p.awareness = Math.min(C.AD_AWARE_CAP,
+        p.awareness + C.AD_K * Math.sqrt(ad / 1000.0));
+    }
+  }
+}
+
+/* When a company leaves, its customers do not evaporate — but neither do they all
+   find a new supplier. About two thirds land somewhere; the rest simply stop
+   buying, because nobody has the capacity or the proposition to serve them. And
+   they go to the closest substitute, not the biggest survivor: when Spirit failed,
+   its traffic went to JetBlue, Breeze, Frontier and Allegiant, and none of it went
+   to the legacy carriers. */
+function distributeCustomers(leaver, survivors, leaverPrice, prices) {
+  const orphaned = live(leaver).reduce((a, p) => a + C.MARKET_BASE + p.inherited, 0)
+                 * C.INHERIT_SHARE;
+  const pool = [];
+  for (const f of survivors) if (!f.bankrupt) for (const p of live(f)) pool.push(p);
+  if (!pool.length || orphaned <= 0) return { orphaned: 0, shares: [] };
+  const affinity = (p) => {
+    if (leaverPrice === undefined || !prices || prices[p.name] === undefined) return 1;
+    const gap = Math.abs(Math.log(Math.max(prices[p.name], 1e-6) / Math.max(leaverPrice, 1e-6)));
+    return Math.exp(-C.INHERIT_AFFINITY * gap);
+  };
+  const weights = pool.map((p) => demandPool(p) * affinity(p));
+  const total = weights.reduce((a, b) => a + b, 0) || pool.length;
+  const shares = [];
+  pool.forEach((p, i) => {
+    const got = orphaned * (weights[i] / total);
+    p.inherited += got;
+    shares.push({ product: p, units: got, fraction: weights[i] / total });
+  });
+  return { orphaned, shares };
+}
+
+/* ---------------- shared market ---------------- */
+/* entries: [{product, price}] across every firm. Three kinds of buyer. */
+function sharedDemands(entries, marketMult) {
+  const mm = marketMult === undefined ? 1 : marketMult;
+  const vbar = entries.reduce((a, e) => a + value(e.product), 0) / Math.max(1, entries.length);
+  const attr = entries.map((e) => e.price > 0
+    ? Math.pow(value(e.product) / e.price, C.SHARE_BETA)
+      * Math.pow(value(e.product) / vbar, C.QUALITY_PULL)
+      * Math.pow(1 + e.product.awareness / 100, C.AD_GAMMA)
+    : 0);
+  const tot = attr.reduce((a, b) => a + b, 0) || 1;
+  const shares = attr.map((a) => a / tot);
+  const pbar = entries.reduce((a, e, i) => a + e.price * shares[i], 0);
+  const vbarW = entries.reduce((a, e, i) => a + value(e.product) * shares[i], 0);
+  const pool = entries.reduce((a, e) => a + demandPool(e.product, mm), 0);
+  const total = pool * Math.max(0, 1 + C.CATEGORY_ELAST * (1 - pbar / vbarW));
+  return { demands: shares.map((s) => total * s), shares };
+}
+
+/* Demand a firm cannot fill spills to rivals that still have stock. */
+function spill(demands, availables) {
+  const n = demands.length;
+  const sales = new Array(n).fill(0);
+  const remD = demands.slice();
+  const remA = availables.slice();
+  for (let pass = 0; pass < 5; pass++) {
+    let unmet = 0;
+    for (let i = 0; i < n; i++) {
+      const take = Math.min(remD[i], remA[i]);
+      sales[i] += take; remA[i] -= take; unmet += remD[i] - take; remD[i] = 0;
+    }
+    if (unmet <= 1e-6) break;
+    const spare = remA.map((a) => Math.max(0, a));
+    const tot = spare.reduce((a, b) => a + b, 0);
+    if (tot <= 1e-6) break;
+    for (let i = 0; i < n; i++) remD[i] = unmet * (spare[i] / tot);
+  }
+  return sales;
+}
+
+/* ---------------- PHASE C ---------------- */
+function resolve(firm, decisions, roundNo, opts) {
+  const o = opts || {};
+  const marketMult = o.marketMult === undefined ? 1.0 : o.marketMult;
+  const costShock = o.costShock === undefined ? 1.0 : o.costShock;
+  const capacityMult = o.capacityMult === undefined ? 1.0 : o.capacityMult;
+
+  let revenue = 0.0, costs = 0.0;
+  const log = [];
+  const liveList = live(firm);
+
+  /* In a shared market the caller has already split demand between firms and
+     passes each firm its slice. Only compute demand here when playing solo. */
+  const demands = {};
+  for (const p of liveList) {
+    demands[p.name] = (o.sharedDemands && o.sharedDemands[p.name] !== undefined)
+      ? o.sharedDemands[p.name]
+      : soloDemand(p, decisions[p.name].price, marketMult);
+  }
+
+  const availables = {};
+  const unitCosts = {};
+  for (const p of liveList) {
+    const d = decisions[p.name];
+    if (d.discontinue) continue;
+    const sell = Math.min(Math.max(0.0, d.sellCapacity || 0.0),
+                          Math.max(0.0, p.capacity - C.CAPACITY_FLOOR));
+    if (sell > 0) { p.capacity -= sell; d._soldCapacity = sell; }
+    const produce = Math.max(0.0, Math.min(d.produce, effCapacity(p) * capacityMult));
+    const uc = unitCost(p, costShock);
+    unitCosts[p.name] = uc;
+    costs += produce * uc;
+    p.cumUnits += produce;
+    p.invBook += produce * uc;
+    availables[p.name] = p.inventory + produce;
+    d._produced = produce;
+  }
+
+  for (const p of liveList) {
+    const d = decisions[p.name];
+    if (d.discontinue) {
+      costs += C.RESTRUCTURE;
+      revenue += p.invBook * C.SALVAGE;
+      log.push({
+        name: p.name, event: 'discontinued', profit: 0,
+        salvage: p.invBook * C.SALVAGE, restructure: C.RESTRUCTURE,
+      });
+      p.alive = false;
+      p.inventory = 0.0;
+      p.invBook = 0.0;
+      continue;
+    }
+
+    const available = availables[p.name];
+    const demand = demands[p.name];
+    const sales = Math.min(demand, available);
+    p.stockoutLast = demand > available + 1e-6;
+    const unitBook = available > 0 ? p.invBook / available : 0.0;
+    const cogs = sales * unitBook;
+    p.inventory = available - sales;
+    p.invBook = p.inventory * unitBook;
+    revenue += sales * d.price;
+    const pk = kindOf(p);
+    const holding = p.invBook * C.HOLDING * pk.inventory;
+    const upkeepCost = p.capacity * C.CAPACITY_UPKEEP * pk.upkeep;
+    const rd = d.rd || 0.0;
+    const rdProcess = d.rdProcess || 0.0;
+    const advertising = d.advertising || 0.0;
+    const capex = d.capex || 0.0;
+    costs += holding + upkeepCost + C.PRODUCT_FIXED * pk.fixed + rd + rdProcess + advertising + capex;
+
+    const sold = d._soldCapacity || 0.0;
+    if (sold > 0) revenue += sold * C.CAPEX_PER_UNIT * C.CAPACITY_RESALE;
+    if (rd > 0) {
+      const dq = C.RD_K * pk.rdLeverage * Math.sqrt(rd / 1000.0) * (100.0 / Math.max(p.quality, 1));
+      p.rdPipeline.push({ lands: roundNo + C.RD_DELAY + pk.rdDelay, dq, spend: rd });
+    }
+    if (rdProcess > 0) {
+      const de = C.RD_K_PROC * Math.sqrt(rdProcess / 1000.0)
+               * (100.0 / Math.max(p.efficiency, 1));
+      p.procPipeline.push({ lands: roundNo + C.RD_DELAY + pk.rdDelay, de, spend: rdProcess });
+    }
+    if (capex > 0) p.pendingCapacity += capex / C.CAPEX_PER_UNIT;
+
+    p.age += 1;
+    const pprofit = sales * d.price - cogs - holding - upkeepCost
+                  - C.PRODUCT_FIXED * pk.fixed - rd - rdProcess - advertising;
+    p.profitHistory.push(pprofit);
+    log.push({
+      name: p.name, demand, sales, produced: d._produced,
+      inventory: p.inventory, profit: pprofit, stockout: p.stockoutLast,
+      revenue: sales * d.price, cogs, holding, upkeepCost, rd, capex,
+      unitCost: unitCosts[p.name], lostSales: Math.max(0, demand - available),
+    });
+  }
+
+  const corp = C.CORP_FIXED * Math.pow(Math.max(1, liveList.length), C.CORP_SCALING);
+  costs += corp;
+  /* Priced on last round's standing, not this one's — you borrow at the rate you
+     had earned, and the consequences of a bad round land the round after. */
+  const rate = creditRate(firm, o.creditLimit);
+  const interest = firm.debt * rate;
+  costs += interest;
+  const profit = revenue - costs;
+  firm.profitHistory.push(profit);
+  if (firm.profitHistory.length > 8) firm.profitHistory.shift();
+  firm.cash += profit;
+  if (firm.cash < 0) {
+    firm.debt += -firm.cash;
+    firm.cash = 0.0;
+  } else if (firm.debt > 0) {
+    const pay = Math.min(firm.cash, firm.debt);
+    firm.debt -= pay;
+    firm.cash -= pay;
+  }
+  /* Live sessions let the host pick a difficulty preset, which moves the credit
+     limit. Defaults to the balanced constant when nothing is passed. */
+  const creditLimit = o.creditLimit === undefined ? C.CREDIT_LIMIT : o.creditLimit;
+  if (firm.debt > creditLimit) firm.bankrupt = true;
+  return { profit, log, corp, interest, rate, revenue, costs };
+}
+
+function companyValue(firm) {
+  let v = firm.cash - firm.debt;
+  for (const p of firm.products) {
+    v += p.invBook * C.SALVAGE;
+    if (p.alive && p.profitHistory.length) {
+      const recent = p.profitHistory.slice(-3);
+      const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+      if (avg > 0) v += 4 * avg;
+    }
+  }
+  return v;
+}
+
+
+
+/* ==================== shock deck (Level 2) ====================
+   Three independent tracks, so a recession and a cost spike can bite at once.
+   Headlines describe what is happening NOW — they are narration, not prediction.
+   Measured testing showed leading indicators are worth ~3% even when perfectly
+   reliable, so this deliberately does not forecast. */
+
+const SHOCKS = {
+  demand: [
+    { name: 'Recession', mult: 0.70, dur: 3,
+      start: 'Recession declared as output falls for a second quarter',
+      during: 'Recession — households have stopped spending',
+      end: 'Forecasters call the recession over' },
+    { name: 'Consumer boom', mult: 1.30, dur: 2,
+      start: 'Spending surges as consumer confidence hits a five-year high',
+      during: 'Consumer boom — buyers are out in force',
+      end: 'The spending surge cools off' },
+    { name: 'Category trend', mult: 1.25, dur: 3,
+      start: 'Your category is suddenly fashionable, say retail analysts',
+      during: 'Category in vogue — new buyers keep arriving',
+      end: 'The trend moves on to something else' },
+    { name: 'Demand slump', mult: 0.80, dur: 2,
+      start: 'Retailers report a sharp slowdown at the checkout',
+      during: 'Slump — the shops are quiet',
+      end: 'Retail traffic returns to normal' },
+  ],
+  cost: [
+    { name: 'Input cost spike', mult: 1.35, dur: 2,
+      start: 'Component prices jump after a supplier fire',
+      during: 'Input costs are up sharply — every unit is dearer to make',
+      end: 'Component prices settle back down' },
+    { name: 'Tariffs', mult: 1.20, dur: 3,
+      start: 'New tariffs announced on imported parts',
+      during: 'Tariffs in force — parts cost more',
+      end: 'Tariffs lifted after trade talks' },
+    { name: 'Commodity glut', mult: 0.85, dur: 2,
+      start: 'Oversupply sends raw material prices tumbling',
+      during: 'Cheap materials — your units cost less to build',
+      end: 'Material prices normalise' },
+  ],
+  capacity: [
+    { name: 'Supply crunch', mult: 0.65, dur: 2,
+      start: 'Port strike halts inbound shipments',
+      during: 'Supply crunch — you cannot run the factory at full tilt',
+      end: 'The ports reopen' },
+    { name: 'Logistics strike', mult: 0.75, dur: 2,
+      start: 'Hauliers walk out over pay',
+      during: 'Haulage disrupted — output is constrained',
+      end: 'Hauliers return to work' },
+  ],
+};
+const SHOCK_CHANCE = { demand: 0.20, cost: 0.16, capacity: 0.12 };
+const TECH_LEAP_CHANCE = 0.08;
+const TECH_LEAP_HIT = 0.88;
+
+/* Small seeded PRNG so a game can be replayed from its seed. */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* The shock stream has to survive being written to storage and read back in a
+   different process, so the state is a seed and a call count rather than a live
+   generator — JSON cannot hold a closure. Rebuilding costs one cheap loop and the
+   count stays in the low hundreds over a whole game. */
+function newShockState(seed) {
+  return { seed: seed >>> 0, calls: 0, active: {}, news: [] };
+}
+
+function shockRand(S) {
+  if (typeof S.rand !== 'function' || S.at !== S.calls) {
+    const r = mulberry32(S.seed);
+    for (let i = 0; i < S.calls; i++) r();
+    S.rand = r;
+  }
+  const v = S.rand();
+  S.calls += 1;
+  S.at = S.calls;
+  return v;
+}
+
+/* Called at the top of each round, before the player decides. */
+/* `firms` may be one firm or many. A technology leap raises the bar for everyone
+   in the market — passing a single firm made it hit that company alone, which in
+   a shared market means one player is randomly punished and the rest are not. */
+function shockTick(S, firms) {
+  S.news = [];
+  for (const track of Object.keys(SHOCKS)) {
+    const cur = S.active[track];
+    if (cur && cur.left > 1) {
+      cur.left -= 1;
+      S.news.push({ kind: 'during', track, text: cur.card.during, card: cur.card });
+    } else if (cur) {
+      S.news.push({ kind: 'end', track, text: cur.card.end, card: cur.card });
+      delete S.active[track];
+    } else if (shockRand(S) < SHOCK_CHANCE[track]) {
+      const deck = SHOCKS[track];
+      const card = deck[Math.floor(shockRand(S) * deck.length)];
+      S.active[track] = { card, left: card.dur };
+      S.news.push({ kind: 'start', track, text: card.start, card });
+    }
+  }
+  const hit = Array.isArray(firms) ? firms : (firms ? [firms] : []);
+  if (shockRand(S) < TECH_LEAP_CHANCE && hit.length) {
+    for (const f of hit) for (const p of live(f)) p.quality *= TECH_LEAP_HIT;
+    S.news.push({ kind: 'start', track: 'tech',
+      text: 'A new generation of products arrives — the bar for "good" just rose',
+      card: { name: 'Technology leap' } });
+  }
+  return S.news;
+}
+
+const shockMult = (S, track) => (S.active[track] ? S.active[track].card.mult : 1.0);
+
+
+
+/* ==================== bot opponents (Level 3) ====================
+   Personalities are the five configurations measured in simulation. They are
+   fixed rather than adaptive: the balance numbers were obtained with these
+   exact values, and a bot that improvises would invalidate them. */
+
+const BOTS = [
+  { id: 'discounter', name: 'Valu-Line', tagline: 'Cheap and everywhere',
+    strategy: 'Discounter — undercut and win on volume',
+    blurb: 'Undercuts on price and makes it up on volume. Spends most of its research on cutting costs.',
+    priceRatio: 0.92, produceRatio: 1.18, rdTotal: 58000, procShare: 0.30, headroom: 1.05, ad: 12000 },
+  { id: 'premium', name: 'Meridian', tagline: 'The best thing on the shelf',
+    strategy: 'Premium — charge more, out-innovate',
+    blurb: 'Charges the most and earns it — nearly all research goes into the product. Buys little advertising.',
+    priceRatio: 1.04, produceRatio: 1.05, rdTotal: 68000, procShare: 0.05, headroom: 1.00, ad: 9000 },
+  { id: 'marketer', name: 'Brightwell', tagline: 'You have heard of them',
+    strategy: 'Marketer — buy attention',
+    blurb: 'Outspends everyone on advertising. Watch what that does to its balance sheet before you copy it.',
+    priceRatio: 0.99, produceRatio: 1.10, rdTotal: 58000, procShare: 0.15, headroom: 1.00, ad: 15000 },
+  { id: 'operator', name: 'Kestrel Works', tagline: 'Lean and quiet',
+    strategy: 'Operator — small plant, low unit costs',
+    blurb: 'Runs a small plant at full tilt and grinds its unit costs down. Rarely spectacular, rarely in trouble.',
+    priceRatio: 0.96, produceRatio: 1.12, rdTotal: 60000, procShare: 0.28, headroom: 0.95, ad: 10000 },
+  { id: 'balanced', name: 'Harbour & Co', tagline: 'Middle of everything',
+    strategy: 'Balanced — no strong opinions',
+    blurb: 'No strong opinions. Prices near value, splits research sensibly, advertises moderately.',
+    priceRatio: 0.98, produceRatio: 1.10, rdTotal: 60000, procShare: 0.15, headroom: 1.00, ad: 12000 },
+];
+
+/* ---------------- seating: labelled vs hidden ----------------
+   The behaviour layer below removes the tells a player could measure. This layer
+   removes the ones they could simply read. In a labelled game the personalities
+   are the teaching material and keep their names and taglines. In a hidden game
+   a tagline is a perfect identity leak — "Cheap and everywhere" is a confession —
+   so names come from the same pool human players draw from, taglines vanish, and
+   the personalities are shuffled so seat order carries no information either. */
+
+const NAME_POOL = [
+  'Northgate', 'Aster Industries', 'Bellweather', 'Corvid Manufacturing', 'Dunmore & Sons',
+  'Elder Row', 'Fairhaven Works', 'Granby Supply', 'Halloway', 'Ironvale',
+  'Juniper Trading', 'Kepler Goods', 'Larkfield', 'Mercer Brothers', 'Nine Elms',
+  'Osprey Works', 'Pemberton', 'Quarry Lane', 'Redhill Manufacturing', 'Stanmore',
+  'Thackeray', 'Uplands Co', 'Vance & Hart', 'Westmere', 'Yarrow Industries',
+];
+
+function shuffle(arr, rnd) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* Returns the rival seats for a game: which personality sits where, what it is
+   called, and what — if anything — the player is told about it. */
+function seatRivals(seed, n, hidden) {
+  const rnd = mulberry32(seed ^ 0x5eaf1);
+  const count = Math.max(1, Math.min(n, BOTS.length));
+  const picked = hidden ? shuffle(BOTS, rnd).slice(0, count) : BOTS.slice(0, count);
+  const names = hidden ? shuffle(NAME_POOL, rnd) : null;
+  return picked.map((bot, i) => ({
+    bot,
+    label: hidden ? names[i] : bot.name,
+    tagline: hidden ? '' : bot.tagline,
+    blurb: hidden ? '' : bot.blurb,
+    isBot: true,
+  }));
+}
+
+/* ---------------- making a bot hard to spot ----------------
+   A player only ever sees a rival's price, quality and share — so price is where
+   essentially all the detection risk lives. The giveaway was never that a bot's
+   price stayed still (it moves, because value moves); it was the DECIMALS. A fixed
+   ratio times a computed value emits $106.59 every round forever. People type $105. */
+
+function newBotState(seed, bot) {
+  return { rand: mulberry32(seed), drift: 0, lastShare: null,
+           lastStockout: false, mistakeCd: 0, anchor: bot.priceRatio };
+}
+
+const snapTo = (x, step) => Math.round(x / step) * step;
+
+/* A per-round variant of the personality — never a different personality. */
+function humaniseBot(bot, st) {
+  const rnd = st.rand;
+  const u = (a, b) => a + rnd() * (b - a);
+  // a slow, mean-reverting wander: nobody re-derives the same number every quarter
+  st.drift += u(-0.026, 0.026);
+  st.drift *= 0.84;
+  // and reactions to what just happened
+  if (st.lastShare !== null) {
+    if (st.lastShare < 0.14) st.drift -= 0.012;        // losing badly: shade down
+    else if (st.lastShare > 0.34) st.drift += 0.008;   // comfortable: take margin
+  }
+  if (st.lastStockout) st.drift += 0.010;              // could not supply: ease off
+  st.drift = Math.max(-0.07, Math.min(0.07, st.drift));
+
+  const out = Object.assign({}, bot);
+  out.priceRatio = st.anchor + st.drift;
+  out.rdTotal = Math.max(0, snapTo(bot.rdTotal * (1 + u(-0.14, 0.14)), 5000));
+  out.ad = Math.max(0, snapTo(bot.ad * (1 + u(-0.18, 0.18)), 1000));
+  out.produceRatio = bot.produceRatio * (1 + u(-0.05, 0.05));
+  out.headroom = bot.headroom * (1 + u(-0.04, 0.04));
+  out.procShare = Math.min(0.6, Math.max(0, bot.procShare + u(-0.05, 0.05)));
+
+  // real mistakes, occasionally, with a cooldown so they do not cluster
+  st.mistakeCd = Math.max(0, st.mistakeCd - 1);
+  if (st.mistakeCd === 0 && rnd() < 0.09) {
+    st.mistakeCd = 3;
+    const kind = Math.floor(rnd() * 4);
+    if (kind === 0) out.produceRatio *= 1.35;             // over-ordered
+    else if (kind === 1) out.rdTotal = 0;                 // skipped research
+    else if (kind === 2) out.ad = snapTo(bot.ad * 2.2, 1000);  // panic-bought attention
+    else out.headroom *= 1.45;                            // overbuilt the factory
+  }
+  return out;
+}
+
+/* People post round prices. This is the single most visible tell. */
+function humanPrice(val, ratio, rnd) {
+  const raw = val * ratio;
+  const roll = rnd();
+  if (roll < 0.30) return Math.round(raw / 5) * 5;
+  if (roll < 0.80) return Math.round(raw);
+  return Math.round(raw * 2) / 2;
+}
+
+function botObserve(st, share, stockout) {
+  st.lastShare = share;
+  st.lastStockout = stockout;
+}
+
+/* What any firm can honestly work out before a round resolves: its own share if
+   every rival repeats the price it charged last round. The bots get exactly the
+   same information the human player does — nobody sees this round's prices. */
+function estimateShare(me, myPrice, rivals, rivalLastPrices, marketMult) {
+  const entries = [{ product: me, price: myPrice }].concat(
+    rivals.map((rp, k) => ({ product: rp, price: rivalLastPrices[k] })));
+  return sharedDemands(entries, marketMult).demands[0];
+}
+
+/* Per product, so a bot running two lines splits its money across them instead of
+   spending its whole budget twice. */
+function botDecideFor(firm, bot, p, guess, opts) {
+  const o = opts || {};
+  const cm = o.capacityMult === undefined ? 1 : o.capacityMult;
+  const share = o.budgetShare === undefined ? 1 : o.budgetShare;
+  const price = value(p) * bot.priceRatio;
+  let budget = firm.cash * 0.55 * share;
+  let capex = 0, sellCapacity = 0;
+  const target = guess * bot.headroom;
+  if (target > effCapacity(p) * 0.95) {
+    capex = Math.min(Math.max(0, target - effCapacity(p)) * C.CAPEX_PER_UNIT, budget * 0.45);
+    budget -= capex;
+  } else if (p.age >= C.MATURITY_ROUND && effCapacity(p) > target * 1.3) {
+    sellCapacity = p.capacity - target * 1.1;   // only shed plant in real decline
+  }
+  const advertising = Math.min(bot.ad, Math.max(0, budget)); budget -= advertising;
+  const rd = Math.min(bot.rdTotal * (1 - bot.procShare), Math.max(0, budget)); budget -= rd;
+  const rdProcess = Math.min(bot.rdTotal * bot.procShare, Math.max(0, budget)); budget -= rdProcess;
+  const produce = Math.max(0, Math.min(guess * bot.produceRatio, effCapacity(p) * cm) - p.inventory);
+  return { price, produce, rd, rdProcess, advertising, capex, sellCapacity };
+}
+
+function botDecide(firm, bot, guess, opts) {
+  return botDecideFor(firm, bot, live(firm)[0], guess, opts);
+}
+
+/* A new product line for an existing company, carrying over what the company
+   already knows how to do. */
+function newLine(firm, name, kind) {
+  const p = newProduct(name, kind);
+  const best = live(firm).reduce((a, x) => Math.max(a, x.quality), 0);
+  const eff = live(firm).reduce((a, x) => Math.max(a, x.efficiency), 0);
+  /* Know-how carries over in full only when the new line is the same sort of
+     thing. A factory's process learning is worth much less to a software product,
+     and vice versa — which is what stops "launch a different kind" being a free
+     reset into whichever kind is currently strongest. */
+  const same = live(firm).some((x) => (x.kind || 'hardware') === (p.kind || 'hardware'));
+  const carry = same ? 1 : 0.6;
+  if (best > 0) p.quality = Math.max(p.quality, best * C.LINE_QUALITY_INHERIT * carry);
+  if (eff > 0) p.efficiency = Math.max(p.efficiency, eff * C.LINE_EFFICIENCY_INHERIT * carry);
+  return p;
+}
+
+/* Whether a bot opens a second line. Without this, long live games are decided by
+   the fact that only the humans can answer a product going into decline — which
+   would be a worse asymmetry than the one it fixes. The rules are the ones a
+   cautious operator would use: pay cash, never while in debt, only once the
+   existing line is maturing, and never so late that it cannot pay back. */
+function botShouldLaunch(firm, roundNo, totalRounds, rnd, creditLimit) {
+  const ps = live(firm);
+  if (!ps.length || ps.length >= C.MAX_PRODUCTS) return false;
+  /* Bots will borrow for a launch, but only a third of their remaining line —
+     they are meant to be plausible operators, not reckless ones. */
+  const headroom = Math.max(0, (creditLimit === undefined ? C.CREDIT_LIMIT : creditLimit) - firm.debt);
+  if (firm.cash + headroom - C.LAUNCH_COST < C.LAUNCH_RESERVE) return false;
+  if (totalRounds - roundNo < 5) return false;
+  const oldest = ps.reduce((a, p) => Math.max(a, p.age), 0);
+  if (oldest < C.MATURITY_ROUND - 3) return false;
+  return rnd() < 0.5;
+}
+
+
+
+
+/* The same economy the server runs, in the page — so the projection below is
+   computed with the identical code that will resolve the round, not an
+   approximation of it. That is the whole reason it can be trusted. */
+
+/* Stamped into this file by mklive.py at build time, so the page cannot claim to
+   be a version it is not. */
+const PAGE_BUILD = '2026-08-17 · ranked tables are private';
+
+const $ = (id) => document.getElementById(id);
+const money = (x) => (x < 0 ? '-$' : '$') + Math.abs(Math.round(x)).toLocaleString('en-US');
+const money2 = (x) => '$' + (+x).toFixed(2);
+const pct = (x) => (x == null ? '—' : (x * 100).toFixed(0) + '%');
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* Identity lives in the browser. No accounts, no passwords: the host sends a link,
+   you name your company, and the token that comes back is you. Losing it is the
+   one real failure mode, so the join screen shows the personal link to keep. */
+const KEY = 'ceo.live.v1';
+const readAll = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+const remember = (code, token, name, pub) => {
+  const all = readAll(); all[code] = { token, name, at: Date.now(), pub: !!pub };
+  try { localStorage.setItem(KEY, JSON.stringify(all)); } catch {}
+};
+const tokenFor = (code) => (readAll()[code] || {}).token || null;
+
+const S = { code: null, token: null, view: null, cfg: null, busy: false, error: null,
+             tab: 'orders', sb: null, session: null, account: null, notice: null,
+             board: null, record: null, showBoard: false,
+             cohorts: null, cohort: null, showClass: false, joinClass: null,
+             demo: null };
+
+/* The demo class belongs to nobody, so the token that came back with it is the
+   only way to get at it again. Kept in the browser so a reload does not silently
+   abandon a class somebody is halfway through showing to a colleague. */
+const DEMOKEY = 'ceo.demo.v1';
+const demoArg = (b = {}) => (S.demo ? { ...b, demo: S.demo.token } : b);
+
+/* Signing in is only needed to host or to own a name. Joining a game a friend
+   sent you stays anonymous — the invitation is the credential. */
+async function api(path, body) {
+  const headers = {};
+  if (body) headers['content-type'] = 'application/json';
+  if (S.session && S.session.access_token) headers.authorization = `Bearer ${S.session.access_token}`;
+  const opt = body ? { method: 'POST', headers, body: JSON.stringify(body) } : { headers };
+  const res = await fetch('/api/' + path, opt);
+  const data = await res.json().catch(() => ({ error: 'The server sent something unreadable.' }));
+  if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+  return data;
+}
+
+function setBusy(b) { S.busy = b; render(); }
+async function guard(fn) {
+  S.error = null; setBusy(true);
+  try { await fn(); } catch (e) { S.error = e.message; }
+  setBusy(false);
+}
+
+/* --------------------------------------------------------------- accounts */
+async function initAuth() {
+  const cfg = S.cfg && S.cfg.auth;
+  if (!cfg || !cfg.enabled) {
+    /* Running locally against the in-memory server: no Supabase, so a token can
+       be typed in. Never reachable in production, where auth.enabled is true. */
+    const dev = localStorage.getItem('ceo.dev.token');
+    if (dev) S.session = { access_token: dev };
+    return;
+  }
+  try {
+    const mod = await import('https://esm.sh/@supabase/supabase-js@2');
+    S.sb = mod.createClient(cfg.url, cfg.anonKey, {
+      auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
+    });
+    const { data } = await S.sb.auth.getSession();
+    S.session = data.session || null;
+    S.sb.auth.onAuthStateChange((_e, sess) => {
+      S.session = sess || null;
+      loadAccount().then(render);
+    });
+  } catch (e) {
+    S.error = 'Could not load sign-in. ' + e.message;
+  }
+}
+
+async function loadAccount() {
+  try { S.account = await api('account'); } catch { S.account = { signedIn: false }; }
+}
+
+async function signIn(email) {
+  if (!S.sb) throw new Error('Sign-in is not configured on this server.');
+  const { error } = await S.sb.auth.signInWithOtp({
+    email, options: { emailRedirectTo: location.origin + '/g/' },
+  });
+  if (error) throw new Error(error.message);
+  S.notice = `Check ${email} — we have sent you a sign-in link.`;
+}
+
+async function signOut() {
+  if (S.sb) await S.sb.auth.signOut();
+  S.session = null; S.account = null;
+}
+
+const signedIn = () => !!(S.account && S.account.signedIn);
+const canHost = () => !!(S.account && S.account.canHost);
+const myCompany = () => (S.account && S.account.companies && S.account.companies[0]) || null;
+
+function accountCard() {
+  const p = S.cfg && S.cfg.products && S.cfg.products.host;
+  if (!signedIn()) {
+    return `
+    <div class="card">
+      <h2>Your company</h2>
+      <p class="lede">Joining a game someone invited you to needs nothing at all.
+        Sign in only if you want to <b>host games for your friends</b> and keep a
+        company name that stays yours.</p>
+      <div class="row" style="margin-top:12px;max-width:420px">
+        <div><label for="email">Email</label>
+          <input id="email" type="email" placeholder="you@example.com" autocomplete="email"></div>
+      </div>
+      <button class="primary" id="signin" style="margin-top:10px">Email me a sign-in link</button>
+      <p class="muted" style="margin-top:8px">No password. We send a link you click.</p>
+    </div>`;
+  }
+  const mine = myCompany();
+  if (canHost() && mine) {
+    return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">${esc(mine.name)}</h2>
+        <span class="muted">${esc(S.account.email || '')} · <a href="#" id="signout">sign out</a></span>
+      </div>
+      <p class="muted" style="margin-top:6px">Your company name, kept for good. You can host
+        private games below.</p>
+    </div>`;
+  }
+  /* signed in, nothing bought yet */
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Claim your company</h2>
+      <span class="muted">${esc(S.account.email || '')} · <a href="#" id="signout">sign out</a></span>
+    </div>
+    <p class="lede">${p ? esc(p.blurb) : 'Your company name, kept for good, and the ability to host private games.'}</p>
+    <div class="row" style="margin-top:12px;max-width:420px">
+      <div><label for="claimname">Company name</label>
+        <input id="claimname" type="text" maxlength="28" placeholder="Ravensworth &amp; Co">
+        <div class="muted" id="namestate" style="font-size:11.5px;margin-top:4px">&nbsp;</div></div>
+    </div>
+    <button class="primary" id="buy" style="margin-top:10px" ${p && p.forSale ? '' : 'disabled'}>
+      ${p && p.forSale ? 'Continue to payment' : 'Not on sale yet'}</button>
+    <p class="muted" style="margin-top:8px">The name is held for you while you pay, so nobody
+      can take it out from under you.</p>
+  </div>`;
+}
+
+/* ------------------------------------------------------------------ setup */
+function screenHome() {
+  const saved = Object.entries(readAll()).sort((a, b) => b[1].at - a[1].at).slice(0, 4);
+  const L = S.cfg ? S.cfg.limits : { seats: { min: 3, max: 6, default: 4 }, rounds: { min: 8, max: 14, default: 10 } };
+  const seatBtns = [];
+  for (let n = L.seats.min; n <= L.seats.max; n++) {
+    seatBtns.push(`<button class="choice" data-seats="${n}" aria-pressed="${n === L.seats.default}">
+      <div class="n">${n} companies</div></button>`);
+  }
+  const CAD = (S.cfg && S.cfg.cadences) || {};
+  const cadBtns = Object.entries(CAD).map(([id, c]) =>
+    `<button class="choice kind" data-cadence="${id}" aria-pressed="${id === '15m'}">
+      <div class="n">${esc(c.label)}</div><div class="d">${esc(c.note)}</div></button>`).join('');
+  const roundBtns = [8, 10, 12, 16, 20].filter((r) => r >= L.rounds.min && r <= L.rounds.max)
+    .map((r) => `<button class="choice" data-rounds="${r}" aria-pressed="${r === L.rounds.default}">
+      <div class="n">${r} rounds</div></button>`).join('');
+  const presets = S.cfg ? Object.entries(S.cfg.presets).map(([k, p]) =>
+    `<button class="choice" data-preset="${k}" aria-pressed="${k === 'standard'}">
+      <div class="n">${esc(p.label)}</div><div class="d">${esc(p.note)}</div></button>`).join('') : '';
+
+  if (S.joinClass) {
+    return `
+    <div class="card">
+      <h2>You have been invited to a class</h2>
+      <p class="lede">Class code <b>${esc(S.joinClass)}</b>. Name your company and you will
+        be put into a group automatically. Every group plays the same market.</p>
+      <div style="max-width:340px;margin-top:12px">
+        <label for="studentname">Your company name</label>
+        <input id="studentname" type="text" maxlength="28" placeholder="Ravensworth &amp; Co">
+      </div>
+      <button class="primary" id="joinclass" style="margin-top:12px">Join the class</button>
+    </div>`;
+  }
+  const gated = !canHost();
+  const fmt = (S.cfg && S.cfg.publicFormat) || {};
+  const rated = !!myCompany();
+  const publicCard = `
+  <div class="card">
+    <h2>Play now</h2>
+    <p class="lede">Join a table with whoever else is around. Empty seats fill with
+      AI companies, and you find out who was who at the end.</p>
+    <p class="muted">${esc(fmt.describe || '5 companies · 8 rounds')} · free, no account needed.</p>
+    ${rated
+      ? `<p class="muted">You will play as <b>${esc(myCompany().name)}</b>, and the result
+           counts towards your rating.</p>`
+      : `<div style="max-width:320px;margin:10px 0">
+           <label for="publicname">Your company name for this game</label>
+           <input id="publicname" type="text" maxlength="28" placeholder="Ketteridge">
+         </div>
+         <p class="muted">Games are only rated for companies with a claimed name —
+           see below.</p>`}
+    <button class="primary" id="playnow" style="margin-top:6px">Find me a game</button>
+    <button class="ghost" id="showboard" style="margin-top:6px">Leaderboard</button>
+  </div>`;
+  return publicCard + accountCard() + classCard() + demoCard() + `
+  <div class="card" ${gated ? 'style="opacity:0.55"' : ''}>
+    <h2>Start a game</h2>
+    <p class="lede">You invite your friends with a link. Empty seats are filled by
+      AI companies, and nobody — including you — is told which is which until the
+      last round is scored.</p>
+    ${gated ? `<p class="muted"><b>Hosting needs a company charter.</b>
+      ${signedIn() ? 'Claim your name above.' : 'Sign in above to claim one.'}</p>` : ''}
+    ${myCompany() ? `<p class="muted">You will play as <b>${esc(myCompany().name)}</b>.</p>` : ''}
+    <h3 style="margin-top:14px">How many companies</h3>
+    <div class="choices" id="seatchoice">${seatBtns.join('')}</div>
+    <h3 style="margin-top:14px">How long is a round</h3>
+    <div class="choices" id="cadencechoice">${cadBtns}</div>
+    <div id="closehour-wrap" class="hidden" style="max-width:260px;margin:8px 0 4px">
+      <label for="closehour">…closing each day at (UTC, 0–23)</label>
+      <input id="closehour" type="number" min="0" max="23" value="18">
+    </div>
+    <h3 style="margin-top:14px">How many rounds</h3>
+    <div class="choices" id="roundchoice">${roundBtns}</div>
+    <p class="muted" style="margin:2px 0 10px">Everyone can see when the game ends — knowing
+      that is what makes the last few rounds a real decision.</p>
+    <h3>Difficulty</h3>
+    <div class="choices" id="presetchoice">${presets}</div>
+    <button class="primary" id="create" style="margin-top:12px" ${gated ? 'disabled' : ''}>Create the game</button>
+  </div>
+
+  <div class="card">
+    <h2>Join a game</h2>
+    <p class="muted" style="margin-bottom:10px">Someone sent you a six-character code.</p>
+    <div class="row">
+      <div><label for="joincode">Game code</label>
+        <input id="joincode" type="text" maxlength="6" placeholder="ABC123" style="text-transform:uppercase"></div>
+      <div><label for="joinname">Your company name</label>
+        <input id="joinname" type="text" maxlength="28" placeholder="Sableworth Ltd"></div>
+    </div>
+    <button class="primary" id="join" style="margin-top:12px">Join</button>
+  </div>
+
+  ${saved.length ? `<div class="card"><h2>Your games</h2>
+    ${saved.map(([c, v]) => `<div style="display:flex;justify-content:space-between;
+      align-items:center;padding:6px 0;border-bottom:1px solid var(--grid)">
+      <span><b>${esc(v.name)}</b> <span class="muted">${v.pub
+        ? 'at a ranked table' : `in game ${c}`}</span></span>
+      <button class="ghost" data-resume="${c}">Open</button></div>`).join('')}
+    </div>` : ''}
+
+  <p class="muted">Practising on your own? The <a href="/">single-player levels</a>
+    teach every lever this game uses.</p>`;
+}
+
+/* ------------------------------------------------------------ facilitator */
+function classCard() {
+  if (!signedIn() || !(S.account && S.account.canFacilitate)) return '';
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Run a class</h2>
+      <button class="ghost" id="showclass">Open the dashboard</button>
+    </div>
+    <p class="muted" style="margin-top:6px">One code for the whole room. Students are seated
+      into groups automatically, and every group faces an identical market.</p>
+  </div>`;
+}
+
+/* No sign-in, no form, no email. An instructor evaluating a teaching tool at
+   eleven at night will not create an account to find out whether it is any good,
+   and an evaluation that does not happen is indistinguishable from a bad one. */
+function demoCard() {
+  const d = (S.cfg && S.cfg.demo) || { groups: 6, students: 30, opening: 5 };
+  return `
+  <div class="card">
+    <h2>Teaching with this?</h2>
+    <p class="lede">Open a class that is already running — ${d.groups} groups,
+      ${d.students} students, ${d.opening} rounds already played, including one student
+      who has not filed once. Push it forward round by round, sit in a student's chair,
+      and download the spreadsheet you would put in a gradebook.</p>
+    <button class="primary" id="trydemo">Open the facilitator demo</button>
+    <p class="muted" style="margin-top:8px">Nothing to sign up for. It is a real class on
+      the real engine, seeded so it plays out the same way every time.</p>
+  </div>`;
+}
+
+function screenClass() {
+  const c = S.cohort;
+  const L = (S.cfg && S.cfg.cohortLimits) || { groupSize: { min: 3, max: 6, default: 5 } };
+  if (!c) {
+    const list = (S.cohorts && S.cohorts.cohorts) || [];
+    return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">Your classes</h2>
+        <button class="ghost" id="closeclass">Back</button>
+      </div>
+      ${list.length ? `<table style="margin-top:8px"><tbody>${list.map((x) => `
+        <tr><td>${esc(x.name)}</td><td class="v"><span class="pill">${esc(x.status)}</span></td>
+        <td class="v"><button class="ghost" data-openclass="${x.id}">Open</button></td></tr>`).join('')}
+        </tbody></table>` : '<p class="muted">No classes yet.</p>'}
+    </div>
+    <div class="card">
+      <h2>New class</h2>
+      <div class="row" style="max-width:520px">
+        <div><label for="cname">Class name</label>
+          <input id="cname" type="text" maxlength="80" placeholder="MGT 481 — Autumn"></div>
+      </div>
+      <h3 style="margin-top:14px">Students per group</h3>
+      <div class="choices" id="groupsize">
+        ${Array.from({ length: L.groupSize.max - L.groupSize.min + 1 }, (_, i) => L.groupSize.min + i)
+          .map((n) => `<button class="choice" data-size="${n}" aria-pressed="${n === L.groupSize.default}">
+            <div class="n">${n}</div></button>`).join('')}
+      </div>
+      <h3 style="margin-top:12px">Rounds</h3>
+      <div class="choices" id="crounds">
+        ${[8, 10, 12, 16, 20].map((r) => `<button class="choice" data-rounds="${r}"
+          aria-pressed="${r === 10}"><div class="n">${r}</div></button>`).join('')}
+      </div>
+      <h3 style="margin-top:12px">How long is a round</h3>
+      <div class="choices" id="ccadence">
+        ${Object.entries((S.cfg && S.cfg.cadences) || {}).map(([id, cc]) =>
+          `<button class="choice" data-cadence="${id}" aria-pressed="${id === '15m'}">
+            <div class="n">${esc(cc.label)}</div></button>`).join('')}
+      </div>
+      <button class="primary" id="makeclass" style="margin-top:12px">Create the class</button>
+    </div>`;
+  }
+
+  const t = c.totals;
+  const link = location.origin + '/g/?class=' + c.code;
+  const over = t.playing === 0;
+  /* In a demo the clock is the enemy: nobody watches fifteen-minute rounds in an
+     evaluation. So the demo swaps the clock controls for a fast-forward, and adds
+     the one thing a dashboard cannot show on its own — what a student sees. */
+  const demoBar = c.isDemo ? `
+    <div class="warnbox ok" style="margin-top:12px"><span class="ic">▸</span>
+      <span>This is a demo class. It belongs to nobody, it expires by itself, and you can
+      do anything to it. ${over ? 'It has played out to the end.'
+        : 'Nothing here waits for a clock — push it forward as fast as you like.'}</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      ${over ? '' : `<button class="primary" id="cadv1">Play the next round</button>
+      <button class="ghost" id="cadv3">Play three rounds</button>
+      <button class="ghost" id="cadv5">Play five rounds</button>`}
+      <button class="ghost" id="cseat">Open a student's screen</button>
+      <button class="ghost" id="cexport">Download the gradebook</button>
+    </div>
+    ${(c.guide || []).map((g) => `<div class="news" style="margin-top:10px">
+      <b>${esc(g.what)}.</b> ${esc(g.text)}</div>`).join('')}` : '';
+
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">${esc(c.name)}</h2>
+      <button class="ghost" id="${c.isDemo ? 'closedemo' : 'closeclass'}">
+        ${c.isDemo ? 'Leave the demo' : 'Back'}</button>
+    </div>
+    <p class="muted">Students join with this code. Every group plays the same market
+      (seed ${c.seed}), so the groups can be compared directly.</p>
+    <div class="code" style="margin:8px 0 4px">${esc(c.code)}</div>
+    <div class="share" style="max-width:520px">
+      <input type="text" id="sharelink" readonly value="${esc(link)}">
+      <button class="ghost" id="copy">Copy</button>
+    </div>
+    <p class="muted" style="margin-top:12px">
+      ${t.groups} group${t.groups === 1 ? '' : 's'} · ${t.players} student${t.players === 1 ? '' : 's'} ·
+      ${t.playing} playing · ${t.finished} finished${t.waiting ? ` · waiting on ${t.waiting}` : ''}</p>
+    ${demoBar}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      ${c.isDemo ? '' : '<button class="primary" id="cstart">Start every group</button>'}
+      <button class="ghost" id="${c.status === 'paused' ? 'cresume' : 'cpause'}">
+        ${c.status === 'paused' ? 'Resume' : 'Pause the class'}</button>
+      <button class="ghost" id="cextend">Give everyone 10 more minutes</button>
+      <button class="ghost" id="cresolve">Close this round now</button>
+      ${c.isDemo ? '' : '<button class="ghost" id="cexport">Download results</button>'}
+    </div>
+    ${c.status === 'paused' ? `<div class="warnbox warn" style="margin-top:10px"><span class="ic">!</span>
+      <span>The class is paused. No round will close until you resume.</span></div>` : ''}
+  </div>
+  ${c.groups.map((g) => `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">Group ${g.group} <span class="muted" style="font-weight:400">${esc(g.code)}</span></h2>
+        <span class="muted">${g.status === 'lobby' ? 'not started'
+          : g.status === 'over' ? 'finished'
+          : `round ${g.round + 1} of ${g.totalRounds}${g.waitingOn.length
+              ? ` · waiting on ${g.waitingOn.map(esc).join(', ')}` : ' · all filed'}`}</span>
+      </div>
+      <table style="margin-top:6px"><tbody>${g.companies.map((co) => `
+        <tr class="${S.demo && S.demo.student.name === co.name
+          && S.demo.student.group === g.group ? 'me' : ''}">
+        <td>${esc(co.name)}${co.isBot ? ' <span class="pill">AI</span>' : ''}
+          ${S.demo && S.demo.student.name === co.name && S.demo.student.group === g.group
+            ? ' <span class="muted">(your seat)</span>' : ''}
+          ${co.out ? ' <span class="pill dead">out</span>' : ''}
+          ${co.missed ? ` <span class="pill out">${co.missed} missed</span>` : ''}</td>
+        <td class="v">${co.value === null ? '—' : money(co.value)}</td>
+        <td class="v">${co.isBot ? '' : co.filed ? '<span class="pill in">filed</span>'
+          : g.status === 'playing' ? '<span class="pill out">not yet</span>' : ''}</td></tr>`).join('')}
+      </tbody></table>
+    </div>`).join('')}`;
+}
+
+function screenBoard() {
+  const b = S.board;
+  if (!b) return `<div class="card"><h2>Leaderboard</h2><p class="muted">Loading…</p></div>`;
+  const me = S.record && S.record.rated ? S.record : null;
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Leaderboard</h2>
+      <button class="ghost" id="closeboard">Back</button>
+    </div>
+    <p class="muted" style="margin-top:6px">Only public games count. Private games with
+      friends are unrated, because the host chooses the settings.</p>
+    ${b.board.length ? `<table style="margin-top:10px">
+      <thead><tr><th>#</th><th>Company</th><th class="v">Rating</th>
+        <th class="v">Games</th><th class="v">Wins</th></tr></thead>
+      <tbody>${b.board.map((r) => `
+        <tr class="${me && r.name === me.name ? 'me' : ''}">
+          <td>${r.rank}</td>
+          <td>${esc(r.name)} <span class="muted">${esc(r.band)}</span></td>
+          <td class="v">${r.rating}</td><td class="v">${r.games}</td><td class="v">${r.wins}</td>
+        </tr>`).join('')}</tbody></table>`
+      : `<p class="muted">Nobody has finished a rated game yet. Be first.</p>`}
+  </div>
+  ${me ? `
+  <div class="card">
+    <h2>${esc(me.name)}</h2>
+    <div class="big">${me.rating} <span class="muted" style="font-size:15px;font-weight:400">${esc(me.band)}</span></div>
+    <div class="muted" style="margin-bottom:10px">${me.games} rated game${me.games === 1 ? '' : 's'} ·
+      ${me.wins} win${me.wins === 1 ? '' : 's'}${me.bestValue != null ? ` · best company ${money(me.bestValue)}` : ''}</div>
+    ${me.recent && me.recent.length ? `<table>
+      <thead><tr><th>Finish</th><th class="v">Company value</th><th class="v">Rating</th></tr></thead>
+      <tbody>${me.recent.map((r) => `<tr>
+        <td>${r.place} of ${r.seats}</td>
+        <td class="v">${money(r.value)}</td>
+        <td class="v ${r.delta >= 0 ? 'pos' : 'neg'}">${r.delta >= 0 ? '+' : ''}${r.delta}</td>
+      </tr>`).join('')}</tbody></table>` : ''}
+  </div>` : ''}`;
+}
+
+/* "about 1 hours end to end" was what a 40-minute game used to call itself. */
+function howLong(mins) {
+  if (mins < 90) return `${Math.round(mins / 5) * 5} minutes`;
+  const h = mins / 60;
+  const r = h < 4 ? Math.round(h * 2) / 2 : Math.round(h);
+  return `${r} hour${r === 1 ? '' : 's'}`;
+}
+
+function screenLobby(v) {
+  const link = location.origin + '/g/' + v.code;
+  const waiting = v.seatCount - v.joined.length;
+  /* Arriving on an invitation is the main way anyone reaches this page, so the
+     first thing someone without a seat needs is the way to take one — unless this
+     is a public table, where seats are dealt by matchmaking and there is nothing
+     to accept. */
+  const takeSeat = (v.you || v.isPublic) ? '' : `
+  <div class="card">
+    <h2>You have been invited</h2>
+    <p class="lede">${esc(v.joined.map((p) => p.name).join(', '))}
+      ${v.joined.length === 1 ? 'is' : 'are'} waiting to start a ${v.totalRounds}-round game.
+      ${waiting > 0 ? `There ${waiting === 1 ? 'is 1 seat' : `are ${waiting} seats`} left.`
+        : 'Every seat is taken.'}</p>
+    ${waiting > 0 ? `
+      <div style="max-width:320px;margin-top:10px">
+        <label for="joinname">Name your company</label>
+        <input id="joinname" type="text" maxlength="28" placeholder="Sableworth Ltd">
+        <input id="joincode" type="hidden" value="${v.code}">
+      </div>
+      <button class="primary" id="join" style="margin-top:12px">Take a seat</button>
+      <p class="muted" style="margin-top:8px">You keep this name across games.</p>`
+      : `<p class="muted">Ask whoever invited you to make room, or start your own game.</p>`}
+  </div>`;
+  /* A public table has no invite link, and showing it one was a real mistake
+     rather than a cosmetic one.
+
+     Public games are the rated tier, and the only reason a rating means anything
+     is that nobody chooses who they sit with. Handing out a code lets four
+     friends fill a "public" table and arrange the finishing order between them.
+     It also gives away the thing the private game is *for* — choosing who plays —
+     which is what somebody paid for.
+
+     So the code is not shown here, and the server refuses to seat anyone at a
+     public table by code even if they learn it another way. */
+  const waitingRoom = v.isPublic ? `
+    <p class="muted">You have been seated with whoever else is looking for a game.
+      It starts when the table fills, or in a minute or so either way — empty seats
+      become AI companies, and you are not told which.</p>
+    <div class="warnbox ok" style="margin-top:10px"><span class="ic">✓</span>
+      <span>There is no link to share, on purpose. A ranked table only means something
+      because nobody picks who they sit with. To play with people you choose, that is
+      what a private game is.</span></div>`
+    : `
+    <p class="muted">Send this to the people you want in the game.</p>
+    <div class="code" style="margin:8px 0 4px">${v.code}</div>
+    <div class="share" style="max-width:520px">
+      <input type="text" id="sharelink" readonly value="${esc(link)}">
+      <button class="ghost" id="copy">Copy</button>
+    </div>`;
+
+  return takeSeat + `
+  <div class="card">
+    <h2>${v.isPublic ? 'Finding you a table' : (v.you ? 'Waiting to start' : 'The game so far')}</h2>
+    ${waitingRoom}
+    <h3 style="margin-top:18px">In the game</h3>
+    <table><tbody>
+      ${v.joined.map((p) => `<tr><td>${esc(p.name)}</td>
+        <td class="v"><span class="pill in">joined</span></td></tr>`).join('')}
+      ${Array.from({ length: waiting }, () => `<tr><td class="muted">Empty seat</td>
+        <td class="v"><span class="pill">AI company if nobody takes it</span></td></tr>`).join('')}
+    </tbody></table>
+    <p class="muted" style="margin-top:12px">${v.seatCount} companies · ${v.totalRounds} rounds ·
+      a round every ${esc((v.cadenceLabel || 'day').toLowerCase())}${v.cadenceMinutes >= 1440
+        ? `, closing at ${String(v.closeHour).padStart(2, '0')}:00 UTC` : ''} ·
+      ${esc(v.preset)} difficulty${v.cadenceMinutes < 1440
+        ? ` · about ${howLong(v.totalRounds * v.cadenceMinutes)} end to end`
+        : ''}</p>
+    ${v.isPublic
+      ? `<p class="muted" style="margin-top:6px">Starting automatically — hold tight.</p>`
+      : v.isHost
+        ? `<button class="primary" id="start" style="margin-top:6px">Start the game${waiting ? ` (${waiting} seat${waiting > 1 ? 's' : ''} become AI)` : ''}</button>`
+        : `<p class="muted" style="margin-top:6px">The host starts the game when everyone is in.</p>`}
+  </div>`;
+}
+
+/* ----------------------------------------------------------------- playing */
+/* At a day the seconds are noise; at five minutes they are the whole tension. */
+function countdown(iso) {
+  if (!iso) return '';
+  const ms = new Date(iso) - Date.now();
+  if (ms <= 0) return 'closing now';
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (h >= 1) return `closes in ${h}h ${m}m`;
+  if (m >= 5) return `closes in ${m}m`;
+  return `closes in ${m}:${String(sec).padStart(2, '0')}`;
+}
+
+/* How urgent the clock is, for the header and how hard we poll. */
+const isFast = () => S.view && S.view.cadenceMinutes && S.view.cadenceMinutes <= 60;
+
+function marketTable(v) {
+  return `<table>
+    <thead><tr><th>Company</th><th class="v">Last price</th><th class="v">Quality</th><th class="v">Lines</th>
+      <th class="v">Share</th><th class="v">This round</th></tr></thead>
+    <tbody>${v.market.map((m) => `
+      <tr class="${m.you ? 'me' : ''}">
+        <td>${esc(m.name)}${m.you ? ' <span class="muted">(you)</span>' : ''}
+          <div class="bar"><i style="width:${((m.lastShare || 0) * 100).toFixed(0)}%"></i></div></td>
+        <td class="v">${m.out ? '—' : money2(m.lastPrice || 0)}</td>
+        <td class="v">${m.out ? '—' : (m.quality || 0).toFixed(0)}</td>
+        <td class="v">${m.out ? '—' : (m.lineCount > 1 ? m.lineCount + ' lines' : '1')}</td>
+        <td class="v">${m.out ? '—' : pct(m.lastShare)}</td>
+        <td class="v">${m.out ? '<span class="pill dead">out of business</span>'
+          : m.filed === null ? '<span class="pill">—</span>'
+          : m.filed ? '<span class="pill in">filed</span>' : '<span class="pill out">not yet</span>'}</td>
+      </tr>`).join('')}</tbody></table>`;
+}
+
+function creditCard(y) {
+  const c = y.credit;
+  const tone = c.rate < 0.055 ? 'in' : c.rate < 0.115 ? '' : c.rate < 0.16 ? 'out' : 'dead';
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Borrowing</h2>
+      <span class="pill ${tone}">${esc(c.label)} — ${(c.rate * 100).toFixed(1)}% a round</span>
+    </div>
+    <p class="muted" style="margin:8px 0 10px">${esc(c.note)}
+      Rates rise with how much of your credit line you have drawn, and again if the
+      business behind it is losing money.</p>
+    <table><tbody>
+      <tr><td>Cash</td><td class="v">${money(y.cash)}</td></tr>
+      <tr><td>Owed</td><td class="v ${c.drawn > 0 ? 'neg' : ''}">${money(c.drawn)}</td></tr>
+      <tr><td>Still available to borrow</td><td class="v">${money(c.headroom)}</td></tr>
+      ${c.drawn > 0 ? `<tr><td>Interest this round</td><td class="v neg">${money(-c.costPerRound)}</td></tr>` : ''}
+      <tr class="total"><td>The bank calls it in past</td><td class="v">${money(c.limit)}</td></tr>
+    </tbody></table>
+    <div class="bar" style="margin-top:8px"><i style="width:${Math.min(100, (c.drawn / c.limit) * 100).toFixed(0)}%;
+      background:${c.rate < 0.08 ? 'var(--series-1)' : 'var(--series-neg)'}"></i></div>
+  </div>`;
+}
+
+/* ------------------------------------------------------ the decision layer */
+/* Orders being typed, keyed by product name, plus the engine objects rebuilt from
+   what the server sent. Held apart from the view so that typing does not trigger a
+   re-render — the form keeps focus, and only the projection repaints. */
+const D = { orders: {}, firm: null, rivals: [], launch: false, launchKind: 'hardware',
+            round: -1, code: null };
+
+function hydrateFirm(v) {
+  if (!v.you || !v.you.firmState) { D.firm = null; return; }
+  /* Only take the server's version of what you intend when the round actually
+     changes. Re-reading it on every render meant the six-second poll quietly
+     un-ticked the launch box a moment after it was ticked — the intent lives here
+     until it is filed, and the server has nothing newer to say about it. */
+  const fresh = v.round !== D.round || v.code !== D.code;
+  if (fresh) { D.orders = {}; D.round = v.round; D.code = v.code; }
+  /* Products come back as plain JSON; the engine only ever reads fields off them,
+     so they work as-is once the arrays are real arrays. */
+  D.firm = {
+    cash: v.you.firmState.cash, debt: v.you.firmState.debt,
+    bankrupt: v.you.firmState.bankrupt,
+    profitHistory: v.you.firmState.profitHistory || [],
+    products: v.you.firmState.products.map((p) => ({ ...p })),
+  };
+  D.rivals = [];
+  for (const m of v.market) {
+    if (m.you || m.out || !m.pub) continue;
+    for (const rp of m.pub) D.rivals.push(rp);
+  }
+  const seen = {};
+  for (const p of D.firm.products) {
+    const prior = D.orders[p.name];
+    const fromServer = (v.you.products.find((x) => x.name === p.name) || {}).orders;
+    seen[p.name] = prior || fromServer || {
+      price: Math.round(value(p)),
+      produce: Math.round(Math.max(0, Math.min(
+        (v.you.products.find((x) => x.name === p.name) || {}).lastDemand || demandPool(p),
+        effCapacity(p)) - p.inventory)),
+      rd: 30000, rdProcess: 10000, advertising: 0,
+      targetCapacity: Math.round(p.capacity), discontinue: false,
+    };
+  }
+  D.orders = seen;
+  if (fresh) {
+    D.launch = !!v.you.wantsLaunch;
+    D.launchKind = v.you.wantsLaunchKind || 'hardware';
+  }
+  /* A line you can no longer afford cannot stay armed. */
+  if (D.launch && !v.you.canLaunch) D.launch = false;
+}
+
+/* What this product is likely to sell, given what rivals charged last round.
+   Exactly the estimate the solo shared market makes: everyone else holds steady.
+   They usually will not, which is the point. */
+function estimateDemandFor(p, price, v) {
+  const others = D.rivals;
+  if (!others.length) return soloDemand(p, price, v.you.marketMult);
+  return estimateShare(p, price, others, others.map((r) => r.price), v.you.marketMult);
+}
+
+/* The projection. Same arithmetic resolve() will do, on the orders as typed. */
+function project(v) {
+  const rows = [];
+  let revenue = 0, production = 0, holding = 0, capUpkeep = 0, fixed = 0,
+      rd = 0, ads = 0, capex = 0, restructure = 0, salvage = 0, plantSale = 0;
+  const lines = D.firm.products.filter((p) => p.alive);
+
+  for (const p of lines) {
+    const d = D.orders[p.name];
+    const pk = kindOf(p);
+    if (d.discontinue) {
+      restructure += C.RESTRUCTURE;
+      salvage += p.invBook * C.SALVAGE;
+      rows.push({ p, discontinue: true });
+      continue;
+    }
+    const demand = estimateDemandFor(p, d.price, v);
+    const sell = Math.min(Math.max(0, p.capacity - d.targetCapacity),
+                          Math.max(0, p.capacity - C.CAPACITY_FLOOR));
+    const build = Math.max(0, d.targetCapacity - p.capacity);
+    const capNow = (p.capacity - sell) * Math.pow(p.efficiency / 100, C.THROUGHPUT_EXP)
+                   * v.you.capacityMult;
+    const produce = Math.max(0, Math.min(d.produce, capNow));
+    const uc = unitCost(p, v.you.costMult);
+    const available = p.inventory + produce;
+    const sales = Math.min(demand, available);
+    const leftover = available - sales;
+    const unitBook = available > 0 ? (p.invBook + produce * uc) / available : 0;
+    const hold = leftover * unitBook * C.HOLDING * pk.inventory;
+    const upk = (p.capacity - sell) * C.CAPACITY_UPKEEP * pk.upkeep;
+
+    revenue += sales * d.price;
+    production += produce * uc;
+    holding += hold;
+    capUpkeep += upk;
+    fixed += C.PRODUCT_FIXED * pk.fixed;
+    rd += d.rd + d.rdProcess;
+    ads += d.advertising;
+    capex += build * C.CAPEX_PER_UNIT;
+    plantSale += sell * C.CAPEX_PER_UNIT * C.CAPACITY_RESALE;
+
+    rows.push({ p, demand, produce, sales, leftover, uc,
+      lost: Math.max(0, demand - available),
+      capped: d.produce > capNow + 1e-6, capNow, sell, build });
+  }
+
+  const corp = C.CORP_FIXED * Math.pow(Math.max(1, lines.length), C.CORP_SCALING);
+  const interest = D.firm.debt * creditRate(D.firm, v.you.constants.CREDIT_LIMIT);
+  const launchCost = D.launch ? launchCostOf(D.launchKind) : 0;
+  const profit = revenue + salvage + plantSale - production - holding - capUpkeep
+               - fixed - rd - ads - capex - restructure - corp - interest;
+  return { rows, revenue, salvage, plantSale, production, holding, capUpkeep,
+           fixed, rd, ads, capex, restructure, corp, interest, launchCost, profit };
+}
+
+function renderProjection(v) {
+  const host = $('projection');
+  if (!host || !D.firm) return;
+  const pr = project(v);
+  const L = (k, val, cls) => `<div class="line"><span class="k">${k}</span>
+    <span class="v ${cls || ''}">${money(val)}</span></div>`;
+  const parts = [`<div class="sec">Money in</div>`, L('Sales', pr.revenue)];
+  if (pr.salvage > 0.5) parts.push(L('Stock sold off', pr.salvage));
+  if (pr.plantSale > 0.5) parts.push(L('Plant sold', pr.plantSale));
+  parts.push(`<div class="sec">Money out</div>`);
+  parts.push(L('Making them', -pr.production, 'neg'));
+  if (pr.holding > 0.5) parts.push(L('Holding stock', -pr.holding, 'neg'));
+  parts.push(L('Plant upkeep', -pr.capUpkeep, 'neg'));
+  parts.push(L('Fixed costs', -(pr.fixed + pr.corp), 'neg'));
+  if (pr.rd > 0.5) parts.push(L('Research', -pr.rd, 'neg'));
+  if (pr.ads > 0.5) parts.push(L('Advertising', -pr.ads, 'neg'));
+  if (pr.capex > 0.5) parts.push(L('Building plant', -pr.capex, 'neg'));
+  if (pr.restructure > 0.5) parts.push(L('Closing a line', -pr.restructure, 'neg'));
+  if (pr.interest > 0.5) {
+    parts.push(L(`Interest at ${(v.you.credit.rate * 100).toFixed(1)}%`, -pr.interest, 'neg'));
+  }
+  parts.push(`<div class="line total"><span class="k">Expected profit</span>
+    <span class="v ${pr.profit >= 0 ? 'pos' : 'neg'}">${money(pr.profit)}</span></div>`);
+  if (pr.launchCost) {
+    parts.push(`<div class="line"><span class="k">…and ${money(pr.launchCost)} for the new
+      line, paid on top</span><span class="v"></span></div>`);
+  }
+
+  /* the warnings, checked at the end of the range that actually bites */
+  const w = [];
+  for (const r of pr.rows) {
+    if (r.discontinue) continue;
+    const label = D.firm.products.filter((x) => x.alive).length > 1
+      ? `${esc(kindOf(r.p).label)} line: ` : '';
+    if (r.capped) {
+      w.push(`<div class="warnbox warn"><span class="ic">!</span><span>${label}your factory
+        can only make <b>${Math.round(r.capNow)}</b> this round — the rest of that order
+        will not happen.</span></div>`);
+    }
+    if (r.lost > r.demand * 0.08 && r.lost > 20) {
+      w.push(`<div class="warnbox warn"><span class="ic">!</span><span>${label}about
+        <b>${Math.round(r.lost)}</b> buyers may find nothing in stock. Demand you cannot
+        supply goes straight to whoever can.</span></div>`);
+    }
+    if (r.leftover > r.sales * 0.35 && r.leftover > 60) {
+      w.push(`<div class="warnbox warn"><span class="ic">!</span><span>${label}you may be
+        left holding <b>${Math.round(r.leftover)}</b> unsold, and holding stock costs
+        ${Math.round(C.HOLDING * 100)}% of its value a round.</span></div>`);
+    }
+  }
+  const after = D.firm.cash + pr.profit - pr.launchCost;
+  if (after < 0) {
+    const owed = D.firm.debt + (-after);
+    const rate = creditRate({ debt: owed, profitHistory: (D.firm.profitHistory || []).concat([pr.profit]) },
+                            v.you.constants.CREDIT_LIMIT);
+    const band = creditStanding({ debt: owed, profitHistory: (D.firm.profitHistory || []).concat([pr.profit]) },
+                                v.you.constants.CREDIT_LIMIT);
+    w.push(`<div class="warnbox bad"><span class="ic">!</span><span>This plan spends
+      <b>${money(-after)}</b> more than you have. You would borrow it at
+      <b>${(rate * 100).toFixed(1)}%</b> a round — ${band.label.toLowerCase()}. The bank calls
+      it in past ${money(v.you.constants.CREDIT_LIMIT)}.</span></div>`);
+  } else if (!w.length) {
+    w.push(`<div class="warnbox ok"><span class="ic">✓</span><span>Nothing obviously
+      wrong with this plan. Rivals are assumed to hold their prices — they usually
+      will not.</span></div>`);
+  }
+
+  host.innerHTML = `<div class="card proj"><h2>If the round ran now</h2>
+    ${parts.join('')}${w.join('')}
+    <p class="muted" style="margin:10px 0 0">Everyone commits blind, so this assumes
+      rivals charge what they charged last round.</p></div>`;
+}
+
+/* ------------------------------------------------------------- the controls */
+function ctrl(name, hint, field, pname, val, min, max, step, extra) {
+  return `<div class="ctrl">
+    <div class="lab"><span class="name">${name}</span><span class="hint">${hint}</span></div>
+    <div class="row">
+      <input type="range" min="${min}" max="${max}" step="${step}"
+             value="${Math.max(min, Math.min(max, val))}" data-p="${esc(pname)}" data-field="${field}">
+      <input type="number" min="0" step="${step}" value="${Math.round(val * 100) / 100}"
+             data-p="${esc(pname)}" data-field="${field}">
+    </div>${extra || ''}</div>`;
+}
+
+function lineForm(p, view, i) {
+  const eng = D.firm.products.find((x) => x.name === p.name);
+  const d = D.orders[p.name];
+  const K = view.you.constants;
+  const val = value(eng);
+  const cap = effCapacity(eng);
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">${esc(p.label)}</h2>
+      <span class="muted">${esc(p.kindLabel)} · quality ${p.quality.toFixed(0)} ·
+        ${p.physical ? `${Math.round(p.inventory)} in stock` : 'nothing to warehouse'} ·
+        ${p.age < 2 ? 'still ramping up' : p.age >= 8 ? 'past its best' : 'established'}</span>
+    </div>
+    ${ctrl('Price', `worth ${money2(val)} to a buyer`, 'price', p.name, d.price,
+           (val * 0.5).toFixed(0), (val * 1.6).toFixed(0), 0.5)}
+    ${ctrl('Units to make', `room for ${Math.round(cap)} · ${money2(p.unitCost)} each`,
+           'produce', p.name, d.produce, 0, Math.round(cap), 10)}
+    ${ctrl('Product R&amp;D — make it better', `lands in ${K.RD_DELAY} rounds`,
+           'rd', p.name, d.rd, 0, 150000, 2500)}
+    ${ctrl('Process R&amp;D — make it cheaper', 'also raises how much you can make',
+           'rdProcess', p.name, d.rdProcess, 0, 150000, 2500)}
+    ${ctrl('Advertising', `works now, fades ${Math.round(K.AD_DECAY * 100)}% a round`,
+           'advertising', p.name, d.advertising, 0, 60000, 1000)}
+    ${ctrl(p.physical ? 'Factory size' : 'Capacity to serve',
+           `${money2(K.CAPEX_PER_UNIT)} a unit to build · ${Math.round(K.CAPACITY_RESALE * 100)}% back to sell`,
+           'targetCapacity', p.name, d.targetCapacity,
+           Math.round(K.CAPACITY_FLOOR), Math.round(Math.max(p.capacity * 2, 5000)), 50)}
+    <label style="margin-top:10px;display:flex;gap:7px;align-items:center;font-size:13px">
+      <input type="checkbox" data-p="${esc(p.name)}" data-field="discontinue"
+        ${d.discontinue ? 'checked' : ''} style="width:auto">
+      Discontinue this line — sell the stock and the plant, stop the fixed costs
+    </label>
+  </div>`;
+}
+
+function ordersForm(v) {
+  const y = v.you;
+  const lines = y.products.map((p, i) => lineForm(p, v, i)).join('');
+  const kinds = (y.kinds || []).map((k) => `
+    <button class="choice kind ${k.affordable ? '' : 'off'}" data-kind="${k.id}"
+      aria-pressed="${k.id === D.launchKind}" ${k.affordable ? '' : 'disabled'}>
+      <div class="n">${esc(k.label)} <span class="muted">${money(k.cost)}</span></div>
+      <div class="d">${esc(k.blurb)}</div>
+      <div class="d" style="margin-top:3px">${k.affordable
+        ? (k.borrowing > 0
+            ? `You would borrow ${money(k.borrowing)} of it — that raises your rate.`
+            : 'You can pay for this out of cash.')
+        : 'Out of reach right now.'}</div>
+    </button>`).join('');
+
+  return `
+  <div class="layout">
+    <div>
+      <div class="card">
+        <h2>Your orders for round ${v.round + 1}</h2>
+        ${y.filed ? `<p class="muted"><span class="pill in">filed</span>
+          You can change these until the round closes.</p>` : ''}
+        ${y.autoRounds ? `<p class="muted">Rounds filed automatically for you so far:
+          ${y.autoRounds}. Miss a deadline and your last orders simply repeat.</p>` : ''}
+        ${y.products.length > 1 ? `<p class="muted">You are running ${y.products.length} lines.
+          They compete with each other as well as with everyone else.</p>` : ''}
+      </div>
+      ${lines}
+      <div class="card">
+        <h2>A new product line</h2>
+        <p class="muted">Starts trading next round. It carries over what your company
+          already knows, but it ramps slowly and adds fixed costs from day one.</p>
+        ${y.products.length >= y.maxProducts
+          ? `<p class="muted">You are already running the maximum of ${y.maxProducts}.</p>`
+          : y.canLaunch
+            ? `<div class="choices" id="kindchoice" style="margin:10px 0 12px">${kinds}</div>
+               <label style="display:flex;gap:7px;align-items:center;font-size:13.5px">
+                 <input type="checkbox" id="f_launch" ${D.launch ? 'checked' : ''} style="width:auto">
+                 Launch a line of the kind selected above, this round</label>
+               <p class="muted" style="margin-top:8px">Launching early, while your first line
+                 is still finding its feet, is how companies go under. It pays once the first
+                 one is mature enough to carry it.</p>`
+            : `<p class="muted">Not available: a launch has to leave you enough credit to
+                 survive the new line's first rounds, and right now none of them would.</p>`}
+      </div>
+      <div class="card">
+        <button class="primary" id="file">${y.filed ? 'Update my orders' : 'File my orders'}</button>
+      </div>
+    </div>
+    <div id="projection"></div>
+  </div>`;
+}
+
+function lastRound(v) {
+  if (!v.history.length) return '';
+  const h = v.history[v.history.length - 1];
+  const mine = h.results.find((r) => r.seatId === (v.you && v.you.seatId));
+  return `
+  <div class="card">
+    <h2>Round ${h.round}</h2>
+    ${h.news && h.news.length ? h.news.map((n) => `<div class="news">${esc(n.text)}</div>`).join('') : ''}
+    ${h.launched && h.launched.length ? h.launched.map((l) =>
+      `<div class="news">${esc(l.name)} opened a new ${esc((l.kindLabel || '').toLowerCase())} line.</div>`).join('') : ''}
+    ${h.inherited && h.inherited.length ? h.inherited.map((i) =>
+      `<div class="news">${esc(i.name)} went out of business. About two thirds of its
+        customers found a new supplier — they went to whoever was priced closest to it.</div>`).join('') : ''}
+    ${mine ? `
+      <div class="big ${mine.profit >= 0 ? 'pos' : 'neg'}">${money(mine.profit)}</div>
+      <div class="muted" style="margin-bottom:10px">your profit${mine.auto ? ' — filed automatically from your last orders' : ''}</div>
+      <table><tbody>
+        <tr><td>You sold</td><td class="v">${Math.round(mine.sales)} units at ${money2(mine.price)}</td></tr>
+        <tr><td>People wanted</td><td class="v">${Math.round(mine.demand)} units</td></tr>
+        <tr><td>Your share</td><td class="v">${pct(mine.share)}</td></tr>
+        <tr><td>Revenue</td><td class="v">${money(mine.revenue)}</td></tr>
+        ${mine.interest > 0 ? `<tr><td>Interest at ${(mine.rate * 100).toFixed(1)}%</td>
+          <td class="v neg">${money(-mine.interest)}</td></tr>` : ''}
+        <tr><td>Costs</td><td class="v neg">${money(-mine.costs)}</td></tr>
+        <tr class="me"><td>Cash now</td><td class="v">${money(mine.cash)}</td></tr>
+      </tbody></table>` : ''}
+    <h3 style="margin-top:16px">What everyone charged</h3>
+    <table><thead><tr><th>Company</th><th class="v">Price</th><th class="v">Share</th><th class="v">Advertising</th></tr></thead>
+      <tbody>${h.results.map((r) => `<tr class="${r.seatId === (v.you && v.you.seatId) ? 'me' : ''}">
+        <td>${esc(r.name)}${r.bankrupt ? ' <span class="pill dead">out</span>' : ''}</td>
+        <td class="v">${money2(r.price)}</td><td class="v">${pct(r.share)}</td>
+        <td class="v">${money(r.advertising)}</td></tr>`).join('')}</tbody></table>
+  </div>`;
+}
+
+/* Sitting in a student's chair inside the demo, with the way back always in
+   view — the point of the seat is the comparison, not the game. */
+function demoSeatBar(v) {
+  if (!S.demo || S.demo.student.code !== v.code) return '';
+  return `
+  <div class="card" style="display:flex;justify-content:space-between;align-items:baseline;
+       flex-wrap:wrap;gap:8px">
+    <span class="muted">You are sitting in <b>${esc(S.demo.student.name)}</b>'s chair,
+      group ${S.demo.student.group}. This is exactly what a student sees — no more.</span>
+    <button class="ghost" id="backtoclass">Back to the class dashboard</button>
+  </div>`;
+}
+
+function screenPlaying(v) {
+  const y = v.you;
+  const waiting = v.waitingOn.length;
+  return demoSeatBar(v) + `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Round ${v.round + 1} of ${v.totalRounds}</h2>
+      <div class="muted" id="clock" data-rest="${esc(waiting
+        ? ' · waiting on ' + v.waitingOn.join(', ')
+        : ' · everyone has filed')}">${countdown(v.deadline)}${waiting
+        ? ` · waiting on ${v.waitingOn.map(esc).join(', ')}`
+        : ' · everyone has filed'}</div>
+    </div>
+    ${v.firstRoundGrace ? `<div class="warnbox ok" style="margin-top:10px"><span class="ic">✓</span>
+      <span>The first round is longer on purpose — <b>${howLong(v.cadenceMinutes * 2)}</b>,
+      so everyone can read the screen before committing to anything. After this one,
+      a round every ${esc((v.cadenceLabel || '').toLowerCase())}. It closes sooner if
+      everyone files.</span></div>` : ''}
+    <p class="muted" style="margin:8px 0 12px">Prices and shares below are <b>last round's</b>.
+      Nobody can see this round's until it closes.</p>
+    ${marketTable(v)}
+  </div>
+  ${y && !y.bankrupt ? creditCard(y) : ''}
+  ${y && y.products && y.products.length && !y.bankrupt ? ordersForm(v)
+    : y ? `<div class="card"><h2>You are out of the game</h2>
+        <p class="muted">Your debt passed the limit and the bank called it in. You can still
+        watch the rest of the game and see the reveal at the end.</p></div>`
+    : `<div class="card"><h2>You are watching</h2>
+        <p class="muted">This game has already started, so there is no seat for you — but you
+        can follow it, and you will see who was who at the end.
+        <a href="/g/">Start your own game</a>.</p></div>`}
+  ${lastRound(v)}`;
+}
+
+function screenOver(v) {
+  const rows = v.market.slice().sort((a, b) => b.finalValue - a.finalValue);
+  const mine = rows.findIndex((r) => r.you);
+  return demoSeatBar(v) + `
+  <div class="card">
+    <h2>Game over</h2>
+    ${mine >= 0 ? `<div class="big">${['1st', '2nd', '3rd', '4th', '5th', '6th'][mine]}</div>
+      <div class="muted" style="margin-bottom:12px">of ${rows.length} companies</div>` : ''}
+    <p class="lede">Here is who everyone actually was.</p>
+    <table><thead><tr><th>#</th><th>Company</th><th class="v">Final value</th><th>What it was</th></tr></thead>
+      <tbody>${rows.map((m, i) => `<tr class="${m.you ? 'me' : ''}">
+        <td>${i + 1}</td>
+        <td>${esc(m.name)}${m.out ? ' <span class="pill dead">went under</span>' : ''}</td>
+        <td class="v">${money(m.finalValue)}</td>
+        <td class="muted">${m.isBot ? esc(m.strategy || 'an AI company') : 'a person'}</td>
+      </tr>`).join('')}</tbody></table>
+    <p class="muted" style="margin-top:14px">Companies are valued at cash, stock at salvage,
+      plus four times what the products still earn — which is why running one into the
+      ground to bank the cash scores badly.</p>
+    <button class="primary" id="home" style="margin-top:6px">Start another game</button>
+  </div>
+  ${lastRound(v)}`;
+}
+
+/* ------------------------------------------------------------------ render */
+function render() {
+  const app = $('app');
+  const v = S.view;
+  if (v && v.status === 'playing') hydrateFirm(v);
+  $('gamechip').classList.toggle('hidden', !S.code);
+  /* A private game's code is shown because handing it out is what it is for. A
+     public table's is not shown anywhere, because handing it out is the one thing
+     that would make a ranked result meaningless. */
+  if (S.code) {
+    $('gamechip').textContent = (v && v.isPublic) ? 'Ranked table' : 'Game ' + S.code;
+  }
+  $('sub').textContent = v && v.cadenceLabel
+    ? `A round every ${v.cadenceLabel.toLowerCase()}. Everyone commits blind.`
+    : 'You choose how long a round lasts. Everyone commits blind.';
+  let html = '';
+  /* A deploy succeeds whether or not the server was given its database, so this
+     is the only place anyone would ever find out. Said once, at the top, rather
+     than discovered one failing button at a time. */
+  if (S.cfg && S.cfg.ready === false) {
+    html += `<div class="card err"><b>This site is still being set up.</b>
+      <p class="muted" style="margin:8px 0 0">Its database is not connected yet, so
+      games cannot be created or joined. If this is your site: Netlify → Site
+      configuration → Environment variables, then redeploy. SETUP.md, step 3.</p></div>`;
+  }
+  if (S.error) html += `<div class="card err"><b>${esc(S.error)}</b></div>`;
+  if (S.notice) html += `<div class="card" style="border-color:var(--good)"><b>${esc(S.notice)}</b></div>`;
+  if (S.showClass) html += screenClass();
+  else if (S.showBoard) html += screenBoard();
+  else if (!v) html += screenHome();
+  else if (v.status === 'lobby') html += screenLobby(v);
+  else if (v.status === 'over') html += screenOver(v);
+  else html += screenPlaying(v);
+  /* What is actually running, on the page rather than in a deploy log. Two of
+     these — what the server is running and what the page is running — because
+     they are uploaded separately and it is entirely possible to have one without
+     the other. That happened; this is the fix for it happening quietly. */
+  html += `<p class="muted" style="margin-top:26px;text-align:center;font-size:11.5px">
+    page ${esc(PAGE_BUILD)}${S.cfg && S.cfg.build
+      ? ` · server ${esc(S.cfg.build)}` : ' · server not reached'}</p>`;
+  app.innerHTML = html;
+  if (S.busy) app.style.opacity = '0.6'; else app.style.opacity = '1';
+  if (v && v.status === 'playing' && v.you && D.firm) renderProjection(v);
+}
+
+/* --------------------------------------------------------------- behaviour */
+const pressed = (host) => {
+  const el = document.querySelector(`#${host} .choice[aria-pressed="true"]`);
+  return el ? el.dataset : {};
+};
+
+/* Typing must not re-render the page: the form would lose focus mid-number. Only
+   the paired control and the projection are updated. */
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  const name = t.dataset && t.dataset.p;
+  const field = t.dataset && t.dataset.field;
+  if (!name || !field || !D.orders[name]) return;
+  if (field === 'discontinue') {
+    D.orders[name].discontinue = t.checked;
+  } else {
+    const n = Number(t.value);
+    if (!Number.isFinite(n)) return;
+    D.orders[name][field] = Math.max(0, n);
+    document.querySelectorAll(`[data-p="${CSS.escape(name)}"][data-field="${field}"]`)
+      .forEach((el) => { if (el !== t) el.value = t.value; });
+  }
+  if (S.view) renderProjection(S.view);
+});
+
+/* Tell people a name is gone before they try to pay for it. */
+let nameTimer = null;
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'claimname') return;
+  const el = $('namestate');
+  const q = e.target.value.trim();
+  clearTimeout(nameTimer);
+  if (!q) { el.textContent = '\u00a0'; return; }
+  el.textContent = 'checking…';
+  nameTimer = setTimeout(async () => {
+    try {
+      const r = await api('name?q=' + encodeURIComponent(q));
+      el.textContent = r.ok ? (r.available ? `${r.name} is available` : `${r.name} is taken`) : r.error;
+      el.style.color = r.ok && r.available ? 'var(--good-text)' : 'var(--muted)';
+    } catch { el.textContent = '\u00a0'; }
+  }, 350);
+});
+
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'f_launch') {
+    D.launch = e.target.checked;
+    if (S.view) renderProjection(S.view);
+  }
+});
+
+document.addEventListener('click', (e) => {
+  const c = e.target.closest('.choice');
+  if (c && c.parentElement.classList.contains('choices')) {
+    c.parentElement.querySelectorAll('.choice').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+    c.setAttribute('aria-pressed', 'true');
+    /* a fixed hour of the day means nothing when a round lasts five minutes */
+    if (c.parentElement.id === 'cadencechoice') {
+      const w = $('closehour-wrap');
+      if (w) w.classList.toggle('hidden', c.dataset.cadence !== '1d');
+    }
+    if (c.parentElement.id === 'kindchoice') {
+      D.launchKind = c.dataset.kind;
+      if (S.view) renderProjection(S.view);
+    }
+    return;
+  }
+  const t = e.target;
+
+  /* ---- facilitator ---- */
+  if (t.id === 'joinclass') {
+    const name = (($('studentname') || {}).value || '').trim();
+    guard(async () => {
+      const r = await api('class/join', { code: S.joinClass, name });
+      S.code = r.code; S.token = r.token; S.view = r.view; S.joinClass = null;
+      remember(r.code, r.token, name);
+      S.notice = `You are in group ${r.group} of ${esc(r.className)}.`;
+      history.pushState({}, '', '/g/' + r.code);
+    });
+    return;
+  }
+  if (t.id === 'trydemo') { guard(openDemo); return; }
+  if (t.id === 'cseat' && S.demo) {
+    /* Straight into the chair, without asking them to join anything. The seat was
+       played for them up to this point, so it has a history to look at. */
+    S.code = S.demo.student.code; S.token = S.demo.student.token;
+    S.showClass = false; S.view = null;
+    remember(S.code, S.token, S.demo.student.name);
+    history.pushState({}, '', '/g/' + S.code);
+    guard(refresh);
+    return;
+  }
+  if (t.id === 'backtoclass' && S.demo) {
+    S.code = null; S.token = null; S.view = null; S.showClass = true;
+    history.pushState({}, '', '/g/?demo=1');
+    guard(async () => { S.cohort = (await api('cohort/' + S.demo.cohortId
+      + '?demo=' + encodeURIComponent(S.demo.token))).cohort; });
+    return;
+  }
+  {
+    const jump = { cadv1: 1, cadv3: 3, cadv5: 5 };
+    if (jump[t.id] && S.cohort && S.demo) {
+      guard(async () => {
+        S.cohort = (await api(`cohort/${S.cohort.id}/advance`,
+          demoArg({ rounds: jump[t.id] }))).cohort;
+      });
+      return;
+    }
+  }
+  if (t.id === 'showclass') {
+    guard(async () => { S.cohorts = await api('cohorts'); S.cohort = null; S.showClass = true; });
+    return;
+  }
+  if (t.id === 'closeclass') {
+    /* The list was fetched before this class existed, so coming back from a class
+       just created showed "No classes yet" — which reads as though it had not
+       been saved. Re-ask on the way out. */
+    if (S.cohort) {
+      guard(async () => { S.cohorts = await api('cohorts'); S.cohort = null; });
+      return;
+    }
+    S.showClass = false; render(); return;
+  }
+  if (t.dataset && t.dataset.openclass) {
+    const id = t.dataset.openclass;
+    guard(async () => { S.cohort = (await api('cohort/' + id)).cohort; });
+    return;
+  }
+  if (t.id === 'closedemo') {
+    S.demo = null; S.cohort = null; S.showClass = false; S.code = null; S.token = null;
+    S.view = null;
+    try { localStorage.removeItem(DEMOKEY); } catch {}
+    history.pushState({}, '', '/g/'); render(); return;
+  }
+  if (t.id === 'makeclass') {
+    const opts = {
+      name: ($('cname') || {}).value || '',
+      groupSize: +(pressed('groupsize').size || 5),
+      rounds: +(pressed('crounds').rounds || 10),
+      cadence: pressed('ccadence').cadence || '15m',
+    };
+    guard(async () => { S.cohort = (await api('cohorts', opts)).cohort; });
+    return;
+  }
+  {
+    /* the class controls all do the same thing: act, then show the new board */
+    const acts = { cstart: 'start', cpause: 'pause', cresume: 'resume',
+                   cextend: 'extend', cresolve: 'resolve' };
+    if (acts[t.id] && S.cohort) {
+      const body = demoArg(t.id === 'cextend' ? { minutes: 10 } : {});
+      guard(async () => {
+        S.cohort = (await api(`cohort/${S.cohort.id}/${acts[t.id]}`, body)).cohort;
+      });
+      return;
+    }
+  }
+  if (t.id === 'cexport' && S.cohort) {
+    /* the file has to arrive with the auth header, so fetch it and hand it over */
+    guard(async () => {
+      const headers = {};
+      if (S.session && S.session.access_token) headers.authorization = `Bearer ${S.session.access_token}`;
+      const q = S.demo ? '?demo=' + encodeURIComponent(S.demo.token) : '';
+      const res = await fetch(`/api/cohort/${S.cohort.id}/export${q}`, { headers });
+      if (!res.ok) throw new Error('Could not build the export.');
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = ((S.cohort.name || 'class').replace(/[^A-Za-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'class') + '-results.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    });
+    return;
+  }
+  if (t.id === 'playnow') {
+    const typed = (($('publicname') || {}).value || '').trim();
+    guard(async () => {
+      const r = await api('public/join', { name: typed });
+      S.code = r.code; S.token = r.token; S.view = r.view;
+      remember(r.code, r.token, (myCompany() || {}).name || typed, true);
+      /* The URL stays plain. A public table's code is not a thing to be passed
+         around, and the address bar is the one place a page cannot un-show it. */
+      history.pushState({}, '', '/g/');
+      S.notice = r.rated ? null : 'This game is unrated — claim a company name to be ranked.';
+    });
+    return;
+  }
+  if (t.id === 'showboard') {
+    guard(async () => {
+      const [board, record] = await Promise.all([api('leaderboard'), api('record')]);
+      S.board = board; S.record = record; S.showBoard = true;
+    });
+    return;
+  }
+  if (t.id === 'closeboard') { S.showBoard = false; render(); return; }
+  if (t.id === 'signin') {
+    const email = ($('email') || {}).value || '';
+    if (!email.includes('@')) { S.error = 'That does not look like an email address.'; render(); return; }
+    guard(async () => { await signIn(email); });
+    return;
+  }
+  if (t.id === 'signout') {
+    e.preventDefault();
+    guard(async () => { await signOut(); });
+    return;
+  }
+  if (t.id === 'buy') {
+    const name = ($('claimname') || {}).value || '';
+    guard(async () => {
+      const r = await api('checkout', { kind: 'host', companyName: name });
+      /* Stripe hosts the payment page; we never see a card. */
+      location.href = r.url;
+    });
+    return;
+  }
+  if (t.id === 'theme') {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+    t.textContent = dark ? 'Dark' : 'Light';
+    return;
+  }
+  if (t.id === 'copy') {
+    const el = $('sharelink'); el.select();
+    navigator.clipboard.writeText(el.value).then(() => { t.textContent = 'Copied'; });
+    return;
+  }
+  if (t.dataset.resume) { open(t.dataset.resume); return; }
+  if (t.id === 'home') { S.code = null; S.token = null; S.view = null; history.pushState({}, '', '/g/'); render(); return; }
+
+  if (t.id === 'create') {
+    /* Read every field BEFORE guard() runs — it re-renders to show the busy
+       state, which rebuilds this screen and resets the buttons. Reading inside
+       the callback silently gave every game the default settings. */
+    const opts = {
+      seats: +(pressed('seatchoice').seats || 4),
+      rounds: +(pressed('roundchoice').rounds || 10),
+      preset: pressed('presetchoice').preset || 'standard',
+      cadence: pressed('cadencechoice').cadence || '15m',
+      closeHour: +(($('closehour') || {}).value || 18),
+    };
+    guard(async () => {
+      const r = await api('create', opts);
+      const name = (myCompany() || {}).name || 'Your company';
+      S.code = r.code; S.token = r.token; S.view = r.view;
+      remember(r.code, r.token, name);
+      history.pushState({}, '', '/g/' + r.code);
+    });
+    return;
+  }
+  if (t.id === 'join') {
+    const code = $('joincode').value.trim().toUpperCase();
+    const name = $('joinname').value.trim();
+    guard(async () => {
+      const r = await api('join', { code, name });   // read above, before the re-render
+      S.code = r.code; S.token = r.token; S.view = r.view;
+      remember(r.code, r.token, name);
+      history.pushState({}, '', '/g/' + r.code);
+    });
+    return;
+  }
+  if (t.id === 'start') {
+    guard(async () => { S.view = (await api('start', { code: S.code, token: S.token })).view; });
+    return;
+  }
+  if (t.id === 'file') {
+    /* The orders live in D, kept current as they are typed — nothing to scrape
+       out of the DOM, and nothing lost when the busy state re-renders. */
+    const products = {};
+    for (const [name, d] of Object.entries(D.orders)) products[name] = { ...d };
+    const decisions = { products, launch: D.launch, launchKind: D.launchKind };
+    guard(async () => {
+      S.view = (await api('submit', { code: S.code, token: S.token, decisions })).view;
+    });
+  }
+});
+
+/* Reopen the demo somebody was already looking at, or build a fresh one. Coming
+   back to a half-shown class matters more than it sounds: the usual way this gets
+   evaluated is one person opening it, then reloading to show a colleague. */
+async function openDemo(force) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(DEMOKEY) || 'null'); } catch {}
+  if (saved && saved.token && !force) {
+    try {
+      const r = await api('cohort/' + saved.cohortId + '?demo=' + encodeURIComponent(saved.token));
+      S.demo = saved; S.cohort = r.cohort; S.showClass = true;
+      history.pushState({}, '', '/g/?demo=1');
+      return;
+    } catch { /* expired or swept — build another */ }
+  }
+  const r = await api('demo', {});
+  S.demo = { cohortId: r.cohortId, token: r.demoToken, student: r.student };
+  S.cohort = r.cohort; S.showClass = true;
+  try { localStorage.setItem(DEMOKEY, JSON.stringify(S.demo)); } catch {}
+  remember(r.student.code, r.student.token, r.student.name);
+  history.pushState({}, '', '/g/?demo=1');
+}
+
+async function refresh() {
+  if (!S.code) return;
+  try {
+    const r = await api('state?code=' + encodeURIComponent(S.code) +
+      (S.token ? '&token=' + encodeURIComponent(S.token) : ''));
+    S.view = r.view; render();
+  } catch (e) { S.error = e.message; render(); }
+}
+
+async function open(code) {
+  S.code = code.toUpperCase();
+  S.token = tokenFor(S.code);
+  const saved = readAll()[S.code] || {};
+  history.pushState({}, '', saved.pub ? '/g/' : '/g/' + S.code);
+  await guard(refresh);
+}
+
+/* Getting back into a ranked table after a refresh.
+
+   A private game lives at /g/CODE, which is exactly right: the URL *is* the
+   invitation. A public table has no invitation, so its code is not in the address
+   bar either — which means a reload has to find the game some other way. The
+   browser already knows: it is the seat token we saved when the table was dealt.
+
+   Only resumed while the game is still running, and only for a few hours, so a
+   finished table does not follow somebody around forever. */
+const RESUME_WINDOW_MS = 4 * 3600 * 1000;
+
+async function resumeRankedTable() {
+  const recent = Object.entries(readAll())
+    .filter(([, v]) => v.pub && Date.now() - (v.at || 0) < RESUME_WINDOW_MS)
+    .sort((a, b) => b[1].at - a[1].at)[0];
+  if (!recent) return false;
+  const [code, saved] = recent;
+  try {
+    const r = await api('state?code=' + encodeURIComponent(code) +
+      '&token=' + encodeURIComponent(saved.token));
+    if (!r.view || r.view.status === 'over') return false;
+    S.code = code; S.token = saved.token; S.view = r.view;
+    return true;
+  } catch {
+    return false;                       /* swept, expired, or never existed */
+  }
+}
+
+/* A game code in the URL is how an invitation arrives. */
+async function boot() {
+  try { S.cfg = await api('config'); } catch {}
+  await initAuth();
+  await loadAccount();
+  const q = new URLSearchParams(location.search);
+  if (q.get('paid')) {
+    S.notice = 'Payment received — your company name is yours. It can take a moment to appear.';
+    /* the webhook may land a beat after the redirect */
+    setTimeout(() => loadAccount().then(render), 2500);
+  }
+  if (q.get('cancelled')) S.notice = 'Payment cancelled. The name you picked has been released.';
+  const classCode = q.get('class');
+  const m = location.pathname.match(/\/g\/([A-Za-z0-9]{6})/);
+  /* Coming back to a seat inside a demo: remember which demo it belongs to, so
+     the way back to the dashboard is still there. */
+  if (m) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(DEMOKEY) || 'null');
+      if (saved && saved.student && saved.student.code === m[1].toUpperCase()) S.demo = saved;
+    } catch {}
+  }
+  if (q.get('demo') && !m) {
+    /* A link straight to the demo, which is the one worth putting in an email. */
+    await guard(openDemo);
+    render();
+  } else if (classCode && !m) {
+    /* Arriving on a class link: ask for a name, then seat them automatically. */
+    S.joinClass = classCode.toUpperCase();
+    render();
+  } else if (m) { await open(m[1]); } else {
+    /* No code in the URL. That is either the front page, or a reload of a ranked
+       table — which deliberately keeps its code out of the address bar. */
+    await resumeRankedTable();
+    render();
+  }
+  /* How often to check depends entirely on how fast the game is: a daily round
+     changes nothing in a minute, a five-minute round changes everything. */
+  let lastPoll = 0;
+  setInterval(() => {
+    if (!S.code || S.busy) return;
+    const gap = isFast() ? 6000 : 25000;
+    if (Date.now() - lastPoll < gap) return;
+    lastPoll = Date.now();
+    refresh();
+  }, 2000);
+  /* and repaint the clock itself, so the countdown actually counts down */
+  setInterval(() => {
+    const v = S.view;
+    if (!v || v.status !== 'playing' || S.busy) return;
+    const el = document.getElementById('clock');
+    if (el) el.textContent = countdown(v.deadline) + el.dataset.rest;
+  }, 1000);
+}
+
+if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  document.documentElement.setAttribute('data-theme', 'dark');
+  $('theme').textContent = 'Light';
+}
+window.addEventListener('popstate', boot);
+boot();
+</script>
+</body></html>
