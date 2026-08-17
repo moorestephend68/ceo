@@ -3,8 +3,18 @@
   command = "echo 'static site — nothing to build'"
 
 [build.environment]
-  # the functions use ESM, top-level await and the platform fetch
-  NODE_VERSION = "20"
+  # The functions use ESM, top-level await and the platform fetch.
+  #
+  # 22 rather than 20, and not by preference: the Supabase client builds a
+  # realtime connection on construction and looks for a global WebSocket, which
+  # Node did not have until 22. On 20 it refuses to start — "Node.js detected but
+  # native WebSocket not found" — and because that happens while the module is
+  # being imported, the function dies before any request handler runs. Every route
+  # then returns a bare 502 with no body, which is a remarkably hard failure to
+  # read backwards.
+  #
+  # We never use realtime. The dependency is on the constructor, not on us.
+  NODE_VERSION = "22"
 
 [functions]
   directory = "netlify/functions"
