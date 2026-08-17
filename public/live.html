@@ -953,7 +953,8 @@ const tokenFor = (code) => (readAll()[code] || {}).token || null;
 
 const S = { code: null, token: null, view: null, cfg: null, busy: false, error: null,
              tab: 'orders', sb: null, session: null, account: null, notice: null,
-             board: null, record: null, showBoard: false };
+             board: null, record: null, showBoard: false,
+             cohorts: null, cohort: null, showClass: false, joinClass: null };
 
 /* Signing in is only needed to host or to own a name. Joining a game a friend
    sent you stays anonymous — the invitation is the credential. */
@@ -1092,6 +1093,19 @@ function screenHome() {
     `<button class="choice" data-preset="${k}" aria-pressed="${k === 'standard'}">
       <div class="n">${esc(p.label)}</div><div class="d">${esc(p.note)}</div></button>`).join('') : '';
 
+  if (S.joinClass) {
+    return `
+    <div class="card">
+      <h2>You have been invited to a class</h2>
+      <p class="lede">Class code <b>${esc(S.joinClass)}</b>. Name your company and you will
+        be put into a group automatically. Every group plays the same market.</p>
+      <div style="max-width:340px;margin-top:12px">
+        <label for="studentname">Your company name</label>
+        <input id="studentname" type="text" maxlength="28" placeholder="Ravensworth &amp; Co">
+      </div>
+      <button class="primary" id="joinclass" style="margin-top:12px">Join the class</button>
+    </div>`;
+  }
   const gated = !canHost();
   const fmt = (S.cfg && S.cfg.publicFormat) || {};
   const rated = !!myCompany();
@@ -1113,7 +1127,7 @@ function screenHome() {
     <button class="primary" id="playnow" style="margin-top:6px">Find me a game</button>
     <button class="ghost" id="showboard" style="margin-top:6px">Leaderboard</button>
   </div>`;
-  return publicCard + accountCard() + `
+  return publicCard + accountCard() + classCard() + `
   <div class="card" ${gated ? 'style="opacity:0.55"' : ''}>
     <h2>Start a game</h2>
     <p class="lede">You invite your friends with a link. Empty seats are filled by
@@ -1160,6 +1174,112 @@ function screenHome() {
 
   <p class="muted">Practising on your own? The <a href="/">single-player levels</a>
     teach every lever this game uses.</p>`;
+}
+
+/* ------------------------------------------------------------ facilitator */
+function classCard() {
+  if (!signedIn() || !(S.account && S.account.canFacilitate)) return '';
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Run a class</h2>
+      <button class="ghost" id="showclass">Open the dashboard</button>
+    </div>
+    <p class="muted" style="margin-top:6px">One code for the whole room. Students are seated
+      into groups automatically, and every group faces an identical market.</p>
+  </div>`;
+}
+
+function screenClass() {
+  const c = S.cohort;
+  const L = (S.cfg && S.cfg.cohortLimits) || { groupSize: { min: 3, max: 6, default: 5 } };
+  if (!c) {
+    const list = (S.cohorts && S.cohorts.cohorts) || [];
+    return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">Your classes</h2>
+        <button class="ghost" id="closeclass">Back</button>
+      </div>
+      ${list.length ? `<table style="margin-top:8px"><tbody>${list.map((x) => `
+        <tr><td>${esc(x.name)}</td><td class="v"><span class="pill">${esc(x.status)}</span></td>
+        <td class="v"><button class="ghost" data-openclass="${x.id}">Open</button></td></tr>`).join('')}
+        </tbody></table>` : '<p class="muted">No classes yet.</p>'}
+    </div>
+    <div class="card">
+      <h2>New class</h2>
+      <div class="row" style="max-width:520px">
+        <div><label for="cname">Class name</label>
+          <input id="cname" type="text" maxlength="80" placeholder="MGT 481 — Autumn"></div>
+      </div>
+      <h3 style="margin-top:14px">Students per group</h3>
+      <div class="choices" id="groupsize">
+        ${Array.from({ length: L.groupSize.max - L.groupSize.min + 1 }, (_, i) => L.groupSize.min + i)
+          .map((n) => `<button class="choice" data-size="${n}" aria-pressed="${n === L.groupSize.default}">
+            <div class="n">${n}</div></button>`).join('')}
+      </div>
+      <h3 style="margin-top:12px">Rounds</h3>
+      <div class="choices" id="crounds">
+        ${[8, 10, 12, 16, 20].map((r) => `<button class="choice" data-rounds="${r}"
+          aria-pressed="${r === 10}"><div class="n">${r}</div></button>`).join('')}
+      </div>
+      <h3 style="margin-top:12px">How long is a round</h3>
+      <div class="choices" id="ccadence">
+        ${Object.entries((S.cfg && S.cfg.cadences) || {}).map(([id, cc]) =>
+          `<button class="choice" data-cadence="${id}" aria-pressed="${id === '15m'}">
+            <div class="n">${esc(cc.label)}</div></button>`).join('')}
+      </div>
+      <button class="primary" id="makeclass" style="margin-top:12px">Create the class</button>
+    </div>`;
+  }
+
+  const t = c.totals;
+  const link = location.origin + '/g/?class=' + c.code;
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">${esc(c.name)}</h2>
+      <button class="ghost" id="closeclass">Back</button>
+    </div>
+    <p class="muted">Students join with this code. Every group plays the same market
+      (seed ${c.seed}), so the groups can be compared directly.</p>
+    <div class="code" style="margin:8px 0 4px">${esc(c.code)}</div>
+    <div class="share" style="max-width:520px">
+      <input type="text" id="sharelink" readonly value="${esc(link)}">
+      <button class="ghost" id="copy">Copy</button>
+    </div>
+    <p class="muted" style="margin-top:12px">
+      ${t.groups} group${t.groups === 1 ? '' : 's'} · ${t.players} student${t.players === 1 ? '' : 's'} ·
+      ${t.playing} playing · ${t.finished} finished${t.waiting ? ` · waiting on ${t.waiting}` : ''}</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="primary" id="cstart">Start every group</button>
+      <button class="ghost" id="${c.status === 'paused' ? 'cresume' : 'cpause'}">
+        ${c.status === 'paused' ? 'Resume' : 'Pause the class'}</button>
+      <button class="ghost" id="cextend">Give everyone 10 more minutes</button>
+      <button class="ghost" id="cresolve">Close this round now</button>
+      <button class="ghost" id="cexport">Download results</button>
+    </div>
+    ${c.status === 'paused' ? `<div class="warnbox warn" style="margin-top:10px"><span class="ic">!</span>
+      <span>The class is paused. No round will close until you resume.</span></div>` : ''}
+  </div>
+  ${c.groups.map((g) => `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">Group ${g.group} <span class="muted" style="font-weight:400">${esc(g.code)}</span></h2>
+        <span class="muted">${g.status === 'lobby' ? 'not started'
+          : g.status === 'over' ? 'finished'
+          : `round ${g.round + 1} of ${g.totalRounds}${g.waitingOn.length
+              ? ` · waiting on ${g.waitingOn.map(esc).join(', ')}` : ' · all filed'}`}</span>
+      </div>
+      <table style="margin-top:6px"><tbody>${g.companies.map((co) => `
+        <tr><td>${esc(co.name)}${co.isBot ? ' <span class="pill">AI</span>' : ''}
+          ${co.out ? ' <span class="pill dead">out</span>' : ''}
+          ${co.missed ? ` <span class="pill out">${co.missed} missed</span>` : ''}</td>
+        <td class="v">${co.value === null ? '—' : money(co.value)}</td>
+        <td class="v">${co.isBot ? '' : co.filed ? '<span class="pill in">filed</span>'
+          : g.status === 'playing' ? '<span class="pill out">not yet</span>' : ''}</td></tr>`).join('')}
+      </tbody></table>
+    </div>`).join('')}`;
 }
 
 function screenBoard() {
@@ -1702,7 +1822,8 @@ function render() {
   let html = '';
   if (S.error) html += `<div class="card err"><b>${esc(S.error)}</b></div>`;
   if (S.notice) html += `<div class="card" style="border-color:var(--good)"><b>${esc(S.notice)}</b></div>`;
-  if (S.showBoard) html += screenBoard();
+  if (S.showClass) html += screenClass();
+  else if (S.showBoard) html += screenBoard();
   else if (!v) html += screenHome();
   else if (v.status === 'lobby') html += screenLobby(v);
   else if (v.status === 'over') html += screenOver(v);
@@ -1780,6 +1901,69 @@ document.addEventListener('click', (e) => {
   }
   const t = e.target;
 
+  /* ---- facilitator ---- */
+  if (t.id === 'joinclass') {
+    const name = (($('studentname') || {}).value || '').trim();
+    guard(async () => {
+      const r = await api('class/join', { code: S.joinClass, name });
+      S.code = r.code; S.token = r.token; S.view = r.view; S.joinClass = null;
+      remember(r.code, r.token, name);
+      S.notice = `You are in group ${r.group} of ${esc(r.className)}.`;
+      history.pushState({}, '', '/g/' + r.code);
+    });
+    return;
+  }
+  if (t.id === 'showclass') {
+    guard(async () => { S.cohorts = await api('cohorts'); S.cohort = null; S.showClass = true; });
+    return;
+  }
+  if (t.id === 'closeclass') {
+    if (S.cohort) { S.cohort = null; render(); return; }
+    S.showClass = false; render(); return;
+  }
+  if (t.dataset && t.dataset.openclass) {
+    const id = t.dataset.openclass;
+    guard(async () => { S.cohort = (await api('cohort/' + id)).cohort; });
+    return;
+  }
+  if (t.id === 'makeclass') {
+    const opts = {
+      name: ($('cname') || {}).value || '',
+      groupSize: +(pressed('groupsize').size || 5),
+      rounds: +(pressed('crounds').rounds || 10),
+      cadence: pressed('ccadence').cadence || '15m',
+    };
+    guard(async () => { S.cohort = (await api('cohorts', opts)).cohort; });
+    return;
+  }
+  {
+    /* the class controls all do the same thing: act, then show the new board */
+    const acts = { cstart: 'start', cpause: 'pause', cresume: 'resume',
+                   cextend: 'extend', cresolve: 'resolve' };
+    if (acts[t.id] && S.cohort) {
+      const body = t.id === 'cextend' ? { minutes: 10 } : {};
+      guard(async () => {
+        S.cohort = (await api(`cohort/${S.cohort.id}/${acts[t.id]}`, body)).cohort;
+      });
+      return;
+    }
+  }
+  if (t.id === 'cexport' && S.cohort) {
+    /* the file has to arrive with the auth header, so fetch it and hand it over */
+    guard(async () => {
+      const headers = {};
+      if (S.session && S.session.access_token) headers.authorization = `Bearer ${S.session.access_token}`;
+      const res = await fetch(`/api/cohort/${S.cohort.id}/export`, { headers });
+      if (!res.ok) throw new Error('Could not build the export.');
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (S.cohort.name || 'class').replace(/[^A-Za-z0-9]+/g, '-') + '-results.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    });
+    return;
+  }
   if (t.id === 'playnow') {
     const typed = (($('publicname') || {}).value || '').trim();
     guard(async () => {
@@ -1908,8 +2092,13 @@ async function boot() {
     setTimeout(() => loadAccount().then(render), 2500);
   }
   if (q.get('cancelled')) S.notice = 'Payment cancelled. The name you picked has been released.';
+  const classCode = q.get('class');
   const m = location.pathname.match(/\/g\/([A-Za-z0-9]{6})/);
-  if (m) { await open(m[1]); } else { render(); }
+  if (classCode && !m) {
+    /* Arriving on a class link: ask for a name, then seat them automatically. */
+    S.joinClass = classCode.toUpperCase();
+    render();
+  } else if (m) { await open(m[1]); } else { render(); }
   /* How often to check depends entirely on how fast the game is: a daily round
      changes nothing in a minute, a five-minute round changes everything. */
   let lastPoll = 0;

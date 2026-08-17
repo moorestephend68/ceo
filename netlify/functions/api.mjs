@@ -8,6 +8,7 @@ import * as A from '../../lib/accounts.mjs';
 import * as B from '../../lib/billing.mjs';
 import * as P from '../../lib/public.mjs';
 import * as R from '../../lib/rating.mjs';
+import * as CO from '../../lib/cohorts.mjs';
 import { requireUser, userFrom } from '../../lib/auth.mjs';
 import { getDb, getVerifier, publicAuthConfig } from '../../lib/runtime.mjs';
 
@@ -69,6 +70,7 @@ export default async (req) => {
         }])),
         nameRules: { min: A.NAME.min, max: A.NAME.max },
         publicFormat: { describe: P.describe(), waitSeconds: P.LOBBY_WAIT_SECONDS },
+        cohortLimits: CO.LIMITS,
       });
     }
 
@@ -155,6 +157,73 @@ export default async (req) => {
         recent: recent.map((x) => ({ place: x.place, seats: x.seats,
           value: x.value, delta: x.rating_delta })),
       });
+    }
+
+    /* ------------------------------------------------------------ cohorts */
+    /* Running a class is the facilitator licence; joining one is free, the same
+       way joining a private game is. */
+    if (route === 'cohorts' && req.method === 'POST') {
+      const user = await requireUser(req, db, verify);
+      const acct = await A.accountState(db, user.id);
+      if (!acct.canFacilitate) throw new Error('Running a class needs a facilitator licence.');
+      const cohort = await CO.createCohort(db, user.id, body);
+      return json({ cohort: await CO.board(db, cohort) });
+    }
+
+    if (route === 'cohorts') {
+      const user = await userFrom(req, verify);
+      if (!user) return json({ signedIn: false, cohorts: [] });
+      const acct = await A.accountState(db, user.id);
+      const mine = await db.cohortsOf(user.id);
+      return json({ signedIn: true, canFacilitate: acct.canFacilitate,
+        cohorts: mine.map((c) => ({ id: c.id, name: c.name, code: c.join_code,
+                                    status: c.status, created: c.created_at })) });
+    }
+
+    /* Everything below acts on one class and belongs to its owner alone. */
+    if (route.startsWith('cohort/')) {
+      const [, cohortId, action] = route.split('/');
+      const cohort = await db.cohort(cohortId);
+      if (!cohort) return fail('No class with that id.', 404);
+      const user = await requireUser(req, db, verify);
+      if (cohort.facilitator !== user.id) return fail('That is not your class.', 403);
+
+      if (!action) return json({ cohort: await CO.board(db, cohort) });
+
+      if (action === 'export') {
+        const csv = await CO.exportCsv(db, cohort);
+        const safe = cohort.name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'class';
+        return new Response(csv, { status: 200, headers: {
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': `attachment; filename="${safe}-results.csv"`,
+          'cache-control': 'no-store',
+        } });
+      }
+
+      if (req.method !== 'POST') return fail('Unknown request.', 404);
+      let out;
+      if (action === 'start') out = await CO.startAll(db, cohort, now);
+      else if (action === 'pause') out = await CO.setPaused(db, cohort, true);
+      else if (action === 'resume') out = await CO.setPaused(db, cohort, false);
+      else if (action === 'extend') out = await CO.extendAll(db, cohort, body.minutes, now);
+      else if (action === 'resolve') out = await CO.resolveAll(db, cohort, now);
+      else if (action === 'close') { await db.updateCohort(cohort.id, { status: 'closed' }); out = { closed: true }; }
+      else return fail('Unknown request.', 404);
+
+      const fresh = await db.cohort(cohortId);
+      return json({ ...out, cohort: await CO.board(db, fresh) });
+    }
+
+    /* A student joins with the class code and is seated automatically. */
+    if (route === 'class/join' && req.method === 'POST') {
+      const cohort = await db.cohortByJoinCode(String(body.code || '').trim());
+      if (!cohort) return fail('No class with that code.', 404);
+      const checked = A.checkName(body.name);
+      if (!checked.ok) return fail(checked.error);
+      const joined = await CO.joinCohort(db, cohort, checked.name, now);
+      await db.putGame(joined.game);
+      return json({ code: joined.game.code, token: joined.token, group: joined.group,
+                    className: cohort.name, view: G.viewFor(joined.game, joined.token) });
     }
 
     /* -------------------------------------------------------------- games */

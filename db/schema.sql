@@ -187,3 +187,33 @@ drop policy if exists "ratings are public" on ratings;
 create policy "ratings are public" on ratings for select using (true);
 drop policy if exists "results are public" on results;
 create policy "results are public" on results for select using (true);
+
+-- ============================================================ stage 3
+-- Cohorts: one facilitator running many groups at once.
+
+-- Every group in a cohort shares the cohort's seed, so all of them face an
+-- identical market. That is what makes grading defensible — nobody can claim
+-- they drew a harder economy — and it is the thing an instructor asks about
+-- first.
+create table if not exists cohorts (
+  id           uuid primary key default gen_random_uuid(),
+  facilitator  uuid not null references profiles on delete cascade,
+  name         text not null,
+  join_code    text not null unique,
+  seed         bigint not null,
+  group_size   integer not null default 5,
+  config       jsonb not null default '{}'::jsonb,
+  status       text not null default 'open'
+               check (status in ('open', 'running', 'paused', 'closed')),
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists cohorts_owner_idx on cohorts (facilitator, created_at desc);
+
+alter table games add column if not exists cohort_id uuid references cohorts on delete cascade;
+create index if not exists games_cohort_idx on games (cohort_id);
+
+alter table cohorts enable row level security;
+drop policy if exists "own cohorts" on cohorts;
+create policy "own cohorts" on cohorts
+  for select using (auth.uid() = facilitator);
