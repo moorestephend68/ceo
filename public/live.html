@@ -952,7 +952,8 @@ const remember = (code, token, name) => {
 const tokenFor = (code) => (readAll()[code] || {}).token || null;
 
 const S = { code: null, token: null, view: null, cfg: null, busy: false, error: null,
-             tab: 'orders', sb: null, session: null, account: null, notice: null };
+             tab: 'orders', sb: null, session: null, account: null, notice: null,
+             board: null, record: null, showBoard: false };
 
 /* Signing in is only needed to host or to own a name. Joining a game a friend
    sent you stays anonymous — the invitation is the credential. */
@@ -1092,7 +1093,27 @@ function screenHome() {
       <div class="n">${esc(p.label)}</div><div class="d">${esc(p.note)}</div></button>`).join('') : '';
 
   const gated = !canHost();
-  return accountCard() + `
+  const fmt = (S.cfg && S.cfg.publicFormat) || {};
+  const rated = !!myCompany();
+  const publicCard = `
+  <div class="card">
+    <h2>Play now</h2>
+    <p class="lede">Join a table with whoever else is around. Empty seats fill with
+      AI companies, and you find out who was who at the end.</p>
+    <p class="muted">${esc(fmt.describe || '5 companies · 8 rounds')} · free, no account needed.</p>
+    ${rated
+      ? `<p class="muted">You will play as <b>${esc(myCompany().name)}</b>, and the result
+           counts towards your rating.</p>`
+      : `<div style="max-width:320px;margin:10px 0">
+           <label for="publicname">Your company name for this game</label>
+           <input id="publicname" type="text" maxlength="28" placeholder="Ketteridge">
+         </div>
+         <p class="muted">Games are only rated for companies with a claimed name —
+           see below.</p>`}
+    <button class="primary" id="playnow" style="margin-top:6px">Find me a game</button>
+    <button class="ghost" id="showboard" style="margin-top:6px">Leaderboard</button>
+  </div>`;
+  return publicCard + accountCard() + `
   <div class="card" ${gated ? 'style="opacity:0.55"' : ''}>
     <h2>Start a game</h2>
     <p class="lede">You invite your friends with a link. Empty seats are filled by
@@ -1141,6 +1162,45 @@ function screenHome() {
     teach every lever this game uses.</p>`;
 }
 
+function screenBoard() {
+  const b = S.board;
+  if (!b) return `<div class="card"><h2>Leaderboard</h2><p class="muted">Loading…</p></div>`;
+  const me = S.record && S.record.rated ? S.record : null;
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Leaderboard</h2>
+      <button class="ghost" id="closeboard">Back</button>
+    </div>
+    <p class="muted" style="margin-top:6px">Only public games count. Private games with
+      friends are unrated, because the host chooses the settings.</p>
+    ${b.board.length ? `<table style="margin-top:10px">
+      <thead><tr><th>#</th><th>Company</th><th class="v">Rating</th>
+        <th class="v">Games</th><th class="v">Wins</th></tr></thead>
+      <tbody>${b.board.map((r) => `
+        <tr class="${me && r.name === me.name ? 'me' : ''}">
+          <td>${r.rank}</td>
+          <td>${esc(r.name)} <span class="muted">${esc(r.band)}</span></td>
+          <td class="v">${r.rating}</td><td class="v">${r.games}</td><td class="v">${r.wins}</td>
+        </tr>`).join('')}</tbody></table>`
+      : `<p class="muted">Nobody has finished a rated game yet. Be first.</p>`}
+  </div>
+  ${me ? `
+  <div class="card">
+    <h2>${esc(me.name)}</h2>
+    <div class="big">${me.rating} <span class="muted" style="font-size:15px;font-weight:400">${esc(me.band)}</span></div>
+    <div class="muted" style="margin-bottom:10px">${me.games} rated game${me.games === 1 ? '' : 's'} ·
+      ${me.wins} win${me.wins === 1 ? '' : 's'}${me.bestValue != null ? ` · best company ${money(me.bestValue)}` : ''}</div>
+    ${me.recent && me.recent.length ? `<table>
+      <thead><tr><th>Finish</th><th class="v">Company value</th><th class="v">Rating</th></tr></thead>
+      <tbody>${me.recent.map((r) => `<tr>
+        <td>${r.place} of ${r.seats}</td>
+        <td class="v">${money(r.value)}</td>
+        <td class="v ${r.delta >= 0 ? 'pos' : 'neg'}">${r.delta >= 0 ? '+' : ''}${r.delta}</td>
+      </tr>`).join('')}</tbody></table>` : ''}
+  </div>` : ''}`;
+}
+
 function screenLobby(v) {
   const link = location.origin + '/g/' + v.code;
   const waiting = v.seatCount - v.joined.length;
@@ -1165,8 +1225,10 @@ function screenLobby(v) {
   </div>`;
   return takeSeat + `
   <div class="card">
-    <h2>${v.you ? 'Waiting to start' : 'The game so far'}</h2>
-    <p class="muted">Send this to the people you want in the game.</p>
+    <h2>${v.isPublic ? 'Waiting for players' : (v.you ? 'Waiting to start' : 'The game so far')}</h2>
+    <p class="muted">${v.isPublic
+      ? 'Anyone can join this table. It starts when it fills, or shortly anyway — empty seats become AI companies.'
+      : 'Send this to the people you want in the game.'}</p>
     <div class="code" style="margin:8px 0 4px">${v.code}</div>
     <div class="share" style="max-width:520px">
       <input type="text" id="sharelink" readonly value="${esc(link)}">
@@ -1185,9 +1247,11 @@ function screenLobby(v) {
       ${esc(v.preset)} difficulty${v.cadenceMinutes < 1440
         ? ` · about ${Math.round(v.totalRounds * v.cadenceMinutes / 60) || '<1'} hours end to end`
         : ''}</p>
-    ${v.isHost
-      ? `<button class="primary" id="start" style="margin-top:6px">Start the game${waiting ? ` (${waiting} seat${waiting > 1 ? 's' : ''} become AI)` : ''}</button>`
-      : `<p class="muted" style="margin-top:6px">The host starts the game when everyone is in.</p>`}
+    ${v.isPublic
+      ? `<p class="muted" style="margin-top:6px">Starting automatically — hold tight.</p>`
+      : v.isHost
+        ? `<button class="primary" id="start" style="margin-top:6px">Start the game${waiting ? ` (${waiting} seat${waiting > 1 ? 's' : ''} become AI)` : ''}</button>`
+        : `<p class="muted" style="margin-top:6px">The host starts the game when everyone is in.</p>`}
   </div>`;
 }
 
@@ -1638,7 +1702,8 @@ function render() {
   let html = '';
   if (S.error) html += `<div class="card err"><b>${esc(S.error)}</b></div>`;
   if (S.notice) html += `<div class="card" style="border-color:var(--good)"><b>${esc(S.notice)}</b></div>`;
-  if (!v) html += screenHome();
+  if (S.showBoard) html += screenBoard();
+  else if (!v) html += screenHome();
   else if (v.status === 'lobby') html += screenLobby(v);
   else if (v.status === 'over') html += screenOver(v);
   else html += screenPlaying(v);
@@ -1715,6 +1780,25 @@ document.addEventListener('click', (e) => {
   }
   const t = e.target;
 
+  if (t.id === 'playnow') {
+    const typed = (($('publicname') || {}).value || '').trim();
+    guard(async () => {
+      const r = await api('public/join', { name: typed });
+      S.code = r.code; S.token = r.token; S.view = r.view;
+      if (!myCompany()) remember(r.code, r.token, typed);
+      history.pushState({}, '', '/g/' + r.code);
+      S.notice = r.rated ? null : 'This game is unrated — claim a company name to be ranked.';
+    });
+    return;
+  }
+  if (t.id === 'showboard') {
+    guard(async () => {
+      const [board, record] = await Promise.all([api('leaderboard'), api('record')]);
+      S.board = board; S.record = record; S.showBoard = true;
+    });
+    return;
+  }
+  if (t.id === 'closeboard') { S.showBoard = false; render(); return; }
   if (t.id === 'signin') {
     const email = ($('email') || {}).value || '';
     if (!email.includes('@')) { S.error = 'That does not look like an email address.'; render(); return; }

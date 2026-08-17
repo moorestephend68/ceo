@@ -135,3 +135,55 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_user();
+
+-- ============================================================ stage 2
+-- Public ranked games, and what they produce.
+
+-- Public games are the only rated ones, because they are the only ones with a
+-- format nobody can tune. A private game's host picks the seats, the length and
+-- the difficulty, so ranking those would rank whoever configured the softest
+-- table rather than whoever played best.
+alter table games add column if not exists is_public boolean not null default false;
+
+create index if not exists games_open_public_idx on games (created_at)
+  where is_public and status = 'lobby';
+
+-- One row per company, carrying its standing.
+create table if not exists ratings (
+  company_id  uuid primary key references companies on delete cascade,
+  rating      integer not null default 1500,
+  games       integer not null default 0,
+  wins        integer not null default 0,
+  best_value  numeric,
+  updated_at  timestamptz not null default now()
+);
+
+create index if not exists ratings_board_idx on ratings (rating desc, games desc);
+
+-- One row per company per finished public game. Kept so a rating can be
+-- explained rather than merely asserted, and so a game can never be scored
+-- twice — that is what the unique constraint is for.
+create table if not exists results (
+  id           uuid primary key default gen_random_uuid(),
+  game_code    text not null,
+  company_id   uuid references companies on delete set null,
+  name         text not null,
+  place        integer not null,
+  seats        integer not null,
+  value        numeric not null,
+  rating_delta integer not null default 0,
+  was_bot      boolean not null default false,
+  created_at   timestamptz not null default now(),
+  unique (game_code, name)
+);
+
+create index if not exists results_company_idx on results (company_id, created_at desc);
+
+alter table ratings enable row level security;
+alter table results enable row level security;
+
+-- The leaderboard is public by design; it is the point of it.
+drop policy if exists "ratings are public" on ratings;
+create policy "ratings are public" on ratings for select using (true);
+drop policy if exists "results are public" on results;
+create policy "results are public" on results for select using (true);

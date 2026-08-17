@@ -6,6 +6,8 @@
 import * as G from '../../lib/game.mjs';
 import * as A from '../../lib/accounts.mjs';
 import * as B from '../../lib/billing.mjs';
+import * as P from '../../lib/public.mjs';
+import * as R from '../../lib/rating.mjs';
 import { requireUser, userFrom } from '../../lib/auth.mjs';
 import { getDb, getVerifier, publicAuthConfig } from '../../lib/runtime.mjs';
 
@@ -22,8 +24,20 @@ const fail = (message, status = 400) => json({ error: message }, status);
    The schedule is the backstop, not the mechanism. */
 async function settle(db, game, now) {
   let changed = false;
+  /* A public table waiting for players starts when it fills or when its wait
+     runs out, whichever comes first — nobody sits looking at an empty lobby. */
+  if (game.status === 'lobby' && game.isPublic && P.shouldStart(game, now)) {
+    P.startPublic(game, now);
+    changed = true;
+  }
   while (game.status === 'playing' && G.shouldResolve(game, now)) {
     G.resolveRound(game, now);
+    changed = true;
+  }
+  /* Ratings move when the game ends, and only for public games. scoreGame is
+     idempotent at the database, so two requests finishing it together is fine. */
+  if (game.status === 'over' && game.isPublic && !game.scored) {
+    await P.scoreGame(db, game);
     changed = true;
   }
   if (changed) await db.putGame(game);
@@ -54,6 +68,7 @@ export default async (req) => {
           label: p.label, blurb: p.blurb, forSale: !!process.env[p.envPrice],
         }])),
         nameRules: { min: A.NAME.min, max: A.NAME.max },
+        publicFormat: { describe: P.describe(), waitSeconds: P.LOBBY_WAIT_SECONDS },
       });
     }
 
@@ -84,6 +99,62 @@ export default async (req) => {
         companyName: body.companyName, origin: url.origin, now,
       });
       return json({ url: out.url });
+    }
+
+    /* -------------------------------------------------- public, ranked play */
+    if (route === 'public/format') {
+      return json({ format: P.FORMAT, describe: P.describe(),
+                    waitSeconds: P.LOBBY_WAIT_SECONDS });
+    }
+
+    if (route === 'public/join' && req.method === 'POST') {
+      /* Free, and no account needed. Signing in with a purchased company is what
+         makes the result count towards a rating — that is the whole difference. */
+      const user = await userFrom(req, verify);
+      let name = String(body.name || '').trim();
+      let companyId = null;
+      if (user) {
+        const acct = await A.accountState(db, user.id);
+        if (acct.companies[0]) { name = acct.companies[0].name; companyId = acct.companies[0].id; }
+      }
+      if (!name) return fail('Give your company a name first.');
+      const checked = A.checkName(name);
+      if (!checked.ok) return fail(checked.error);
+
+      const joined = await P.joinPublic(db, { name: checked.name, companyId, now });
+      await settle(db, joined.game, now);
+      await db.putGame(joined.game, user ? user.id : null);
+      return json({ code: joined.game.code, token: joined.token, rated: !!companyId,
+                    view: G.viewFor(joined.game, joined.token) });
+    }
+
+    if (route === 'leaderboard') {
+      const board = await db.leaderboard(50);
+      return json({
+        board: board.map((r, i) => ({
+          rank: i + 1, name: r.name, rating: r.rating, band: R.band(r.rating),
+          games: r.games, wins: r.wins, bestValue: r.best_value,
+        })),
+      });
+    }
+
+    if (route === 'record') {
+      const user = await userFrom(req, verify);
+      if (!user) return json({ signedIn: false });
+      const acct = await A.accountState(db, user.id);
+      const mine = acct.companies[0];
+      if (!mine) return json({ signedIn: true, rated: false });
+      const [rated, recent] = await Promise.all([
+        db.ratingsFor([mine.id]), db.recordFor(mine.id, 10),
+      ]);
+      const r = rated[mine.id];
+      return json({
+        signedIn: true, rated: true, name: mine.name,
+        rating: r ? r.rating : R.START, band: R.band(r ? r.rating : R.START),
+        games: r ? r.games : 0, wins: r ? r.wins : 0, bestValue: r ? r.best_value : null,
+        recent: recent.map((x) => ({ place: x.place, seats: x.seats,
+          value: x.value, delta: x.rating_delta })),
+      });
     }
 
     /* -------------------------------------------------------------- games */
