@@ -135,6 +135,10 @@
    computed with the identical code that will resolve the round, not an
    approximation of it. That is the whole reason it can be trusted. */
 
+/* Stamped into this file by mklive.py at build time, so the page cannot claim to
+   be a version it is not. */
+const PAGE_BUILD = '/*__BUILD__*/';
+
 const $ = (id) => document.getElementById(id);
 const money = (x) => (x < 0 ? '-$' : '$') + Math.abs(Math.round(x)).toLocaleString('en-US');
 const money2 = (x) => '$' + (+x).toFixed(2);
@@ -147,8 +151,8 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
    one real failure mode, so the join screen shows the personal link to keep. */
 const KEY = 'ceo.live.v1';
 const readAll = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
-const remember = (code, token, name) => {
-  const all = readAll(); all[code] = { token, name, at: Date.now() };
+const remember = (code, token, name, pub) => {
+  const all = readAll(); all[code] = { token, name, at: Date.now(), pub: !!pub };
   try { localStorage.setItem(KEY, JSON.stringify(all)); } catch {}
 };
 const tokenFor = (code) => (readAll()[code] || {}).token || null;
@@ -377,7 +381,8 @@ function screenHome() {
   ${saved.length ? `<div class="card"><h2>Your games</h2>
     ${saved.map(([c, v]) => `<div style="display:flex;justify-content:space-between;
       align-items:center;padding:6px 0;border-bottom:1px solid var(--grid)">
-      <span><b>${esc(v.name)}</b> <span class="muted">in game ${c}</span></span>
+      <span><b>${esc(v.name)}</b> <span class="muted">${v.pub
+        ? 'at a ranked table' : `in game ${c}`}</span></span>
       <button class="ghost" data-resume="${c}">Open</button></div>`).join('')}
     </div>` : ''}
 
@@ -573,12 +578,22 @@ function screenBoard() {
   </div>` : ''}`;
 }
 
+/* "about 1 hours end to end" was what a 40-minute game used to call itself. */
+function howLong(mins) {
+  if (mins < 90) return `${Math.round(mins / 5) * 5} minutes`;
+  const h = mins / 60;
+  const r = h < 4 ? Math.round(h * 2) / 2 : Math.round(h);
+  return `${r} hour${r === 1 ? '' : 's'}`;
+}
+
 function screenLobby(v) {
   const link = location.origin + '/g/' + v.code;
   const waiting = v.seatCount - v.joined.length;
   /* Arriving on an invitation is the main way anyone reaches this page, so the
-     first thing someone without a seat needs is the way to take one. */
-  const takeSeat = v.you ? '' : `
+     first thing someone without a seat needs is the way to take one — unless this
+     is a public table, where seats are dealt by matchmaking and there is nothing
+     to accept. */
+  const takeSeat = (v.you || v.isPublic) ? '' : `
   <div class="card">
     <h2>You have been invited</h2>
     <p class="lede">${esc(v.joined.map((p) => p.name).join(', '))}
@@ -595,17 +610,37 @@ function screenLobby(v) {
       <p class="muted" style="margin-top:8px">You keep this name across games.</p>`
       : `<p class="muted">Ask whoever invited you to make room, or start your own game.</p>`}
   </div>`;
-  return takeSeat + `
-  <div class="card">
-    <h2>${v.isPublic ? 'Waiting for players' : (v.you ? 'Waiting to start' : 'The game so far')}</h2>
-    <p class="muted">${v.isPublic
-      ? 'Anyone can join this table. It starts when it fills, or shortly anyway — empty seats become AI companies.'
-      : 'Send this to the people you want in the game.'}</p>
+  /* A public table has no invite link, and showing it one was a real mistake
+     rather than a cosmetic one.
+
+     Public games are the rated tier, and the only reason a rating means anything
+     is that nobody chooses who they sit with. Handing out a code lets four
+     friends fill a "public" table and arrange the finishing order between them.
+     It also gives away the thing the private game is *for* — choosing who plays —
+     which is what somebody paid for.
+
+     So the code is not shown here, and the server refuses to seat anyone at a
+     public table by code even if they learn it another way. */
+  const waitingRoom = v.isPublic ? `
+    <p class="muted">You have been seated with whoever else is looking for a game.
+      It starts when the table fills, or in a minute or so either way — empty seats
+      become AI companies, and you are not told which.</p>
+    <div class="warnbox ok" style="margin-top:10px"><span class="ic">✓</span>
+      <span>There is no link to share, on purpose. A ranked table only means something
+      because nobody picks who they sit with. To play with people you choose, that is
+      what a private game is.</span></div>`
+    : `
+    <p class="muted">Send this to the people you want in the game.</p>
     <div class="code" style="margin:8px 0 4px">${v.code}</div>
     <div class="share" style="max-width:520px">
       <input type="text" id="sharelink" readonly value="${esc(link)}">
       <button class="ghost" id="copy">Copy</button>
-    </div>
+    </div>`;
+
+  return takeSeat + `
+  <div class="card">
+    <h2>${v.isPublic ? 'Finding you a table' : (v.you ? 'Waiting to start' : 'The game so far')}</h2>
+    ${waitingRoom}
     <h3 style="margin-top:18px">In the game</h3>
     <table><tbody>
       ${v.joined.map((p) => `<tr><td>${esc(p.name)}</td>
@@ -617,7 +652,7 @@ function screenLobby(v) {
       a round every ${esc((v.cadenceLabel || 'day').toLowerCase())}${v.cadenceMinutes >= 1440
         ? `, closing at ${String(v.closeHour).padStart(2, '0')}:00 UTC` : ''} ·
       ${esc(v.preset)} difficulty${v.cadenceMinutes < 1440
-        ? ` · about ${Math.round(v.totalRounds * v.cadenceMinutes / 60) || '<1'} hours end to end`
+        ? ` · about ${howLong(v.totalRounds * v.cadenceMinutes)} end to end`
         : ''}</p>
     ${v.isPublic
       ? `<p class="muted" style="margin-top:6px">Starting automatically — hold tight.</p>`
@@ -1080,7 +1115,12 @@ function render() {
   const v = S.view;
   if (v && v.status === 'playing') hydrateFirm(v);
   $('gamechip').classList.toggle('hidden', !S.code);
-  if (S.code) $('gamechip').textContent = 'Game ' + S.code;
+  /* A private game's code is shown because handing it out is what it is for. A
+     public table's is not shown anywhere, because handing it out is the one thing
+     that would make a ranked result meaningless. */
+  if (S.code) {
+    $('gamechip').textContent = (v && v.isPublic) ? 'Ranked table' : 'Game ' + S.code;
+  }
   $('sub').textContent = v && v.cadenceLabel
     ? `A round every ${v.cadenceLabel.toLowerCase()}. Everyone commits blind.`
     : 'You choose how long a round lasts. Everyone commits blind.';
@@ -1102,6 +1142,13 @@ function render() {
   else if (v.status === 'lobby') html += screenLobby(v);
   else if (v.status === 'over') html += screenOver(v);
   else html += screenPlaying(v);
+  /* What is actually running, on the page rather than in a deploy log. Two of
+     these — what the server is running and what the page is running — because
+     they are uploaded separately and it is entirely possible to have one without
+     the other. That happened; this is the fix for it happening quietly. */
+  html += `<p class="muted" style="margin-top:26px;text-align:center;font-size:11.5px">
+    page ${esc(PAGE_BUILD)}${S.cfg && S.cfg.build
+      ? ` · server ${esc(S.cfg.build)}` : ' · server not reached'}</p>`;
   app.innerHTML = html;
   if (S.busy) app.style.opacity = '0.6'; else app.style.opacity = '1';
   if (v && v.status === 'playing' && v.you && D.firm) renderProjection(v);
@@ -1285,8 +1332,10 @@ document.addEventListener('click', (e) => {
     guard(async () => {
       const r = await api('public/join', { name: typed });
       S.code = r.code; S.token = r.token; S.view = r.view;
-      if (!myCompany()) remember(r.code, r.token, typed);
-      history.pushState({}, '', '/g/' + r.code);
+      remember(r.code, r.token, (myCompany() || {}).name || typed, true);
+      /* The URL stays plain. A public table's code is not a thing to be passed
+         around, and the address bar is the one place a page cannot un-show it. */
+      history.pushState({}, '', '/g/');
       S.notice = r.rated ? null : 'This game is unrated — claim a company name to be ranked.';
     });
     return;
@@ -1414,8 +1463,37 @@ async function refresh() {
 async function open(code) {
   S.code = code.toUpperCase();
   S.token = tokenFor(S.code);
-  history.pushState({}, '', '/g/' + S.code);
+  const saved = readAll()[S.code] || {};
+  history.pushState({}, '', saved.pub ? '/g/' : '/g/' + S.code);
   await guard(refresh);
+}
+
+/* Getting back into a ranked table after a refresh.
+
+   A private game lives at /g/CODE, which is exactly right: the URL *is* the
+   invitation. A public table has no invitation, so its code is not in the address
+   bar either — which means a reload has to find the game some other way. The
+   browser already knows: it is the seat token we saved when the table was dealt.
+
+   Only resumed while the game is still running, and only for a few hours, so a
+   finished table does not follow somebody around forever. */
+const RESUME_WINDOW_MS = 4 * 3600 * 1000;
+
+async function resumeRankedTable() {
+  const recent = Object.entries(readAll())
+    .filter(([, v]) => v.pub && Date.now() - (v.at || 0) < RESUME_WINDOW_MS)
+    .sort((a, b) => b[1].at - a[1].at)[0];
+  if (!recent) return false;
+  const [code, saved] = recent;
+  try {
+    const r = await api('state?code=' + encodeURIComponent(code) +
+      '&token=' + encodeURIComponent(saved.token));
+    if (!r.view || r.view.status === 'over') return false;
+    S.code = code; S.token = saved.token; S.view = r.view;
+    return true;
+  } catch {
+    return false;                       /* swept, expired, or never existed */
+  }
 }
 
 /* A game code in the URL is how an invitation arrives. */
@@ -1448,7 +1526,12 @@ async function boot() {
     /* Arriving on a class link: ask for a name, then seat them automatically. */
     S.joinClass = classCode.toUpperCase();
     render();
-  } else if (m) { await open(m[1]); } else { render(); }
+  } else if (m) { await open(m[1]); } else {
+    /* No code in the URL. That is either the front page, or a reload of a ranked
+       table — which deliberately keeps its code out of the address bar. */
+    await resumeRankedTable();
+    render();
+  }
   /* How often to check depends entirely on how fast the game is: a daily round
      changes nothing in a minute, a five-minute round changes everything. */
   let lastPoll = 0;
