@@ -44,8 +44,14 @@ export default async () => {
   /* Names held by someone who never finished paying go back on the market. */
   const freed = await db.releaseExpiredHolds(now);
 
+  /* Demo classes are opened by strangers evaluating the thing and abandoned a
+     few minutes later. Each one is six games, so they are swept rather than
+     kept. */
+  const demos = db.purgeExpiredDemos ? await db.purgeExpiredDemos(now) : 0;
+
   console.log(`tick: ${lobbies.length} lobbies started, ${due.length} overdue, ` +
-              `${closed} rounds closed, ${rated} games rated, ${freed} name holds released`);
+              `${closed} rounds closed, ${rated} games rated, ${freed} name holds released, ` +
+              `${demos} demo classes swept`);
 };
 
 export const config = { schedule: '*/5 * * * *' };

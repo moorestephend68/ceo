@@ -217,3 +217,25 @@ alter table cohorts enable row level security;
 drop policy if exists "own cohorts" on cohorts;
 create policy "own cohorts" on cohorts
   for select using (auth.uid() = facilitator);
+
+-- ============================================================ stage 4
+-- The demo class: a real cohort that belongs to nobody.
+--
+-- An instructor evaluating this should not have to create an account first —
+-- that is the single biggest reason an evaluation never happens. So a demo
+-- cohort has no facilitator at all, and is controlled instead by a random token
+-- handed to whoever opened it. The token grants control of that one throwaway
+-- class and nothing else: no account, no entitlement, no other data.
+alter table cohorts alter column facilitator drop not null;
+alter table cohorts add column if not exists is_demo boolean not null default false;
+alter table cohorts add column if not exists demo_token text;
+alter table cohorts add column if not exists expires_at timestamptz;
+
+-- Demos are disposable; the scheduled sweep deletes them, and games.cohort_id
+-- cascades so nothing is orphaned.
+create index if not exists cohorts_demo_idx on cohorts (expires_at) where is_demo;
+
+-- The "own cohorts" policy above compares auth.uid() to facilitator, and a null
+-- facilitator matches nobody — so a demo cohort is invisible to the anon key.
+-- Only the service role inside the functions can see it, which is what the demo
+-- token is checked against.

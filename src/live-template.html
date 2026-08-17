@@ -156,7 +156,14 @@ const tokenFor = (code) => (readAll()[code] || {}).token || null;
 const S = { code: null, token: null, view: null, cfg: null, busy: false, error: null,
              tab: 'orders', sb: null, session: null, account: null, notice: null,
              board: null, record: null, showBoard: false,
-             cohorts: null, cohort: null, showClass: false, joinClass: null };
+             cohorts: null, cohort: null, showClass: false, joinClass: null,
+             demo: null };
+
+/* The demo class belongs to nobody, so the token that came back with it is the
+   only way to get at it again. Kept in the browser so a reload does not silently
+   abandon a class somebody is halfway through showing to a colleague. */
+const DEMOKEY = 'ceo.demo.v1';
+const demoArg = (b = {}) => (S.demo ? { ...b, demo: S.demo.token } : b);
 
 /* Signing in is only needed to host or to own a name. Joining a game a friend
    sent you stays anonymous — the invitation is the credential. */
@@ -329,7 +336,7 @@ function screenHome() {
     <button class="primary" id="playnow" style="margin-top:6px">Find me a game</button>
     <button class="ghost" id="showboard" style="margin-top:6px">Leaderboard</button>
   </div>`;
-  return publicCard + accountCard() + classCard() + `
+  return publicCard + accountCard() + classCard() + demoCard() + `
   <div class="card" ${gated ? 'style="opacity:0.55"' : ''}>
     <h2>Start a game</h2>
     <p class="lede">You invite your friends with a link. Empty seats are filled by
@@ -392,6 +399,24 @@ function classCard() {
   </div>`;
 }
 
+/* No sign-in, no form, no email. An instructor evaluating a teaching tool at
+   eleven at night will not create an account to find out whether it is any good,
+   and an evaluation that does not happen is indistinguishable from a bad one. */
+function demoCard() {
+  const d = (S.cfg && S.cfg.demo) || { groups: 6, students: 30, opening: 5 };
+  return `
+  <div class="card">
+    <h2>Teaching with this?</h2>
+    <p class="lede">Open a class that is already running — ${d.groups} groups,
+      ${d.students} students, ${d.opening} rounds already played, including one student
+      who has not filed once. Push it forward round by round, sit in a student's chair,
+      and download the spreadsheet you would put in a gradebook.</p>
+    <button class="primary" id="trydemo">Open the facilitator demo</button>
+    <p class="muted" style="margin-top:8px">Nothing to sign up for. It is a real class on
+      the real engine, seeded so it plays out the same way every time.</p>
+  </div>`;
+}
+
 function screenClass() {
   const c = S.cohort;
   const L = (S.cfg && S.cfg.cohortLimits) || { groupSize: { min: 3, max: 6, default: 5 } };
@@ -437,11 +462,31 @@ function screenClass() {
 
   const t = c.totals;
   const link = location.origin + '/g/?class=' + c.code;
+  const over = t.playing === 0;
+  /* In a demo the clock is the enemy: nobody watches fifteen-minute rounds in an
+     evaluation. So the demo swaps the clock controls for a fast-forward, and adds
+     the one thing a dashboard cannot show on its own — what a student sees. */
+  const demoBar = c.isDemo ? `
+    <div class="warnbox ok" style="margin-top:12px"><span class="ic">▸</span>
+      <span>This is a demo class. It belongs to nobody, it expires by itself, and you can
+      do anything to it. ${over ? 'It has played out to the end.'
+        : 'Nothing here waits for a clock — push it forward as fast as you like.'}</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      ${over ? '' : `<button class="primary" id="cadv1">Play the next round</button>
+      <button class="ghost" id="cadv3">Play three rounds</button>
+      <button class="ghost" id="cadv5">Play five rounds</button>`}
+      <button class="ghost" id="cseat">Open a student's screen</button>
+      <button class="ghost" id="cexport">Download the gradebook</button>
+    </div>
+    ${(c.guide || []).map((g) => `<div class="news" style="margin-top:10px">
+      <b>${esc(g.what)}.</b> ${esc(g.text)}</div>`).join('')}` : '';
+
   return `
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
       <h2 style="margin:0">${esc(c.name)}</h2>
-      <button class="ghost" id="closeclass">Back</button>
+      <button class="ghost" id="${c.isDemo ? 'closedemo' : 'closeclass'}">
+        ${c.isDemo ? 'Leave the demo' : 'Back'}</button>
     </div>
     <p class="muted">Students join with this code. Every group plays the same market
       (seed ${c.seed}), so the groups can be compared directly.</p>
@@ -453,13 +498,14 @@ function screenClass() {
     <p class="muted" style="margin-top:12px">
       ${t.groups} group${t.groups === 1 ? '' : 's'} · ${t.players} student${t.players === 1 ? '' : 's'} ·
       ${t.playing} playing · ${t.finished} finished${t.waiting ? ` · waiting on ${t.waiting}` : ''}</p>
+    ${demoBar}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-      <button class="primary" id="cstart">Start every group</button>
+      ${c.isDemo ? '' : '<button class="primary" id="cstart">Start every group</button>'}
       <button class="ghost" id="${c.status === 'paused' ? 'cresume' : 'cpause'}">
         ${c.status === 'paused' ? 'Resume' : 'Pause the class'}</button>
       <button class="ghost" id="cextend">Give everyone 10 more minutes</button>
       <button class="ghost" id="cresolve">Close this round now</button>
-      <button class="ghost" id="cexport">Download results</button>
+      ${c.isDemo ? '' : '<button class="ghost" id="cexport">Download results</button>'}
     </div>
     ${c.status === 'paused' ? `<div class="warnbox warn" style="margin-top:10px"><span class="ic">!</span>
       <span>The class is paused. No round will close until you resume.</span></div>` : ''}
@@ -474,7 +520,11 @@ function screenClass() {
               ? ` · waiting on ${g.waitingOn.map(esc).join(', ')}` : ' · all filed'}`}</span>
       </div>
       <table style="margin-top:6px"><tbody>${g.companies.map((co) => `
-        <tr><td>${esc(co.name)}${co.isBot ? ' <span class="pill">AI</span>' : ''}
+        <tr class="${S.demo && S.demo.student.name === co.name
+          && S.demo.student.group === g.group ? 'me' : ''}">
+        <td>${esc(co.name)}${co.isBot ? ' <span class="pill">AI</span>' : ''}
+          ${S.demo && S.demo.student.name === co.name && S.demo.student.group === g.group
+            ? ' <span class="muted">(your seat)</span>' : ''}
           ${co.out ? ' <span class="pill dead">out</span>' : ''}
           ${co.missed ? ` <span class="pill out">${co.missed} missed</span>` : ''}</td>
         <td class="v">${co.value === null ? '—' : money(co.value)}</td>
@@ -958,10 +1008,23 @@ function lastRound(v) {
   </div>`;
 }
 
+/* Sitting in a student's chair inside the demo, with the way back always in
+   view — the point of the seat is the comparison, not the game. */
+function demoSeatBar(v) {
+  if (!S.demo || S.demo.student.code !== v.code) return '';
+  return `
+  <div class="card" style="display:flex;justify-content:space-between;align-items:baseline;
+       flex-wrap:wrap;gap:8px">
+    <span class="muted">You are sitting in <b>${esc(S.demo.student.name)}</b>'s chair,
+      group ${S.demo.student.group}. This is exactly what a student sees — no more.</span>
+    <button class="ghost" id="backtoclass">Back to the class dashboard</button>
+  </div>`;
+}
+
 function screenPlaying(v) {
   const y = v.you;
   const waiting = v.waitingOn.length;
-  return `
+  return demoSeatBar(v) + `
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
       <h2 style="margin:0">Round ${v.round + 1} of ${v.totalRounds}</h2>
@@ -990,7 +1053,7 @@ function screenPlaying(v) {
 function screenOver(v) {
   const rows = v.market.slice().sort((a, b) => b.finalValue - a.finalValue);
   const mine = rows.findIndex((r) => r.you);
-  return `
+  return demoSeatBar(v) + `
   <div class="card">
     <h2>Game over</h2>
     ${mine >= 0 ? `<div class="big">${['1st', '2nd', '3rd', '4th', '5th', '6th'][mine]}</div>
@@ -1115,18 +1178,58 @@ document.addEventListener('click', (e) => {
     });
     return;
   }
+  if (t.id === 'trydemo') { guard(openDemo); return; }
+  if (t.id === 'cseat' && S.demo) {
+    /* Straight into the chair, without asking them to join anything. The seat was
+       played for them up to this point, so it has a history to look at. */
+    S.code = S.demo.student.code; S.token = S.demo.student.token;
+    S.showClass = false; S.view = null;
+    remember(S.code, S.token, S.demo.student.name);
+    history.pushState({}, '', '/g/' + S.code);
+    guard(refresh);
+    return;
+  }
+  if (t.id === 'backtoclass' && S.demo) {
+    S.code = null; S.token = null; S.view = null; S.showClass = true;
+    history.pushState({}, '', '/g/?demo=1');
+    guard(async () => { S.cohort = (await api('cohort/' + S.demo.cohortId
+      + '?demo=' + encodeURIComponent(S.demo.token))).cohort; });
+    return;
+  }
+  {
+    const jump = { cadv1: 1, cadv3: 3, cadv5: 5 };
+    if (jump[t.id] && S.cohort && S.demo) {
+      guard(async () => {
+        S.cohort = (await api(`cohort/${S.cohort.id}/advance`,
+          demoArg({ rounds: jump[t.id] }))).cohort;
+      });
+      return;
+    }
+  }
   if (t.id === 'showclass') {
     guard(async () => { S.cohorts = await api('cohorts'); S.cohort = null; S.showClass = true; });
     return;
   }
   if (t.id === 'closeclass') {
-    if (S.cohort) { S.cohort = null; render(); return; }
+    /* The list was fetched before this class existed, so coming back from a class
+       just created showed "No classes yet" — which reads as though it had not
+       been saved. Re-ask on the way out. */
+    if (S.cohort) {
+      guard(async () => { S.cohorts = await api('cohorts'); S.cohort = null; });
+      return;
+    }
     S.showClass = false; render(); return;
   }
   if (t.dataset && t.dataset.openclass) {
     const id = t.dataset.openclass;
     guard(async () => { S.cohort = (await api('cohort/' + id)).cohort; });
     return;
+  }
+  if (t.id === 'closedemo') {
+    S.demo = null; S.cohort = null; S.showClass = false; S.code = null; S.token = null;
+    S.view = null;
+    try { localStorage.removeItem(DEMOKEY); } catch {}
+    history.pushState({}, '', '/g/'); render(); return;
   }
   if (t.id === 'makeclass') {
     const opts = {
@@ -1143,7 +1246,7 @@ document.addEventListener('click', (e) => {
     const acts = { cstart: 'start', cpause: 'pause', cresume: 'resume',
                    cextend: 'extend', cresolve: 'resolve' };
     if (acts[t.id] && S.cohort) {
-      const body = t.id === 'cextend' ? { minutes: 10 } : {};
+      const body = demoArg(t.id === 'cextend' ? { minutes: 10 } : {});
       guard(async () => {
         S.cohort = (await api(`cohort/${S.cohort.id}/${acts[t.id]}`, body)).cohort;
       });
@@ -1155,12 +1258,14 @@ document.addEventListener('click', (e) => {
     guard(async () => {
       const headers = {};
       if (S.session && S.session.access_token) headers.authorization = `Bearer ${S.session.access_token}`;
-      const res = await fetch(`/api/cohort/${S.cohort.id}/export`, { headers });
+      const q = S.demo ? '?demo=' + encodeURIComponent(S.demo.token) : '';
+      const res = await fetch(`/api/cohort/${S.cohort.id}/export${q}`, { headers });
       if (!res.ok) throw new Error('Could not build the export.');
       const blob = await res.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = (S.cohort.name || 'class').replace(/[^A-Za-z0-9]+/g, '-') + '-results.csv';
+      a.download = ((S.cohort.name || 'class').replace(/[^A-Za-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'class') + '-results.csv';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     });
@@ -1266,6 +1371,28 @@ document.addEventListener('click', (e) => {
   }
 });
 
+/* Reopen the demo somebody was already looking at, or build a fresh one. Coming
+   back to a half-shown class matters more than it sounds: the usual way this gets
+   evaluated is one person opening it, then reloading to show a colleague. */
+async function openDemo(force) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(DEMOKEY) || 'null'); } catch {}
+  if (saved && saved.token && !force) {
+    try {
+      const r = await api('cohort/' + saved.cohortId + '?demo=' + encodeURIComponent(saved.token));
+      S.demo = saved; S.cohort = r.cohort; S.showClass = true;
+      history.pushState({}, '', '/g/?demo=1');
+      return;
+    } catch { /* expired or swept — build another */ }
+  }
+  const r = await api('demo', {});
+  S.demo = { cohortId: r.cohortId, token: r.demoToken, student: r.student };
+  S.cohort = r.cohort; S.showClass = true;
+  try { localStorage.setItem(DEMOKEY, JSON.stringify(S.demo)); } catch {}
+  remember(r.student.code, r.student.token, r.student.name);
+  history.pushState({}, '', '/g/?demo=1');
+}
+
 async function refresh() {
   if (!S.code) return;
   try {
@@ -1296,7 +1423,19 @@ async function boot() {
   if (q.get('cancelled')) S.notice = 'Payment cancelled. The name you picked has been released.';
   const classCode = q.get('class');
   const m = location.pathname.match(/\/g\/([A-Za-z0-9]{6})/);
-  if (classCode && !m) {
+  /* Coming back to a seat inside a demo: remember which demo it belongs to, so
+     the way back to the dashboard is still there. */
+  if (m) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(DEMOKEY) || 'null');
+      if (saved && saved.student && saved.student.code === m[1].toUpperCase()) S.demo = saved;
+    } catch {}
+  }
+  if (q.get('demo') && !m) {
+    /* A link straight to the demo, which is the one worth putting in an email. */
+    await guard(openDemo);
+    render();
+  } else if (classCode && !m) {
     /* Arriving on a class link: ask for a name, then seat them automatically. */
     S.joinClass = classCode.toUpperCase();
     render();

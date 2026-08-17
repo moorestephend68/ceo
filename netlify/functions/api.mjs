@@ -9,6 +9,7 @@ import * as B from '../../lib/billing.mjs';
 import * as P from '../../lib/public.mjs';
 import * as R from '../../lib/rating.mjs';
 import * as CO from '../../lib/cohorts.mjs';
+import * as D from '../../lib/demo.mjs';
 import { requireUser, userFrom } from '../../lib/auth.mjs';
 import { getDb, getVerifier, publicAuthConfig } from '../../lib/runtime.mjs';
 
@@ -58,6 +59,15 @@ export default async (req) => {
   }
   const code = (body.code || url.searchParams.get('code') || '').toUpperCase();
   const token = body.token || url.searchParams.get('token') || '';
+  const demoKey = body.demo || url.searchParams.get('demo') || '';
+
+  /* A class board, plus — for the demo only — the two or three sentences that
+     say what to look at. A dashboard of six groups explains nothing on its own. */
+  const boardOf = async (co) => {
+    const b = await CO.board(db, co);
+    if (co.is_demo) b.guide = D.guide(b);
+    return b;
+  };
 
   try {
     /* ------------------------------------------------------------ public */
@@ -71,6 +81,9 @@ export default async (req) => {
         nameRules: { min: A.NAME.min, max: A.NAME.max },
         publicFormat: { describe: P.describe(), waitSeconds: P.LOBBY_WAIT_SECONDS },
         cohortLimits: CO.LIMITS,
+        demo: { groups: D.DEMO.groups, students: D.DEMO.groups * D.DEMO.groupSize,
+                opening: D.DEMO.opening, rounds: D.DEMO.rounds,
+                maxAdvance: D.DEMO.maxAdvance },
       });
     }
 
@@ -167,7 +180,18 @@ export default async (req) => {
       const acct = await A.accountState(db, user.id);
       if (!acct.canFacilitate) throw new Error('Running a class needs a facilitator licence.');
       const cohort = await CO.createCohort(db, user.id, body);
-      return json({ cohort: await CO.board(db, cohort) });
+      return json({ cohort: await boardOf(cohort) });
+    }
+
+    /* A class that is already running, with no account and no form to fill in.
+       Whoever opens it gets a token that controls that one throwaway class —
+       and a seat in group one, so they can see what a student sees. */
+    if (route === 'demo' && req.method === 'POST') {
+      const made = await D.createDemo(db, now);
+      return json({
+        cohortId: made.cohort.id, demoToken: made.demoToken,
+        student: made.student, cohort: await boardOf(made.cohort),
+      });
     }
 
     if (route === 'cohorts') {
@@ -185,10 +209,14 @@ export default async (req) => {
       const [, cohortId, action] = route.split('/');
       const cohort = await db.cohort(cohortId);
       if (!cohort) return fail('No class with that id.', 404);
-      const user = await requireUser(req, db, verify);
-      if (cohort.facilitator !== user.id) return fail('That is not your class.', 403);
+      /* Two ways in, and only two: you own this class, or you are holding the
+         token of a demo that belongs to nobody. */
+      if (!D.opensDemo(cohort, demoKey)) {
+        const user = await requireUser(req, db, verify);
+        if (cohort.facilitator !== user.id) return fail('That is not your class.', 403);
+      }
 
-      if (!action) return json({ cohort: await CO.board(db, cohort) });
+      if (!action) return json({ cohort: await boardOf(cohort) });
 
       if (action === 'export') {
         const csv = await CO.exportCsv(db, cohort);
@@ -207,11 +235,20 @@ export default async (req) => {
       else if (action === 'resume') out = await CO.setPaused(db, cohort, false);
       else if (action === 'extend') out = await CO.extendAll(db, cohort, body.minutes, now);
       else if (action === 'resolve') out = await CO.resolveAll(db, cohort, now);
+      /* Time compression. Nobody sits through fifteen-minute rounds in an
+         evaluation, so the demo can be played forward several rounds at once —
+         with the scripted students filing and the visitor's own seat left to its
+         standing orders. It exists only for demos: a real class's rounds belong
+         to the people playing them. */
+      else if (action === 'advance') {
+        if (!cohort.is_demo) return fail('Only the demo class can be fast-forwarded.', 400);
+        out = await D.advanceDemo(db, cohort, body.rounds, now);
+      }
       else if (action === 'close') { await db.updateCohort(cohort.id, { status: 'closed' }); out = { closed: true }; }
       else return fail('Unknown request.', 404);
 
       const fresh = await db.cohort(cohortId);
-      return json({ ...out, cohort: await CO.board(db, fresh) });
+      return json({ ...out, cohort: await boardOf(fresh) });
     }
 
     /* A student joins with the class code and is seated automatically. */
