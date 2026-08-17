@@ -12,6 +12,7 @@ import * as CO from '../../lib/cohorts.mjs';
 import * as D from '../../lib/demo.mjs';
 import { requireUser, userFrom } from '../../lib/auth.mjs';
 import { getDb, getVerifier, publicAuthConfig, serverReady } from '../../lib/runtime.mjs';
+import { BUILD } from '../../lib/version.mjs';
 
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -85,7 +86,7 @@ export default async (req) => {
     if (route === 'config') {
       return json({
         presets: G.PRESETS, limits: G.LIMITS, cadences: G.CADENCES,
-        auth: publicAuthConfig(), ready: serverReady(),
+        auth: publicAuthConfig(), ready: serverReady(), build: BUILD,
         products: Object.fromEntries(Object.entries(B.PRODUCTS).map(([k, p]) => [k, {
           label: p.label, blurb: p.blurb, forSale: !!process.env[p.envPrice],
         }])),
@@ -303,6 +304,18 @@ export default async (req) => {
     if (route === 'join' && req.method === 'POST') {
       const game = await db.getGame(code);
       if (!game) return fail('No game with that code.', 404);
+      /* A public table cannot be joined by code, only by matchmaking.
+         This is the rule the whole rated tier rests on: a rating is only worth
+         something because nobody chooses who they sit with, and a code that can
+         be passed to three friends is a code that can arrange the finishing
+         order. It is also the difference somebody paid for — choosing who plays
+         is what a private game is. Enforced here rather than by not showing the
+         code, because a code that has been seen once has been seen. */
+      if (game.isPublic) {
+        return fail('That is a public table — they are dealt by matchmaking and cannot '
+          + 'be joined with a code. Use "Play now" to be seated at one, or host a '
+          + 'private game to choose who plays.', 403);
+      }
       /* Joining is free and needs no account. If you happen to be signed in with
          a company of your own, it is used. */
       const user = await userFrom(req, verify);
@@ -343,6 +356,14 @@ export default async (req) => {
     if (route === 'state') {
       const game = await db.getGame(code);
       if (!game) return fail('No game with that code.', 404);
+      /* A private game can be watched by anyone holding its code — a game with
+         friends has spectators, and the view already hides everything private.
+         A public table cannot. It is the rated tier, and a code that lets you
+         watch is a code that lets you coach; the only people it shows anything to
+         are the ones sitting at it. */
+      if (game.isPublic && !G.seatByToken(game, token)) {
+        return fail('A ranked table is only visible to the people playing it.', 403);
+      }
       await settle(db, game, now);
       return json({ view: G.viewFor(game, token) });
     }
