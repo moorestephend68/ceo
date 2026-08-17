@@ -1867,6 +1867,11 @@ function screenPlaying(v) {
         ? ` · waiting on ${v.waitingOn.map(esc).join(', ')}`
         : ' · everyone has filed'}</div>
     </div>
+    ${v.firstRoundGrace ? `<div class="warnbox ok" style="margin-top:10px"><span class="ic">✓</span>
+      <span>The first round is longer on purpose — <b>${howLong(v.cadenceMinutes * 2)}</b>,
+      so everyone can read the screen before committing to anything. After this one,
+      a round every ${esc((v.cadenceLabel || '').toLowerCase())}. It closes sooner if
+      everyone files.</span></div>` : ''}
     <p class="muted" style="margin:8px 0 12px">Prices and shares below are <b>last round's</b>.
       Nobody can see this round's until it closes.</p>
     ${marketTable(v)}
