@@ -11,7 +11,7 @@ import * as R from '../../lib/rating.mjs';
 import * as CO from '../../lib/cohorts.mjs';
 import * as D from '../../lib/demo.mjs';
 import { requireUser, userFrom } from '../../lib/auth.mjs';
-import { getDb, getVerifier, publicAuthConfig } from '../../lib/runtime.mjs';
+import { getDb, getVerifier, publicAuthConfig, serverReady } from '../../lib/runtime.mjs';
 
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -50,8 +50,6 @@ export default async (req) => {
   const url = new URL(req.url);
   const route = url.pathname.replace(/^\/api\//, '').replace(/\/$/, '');
   const now = new Date().toISOString();
-  const db = getDb();
-  const verify = getVerifier();
 
   let body = {};
   if (req.method === 'POST') {
@@ -61,20 +59,33 @@ export default async (req) => {
   const token = body.token || url.searchParams.get('token') || '';
   const demoKey = body.demo || url.searchParams.get('demo') || '';
 
+  /* Opening the database is deferred until a route actually needs one.
+
+     It used to happen on the way in, which meant that a server missing its
+     Supabase environment variables threw before the try block and every single
+     request — including the one the page uses to work out what this server even
+     is — came back as an opaque 502 with nothing in it. A half-configured server
+     should be able to say so. */
+  let _db = null;
+  const database = () => (_db || (_db = getDb()));
+  const verify = getVerifier();
+
   /* A class board, plus — for the demo only — the two or three sentences that
      say what to look at. A dashboard of six groups explains nothing on its own. */
   const boardOf = async (co) => {
-    const b = await CO.board(db, co);
+    const b = await CO.board(database(), co);
     if (co.is_demo) b.guide = D.guide(b);
     return b;
   };
 
   try {
     /* ------------------------------------------------------------ public */
+    /* Answered without touching storage, so the page can always find out what it
+       is talking to — including that it is not ready yet. */
     if (route === 'config') {
       return json({
         presets: G.PRESETS, limits: G.LIMITS, cadences: G.CADENCES,
-        auth: publicAuthConfig(),
+        auth: publicAuthConfig(), ready: serverReady(),
         products: Object.fromEntries(Object.entries(B.PRODUCTS).map(([k, p]) => [k, {
           label: p.label, blurb: p.blurb, forSale: !!process.env[p.envPrice],
         }])),
@@ -86,6 +97,16 @@ export default async (req) => {
                 maxAdvance: D.DEMO.maxAdvance },
       });
     }
+
+    /* The public format is fixed and needs no storage either. */
+    if (route === 'public/format') {
+      return json({ format: P.FORMAT, describe: P.describe(),
+                    waitSeconds: P.LOBBY_WAIT_SECONDS });
+    }
+
+    /* Everything below this line touches storage. If the server has not been
+       configured, this is where it says so — with a message rather than a 502. */
+    const db = database();
 
     /* Is this company name free? Answers the format question too, so the page
        can say why rather than just refusing. */
@@ -117,11 +138,6 @@ export default async (req) => {
     }
 
     /* -------------------------------------------------- public, ranked play */
-    if (route === 'public/format') {
-      return json({ format: P.FORMAT, describe: P.describe(),
-                    waitSeconds: P.LOBBY_WAIT_SECONDS });
-    }
-
     if (route === 'public/join' && req.method === 'POST') {
       /* Free, and no account needed. Signing in with a purchased company is what
          makes the result count towards a rating — that is the whole difference. */
@@ -335,6 +351,20 @@ export default async (req) => {
   } catch (err) {
     /* Rule violations from lib/ are messages meant for a player. */
     const msg = err && err.message ? err.message : 'Something went wrong.';
+
+    /* Two failures are the operator's rather than the player's, and both used to
+       arrive as an unexplained crash. They are worth naming exactly, because the
+       fix for each is one step in SETUP.md and nothing in the interface would
+       ever have told anyone which. */
+    if (/is not configured on the server/i.test(msg)) {
+      return fail('This site has not finished being set up: its database is not '
+        + 'connected yet. See SETUP.md, step 3 — the Netlify environment variables.', 503);
+    }
+    if (/is_demo|demo_token|schema cache|column .* does not exist/i.test(msg)) {
+      return fail('The database is missing the latest tables. Re-run db/schema.sql '
+        + 'in the Supabase SQL editor — it is idempotent and will not drop anything.', 503);
+    }
+
     const status = /sign in|please sign/i.test(msg) ? 401
       : /charter|licence/i.test(msg) ? 402
       : 400;

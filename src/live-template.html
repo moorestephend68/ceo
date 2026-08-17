@@ -1085,6 +1085,15 @@ function render() {
     ? `A round every ${v.cadenceLabel.toLowerCase()}. Everyone commits blind.`
     : 'You choose how long a round lasts. Everyone commits blind.';
   let html = '';
+  /* A deploy succeeds whether or not the server was given its database, so this
+     is the only place anyone would ever find out. Said once, at the top, rather
+     than discovered one failing button at a time. */
+  if (S.cfg && S.cfg.ready === false) {
+    html += `<div class="card err"><b>This site is still being set up.</b>
+      <p class="muted" style="margin:8px 0 0">Its database is not connected yet, so
+      games cannot be created or joined. If this is your site: Netlify → Site
+      configuration → Environment variables, then redeploy. SETUP.md, step 3.</p></div>`;
+  }
   if (S.error) html += `<div class="card err"><b>${esc(S.error)}</b></div>`;
   if (S.notice) html += `<div class="card" style="border-color:var(--good)"><b>${esc(S.notice)}</b></div>`;
   if (S.showClass) html += screenClass();

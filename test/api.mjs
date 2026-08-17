@@ -10,27 +10,44 @@ import assert from 'node:assert';
 import { register } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
-/* --- stub @netlify/blobs ------------------------------------------------- */
-const MEM = new Map();
-let writes = 0;
-register(pathToFileURL('./test/blob-stub.mjs'), import.meta.url);
-globalThis.__CEO_BLOBS__ = {
-  get: async (k) => (MEM.has(k) ? JSON.parse(MEM.get(k)) : null),
-  setJSON: async (k, v) => { writes += 1; MEM.set(k, JSON.stringify(v)); },
-  list: async () => ({ blobs: [...MEM.keys()].map((k) => ({ key: k })) }),
-};
+/* --- an in-memory database and a fake token verifier -------------------- */
+import { memoryDb } from '../lib/db.mjs';
+
+const db = memoryDb();
+globalThis.__CEO_DB__ = db;
+
+/* Tokens are "tok:<userid>" in tests. The real verifier asks Supabase; this
+   stands in for it so the handlers, the auth path and the entitlement checks all
+   run for real without a network. */
+const USERS = { 'tok:host': { id: 'user-host', email: 'host@example.com' },
+                'tok:other': { id: 'user-other', email: 'other@example.com' } };
+globalThis.__CEO_VERIFY__ = async (t) =>
+  (USERS[t] ? { data: { user: USERS[t] }, error: null }
+            : { data: null, error: { message: 'bad token' } });
+
+process.env.STRIPE_PRICE_HOST = 'price_test';
+process.env.SUPABASE_URL = 'https://test.supabase.co';
+process.env.SUPABASE_ANON_KEY = 'anon_test';
 
 const { default: api } = await import('../netlify/functions/api.mjs');
 
-const call = async (method, path, body) => {
+const call = async (method, path, body, auth) => {
+  const headers = {};
+  if (body) headers['content-type'] = 'application/json';
+  if (auth) headers.authorization = `Bearer ${auth}`;
   const req = new Request('https://ceo.test' + path, {
-    method,
-    headers: body ? { 'content-type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
+    method, headers, body: body ? JSON.stringify(body) : undefined,
   });
   const res = await api(req);
   return { status: res.status, body: await res.json() };
 };
+
+/* give the host account a company and the right to host, the way a real
+   purchase would */
+import * as A from '../lib/accounts.mjs';
+await db.ensureProfile('user-host', 'host@example.com');
+const held = await A.claimName(db, 'user-host', 'Ravensworth', new Date().toISOString());
+await A.confirmPurchase(db, { owner: 'user-host', companyId: held.id, eventId: 'evt_seed' });
 
 const ok = (r, what) => { assert(r.status === 200, `${what}: ${r.status} ${JSON.stringify(r.body)}`); return r.body; };
 
@@ -40,14 +57,28 @@ console.log('presets:', Object.keys(cfg.presets).join(', '),
             '| seats', cfg.limits.seats.min + '-' + cfg.limits.seats.max,
             '| rounds', cfg.limits.rounds.min + '-' + cfg.limits.rounds.max,
             '(default ' + cfg.limits.rounds.default + ')');
+console.log('round lengths offered:',
+            Object.values(cfg.cadences).map((c) => c.label).join(', '));
+assert(cfg.cadences && cfg.cadences['5m'] && cfg.cadences['1d'], 'cadences not published');
+assert.equal(cfg.limits.rounds.max, 20, 'the 20-round cap did not take');
 
-const bad = await call('POST', '/api/create', { hostName: '  ' });
-assert.equal(bad.status, 400);
-console.log('empty company name rejected:', bad.body.error);
+/* hosting is a paid thing, checked on the server */
+const anon = await call('POST', '/api/create', { seats: 4, rounds: 8 });
+assert.equal(anon.status, 401);
+console.log('creating a game signed out:', anon.status, anon.body.error);
+
+const unpaid = await call('POST', '/api/create', { seats: 4, rounds: 8 }, 'tok:other');
+assert.equal(unpaid.status, 402);
+console.log('creating a game without a charter:', unpaid.status, unpaid.body.error);
 
 const host = ok(await call('POST', '/api/create', {
-  hostName: 'Ravensworth', seats: 4, rounds: 8, preset: 'standard', closeHour: 18,
-}), 'create');
+  seats: 4, rounds: 8, preset: 'standard', cadence: '5m', closeHour: 18,
+}, 'tok:host'), 'create');
+console.log('the host game is named from the account:',
+            host.view.joined.map((j) => j.name).join(', '));
+assert.deepEqual(host.view.joined.map((j) => j.name), ['Ravensworth']);
+assert.equal(host.view.cadenceMinutes, 5, 'the chosen round length was ignored');
+console.log('round length honoured:', host.view.cadenceLabel);
 console.log('created game', host.code, '— host token issued');
 
 const missing = await call('POST', '/api/join', { code: 'ZZZZZZ', name: 'X' });
@@ -108,6 +139,26 @@ assert(typeof cr.headroom === 'number', 'no headroom reported');
 console.log('can launch a new line:', hv.view.you.canLaunch,
             hv.view.you.canLaunch ? `(borrowing ${hv.view.you.launchBorrowing})` : '');
 
+/* --- names and accounts ------------------------------------------------- */
+{
+  const free = ok(await call('GET', '/api/name?q=Dunmore%20%26%20Sons'), 'name');
+  console.log('\nname check "Dunmore & Sons":', JSON.stringify(free));
+  assert(free.available);
+  const taken = ok(await call('GET', '/api/name?q=ravensworth'), 'name');
+  console.log('name check "ravensworth" (owned, different case):', JSON.stringify(taken));
+  assert.equal(taken.available, false, 'an owned name must not read as available');
+  const rude = ok(await call('GET', '/api/name?q=admin'), 'name');
+  assert.equal(rude.ok, false);
+  console.log('name check "admin":', rude.error);
+
+  const out = ok(await call('GET', '/api/account'), 'account');
+  assert.equal(out.signedIn, false);
+  const mine = ok(await call('GET', '/api/account', null, 'tok:host'), 'account');
+  console.log('account:', JSON.stringify(mine));
+  assert.equal(mine.canHost, true);
+  assert.deepEqual(mine.companies.map((c) => c.name), ['Ravensworth']);
+}
+
 /* an unknown token cannot file */
 const impostor = await call('POST', '/api/submit', { code: host.code, token: 'not-a-token', decisions: {} });
 assert.equal(impostor.status, 400);
@@ -148,6 +199,5 @@ const late = await call('POST', '/api/submit', { code: host.code, token: host.to
 assert.equal(late.status, 409);
 console.log('\nfiling after the game ended:', late.status, late.body.error);
 
-console.log('blob writes over the whole game:', writes);
-console.log('stored size:', (MEM.get(`game/${host.code}`).length / 1024).toFixed(1) + ' KB');
+console.log('database rows:', JSON.stringify(db._counts()));
 console.log('\napi OK');

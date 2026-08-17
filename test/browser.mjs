@@ -24,6 +24,8 @@ const watch = (page, who) => {
 
 const browser = await chromium.launch();
 const hostCtx = await browser.newContext({ viewport: { width: 1200, height: 1400 } });
+/* hosting is a paid feature now — sign the host in as the seeded local account */
+await hostCtx.addInitScript(() => localStorage.setItem('ceo.dev.token', 'tok:demo'));
 const friendCtx = await browser.newContext({ viewport: { width: 1200, height: 1400 } });
 const host = await hostCtx.newPage();
 const friend = await friendCtx.newPage();
@@ -31,10 +33,23 @@ watch(host, 'host'); watch(friend, 'friend');
 
 /* ---- host creates ------------------------------------------------------- */
 await host.goto(BASE + '/g/');
-await host.fill('#hostname', 'Ravensworth & Co');
+await host.waitForTimeout(400);   // let the account load
 await host.click('#seatchoice .choice[data-seats="3"]');
+await host.click('#cadencechoice .choice[data-cadence="5m"]');
 await host.click('#roundchoice .choice[data-rounds="8"]');
 await host.click('#presetchoice .choice[data-preset="standard"]');
+/* the fixed-hour box is meaningless at five minutes and should be hidden */
+{
+  const wrap = await host.$('#closehour-wrap');
+  const shown = wrap ? await wrap.isVisible() : false;
+  console.log('close-hour box hidden for a fast game:', !shown);
+  if (shown) throw new Error('the daily close-hour setting was offered for a 5-minute game');
+  await host.click('#cadencechoice .choice[data-cadence="1d"]');
+  const shownDaily = await (await host.$('#closehour-wrap')).isVisible();
+  console.log('close-hour box shown for a daily game:', shownDaily);
+  if (!shownDaily) throw new Error('the daily close-hour setting never appears');
+  await host.click('#cadencechoice .choice[data-cadence="5m"]');
+}
 await host.click('#create');
 await host.waitForSelector('.code');
 const code = (await host.textContent('.code')).trim();
@@ -44,6 +59,8 @@ console.log('host created game', code);
   const txt = await host.evaluate(() => document.body.innerText);
   console.log('host settings honoured:', /3 companies · 8 rounds/.test(txt) ? 'yes' : 'NO — ' + (txt.match(/\d+ companies · \d+ rounds/) || ['?'])[0]);
   if (!/3 companies · 8 rounds/.test(txt)) throw new Error('the host\'s chosen settings were ignored');
+  console.log('lobby states the pace:', (txt.match(/a round every [^·]+/) || ['NOT SHOWN'])[0].trim());
+  if (!/a round every 5 minutes/.test(txt)) throw new Error('the chosen round length was ignored');
 }
 console.log('share link:', link);
 
@@ -70,7 +87,7 @@ if (await friend.$('#start')) throw new Error('a non-host was offered the start 
 
 /* ---- host starts -------------------------------------------------------- */
 await host.click('#start');
-await host.waitForSelector('#f_0_price');
+await host.waitForSelector('.ctrl input[type=range]');
 const seats = await host.$$eval('table tbody tr td:first-child', (n) => n.map((x) => x.textContent.trim()));
 console.log('game started, seats:', seats.slice(0, 4).join(' | '));
 
@@ -95,11 +112,75 @@ const leaks = ['Discounter', 'Premium —', 'Marketer —', 'Operator —', 'Bal
 console.log('identity leaks mid-game:', leaks.length ? leaks.join(', ') : 'none');
 if (leaks.length) throw new Error('identity leaked during play');
 
+/* ---- the interface itself ------------------------------------------------ */
+{
+  const sliders = await host.$$eval('.ctrl input[type=range]',
+    (ns) => ns.map((n) => n.dataset.field));
+  console.log('sliders on the order form:', sliders.join(', ') || 'NONE');
+  if (sliders.length < 6) throw new Error('the live form is missing its sliders');
+
+  const proj = await host.textContent('#projection');
+  console.log('projection panel present:', /Expected profit/.test(proj));
+  if (!/Expected profit/.test(proj)) throw new Error('no projection panel');
+
+  /* moving a slider must move the projection, without losing the form */
+  const before = (await host.textContent('#projection')).match(/Expected profit\s*(-?\$[\d,]+)/)[1];
+  /* a range input is dragged, not typed into — set it the way a drag would.
+     The price slider is bounded to half..1.6x of the product's value, so pick a
+     target inside its own range rather than an arbitrary number. */
+  const target = await host.evaluate(() => {
+    const el = document.querySelector('.ctrl input[type=range][data-field="price"]');
+    const v = String(Math.round(+el.min) + 5);
+    el.value = v;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return el.value;
+  });
+  await host.waitForTimeout(120);
+  const after = (await host.textContent('#projection')).match(/Expected profit\s*(-?\$[\d,]+)/)[1];
+  console.log('projection reacts to a slider:', before, '->', after);
+  if (before === after) throw new Error('the projection did not respond to the price slider');
+
+  /* the number box and the slider are the same value */
+  const num = await host.inputValue('.ctrl input[type=number][data-field="price"]');
+  console.log('slider and number box agree:', num === target, `(both read ${num})`);
+  if (num !== target) throw new Error('slider and number box are out of sync');
+}
+
+/* ---- is the projection honest? ------------------------------------------- */
+/* It cannot be exact in a shared market — it assumes rivals hold their prices and
+   they will not. But the cost side is arithmetic the server repeats verbatim, so a
+   large systematic gap would mean the two have drifted apart. */
+{
+  const projected = Number((await host.textContent('#projection'))
+    .match(/Expected profit\s*(-?\$[\d,]+)/)[1].replace(/[^0-9.-]/g, ''))
+    * ((await host.textContent('#projection')).match(/Expected profit\s*-/) ? -1 : 1);
+  await host.click('#file');
+  await host.waitForTimeout(200);
+  await friend.reload(); await friend.waitForTimeout(200);
+  await friend.click('#file');
+  await friend.waitForTimeout(300);
+  await host.reload(); await host.waitForTimeout(300);
+  const body = await host.evaluate(() => document.body.innerText);
+  const m = body.match(/(-?\$[\d,]+)\s*\n?\s*your profit/);
+  if (m) {
+    const actual = Number(m[1].replace(/[^0-9.-]/g, '')) * (m[1].startsWith('-') ? -1 : 1);
+    const gap = Math.abs(actual - projected);
+    console.log(`projected ${projected} vs actual ${actual} — gap ${gap}`);
+    if (gap > Math.max(60000, Math.abs(projected) * 0.6)) {
+      throw new Error(`projection is off by ${gap}; the two engines may have drifted`);
+    }
+  } else {
+    console.log('could not read the actual profit to compare');
+  }
+}
+
 /* ---- play it out -------------------------------------------------------- */
 async function file(page, mult) {
-  if (!(await page.$('#f_0_price'))) return false;
-  const val = await page.inputValue('#f_0_price');
-  await page.fill('#f_0_price', String(Math.round(+val * mult)));
+  const box = await page.$('.ctrl input[type=number][data-field="price"]');
+  if (!box) return false;
+  const val = await box.inputValue();
+  await box.fill(String(Math.round(+val * mult)));
+  await box.dispatchEvent('input');
   await page.click('#file');
   await page.waitForTimeout(220);
   return true;
