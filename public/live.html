@@ -951,12 +951,16 @@ const remember = (code, token, name) => {
 };
 const tokenFor = (code) => (readAll()[code] || {}).token || null;
 
-const S = { code: null, token: null, view: null, cfg: null, busy: false, error: null, tab: 'orders' };
+const S = { code: null, token: null, view: null, cfg: null, busy: false, error: null,
+             tab: 'orders', sb: null, session: null, account: null, notice: null };
 
+/* Signing in is only needed to host or to own a name. Joining a game a friend
+   sent you stays anonymous — the invitation is the credential. */
 async function api(path, body) {
-  const opt = body
-    ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-    : {};
+  const headers = {};
+  if (body) headers['content-type'] = 'application/json';
+  if (S.session && S.session.access_token) headers.authorization = `Bearer ${S.session.access_token}`;
+  const opt = body ? { method: 'POST', headers, body: JSON.stringify(body) } : { headers };
   const res = await fetch('/api/' + path, opt);
   const data = await res.json().catch(() => ({ error: 'The server sent something unreadable.' }));
   if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
@@ -968,6 +972,103 @@ async function guard(fn) {
   S.error = null; setBusy(true);
   try { await fn(); } catch (e) { S.error = e.message; }
   setBusy(false);
+}
+
+/* --------------------------------------------------------------- accounts */
+async function initAuth() {
+  const cfg = S.cfg && S.cfg.auth;
+  if (!cfg || !cfg.enabled) {
+    /* Running locally against the in-memory server: no Supabase, so a token can
+       be typed in. Never reachable in production, where auth.enabled is true. */
+    const dev = localStorage.getItem('ceo.dev.token');
+    if (dev) S.session = { access_token: dev };
+    return;
+  }
+  try {
+    const mod = await import('https://esm.sh/@supabase/supabase-js@2');
+    S.sb = mod.createClient(cfg.url, cfg.anonKey, {
+      auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
+    });
+    const { data } = await S.sb.auth.getSession();
+    S.session = data.session || null;
+    S.sb.auth.onAuthStateChange((_e, sess) => {
+      S.session = sess || null;
+      loadAccount().then(render);
+    });
+  } catch (e) {
+    S.error = 'Could not load sign-in. ' + e.message;
+  }
+}
+
+async function loadAccount() {
+  try { S.account = await api('account'); } catch { S.account = { signedIn: false }; }
+}
+
+async function signIn(email) {
+  if (!S.sb) throw new Error('Sign-in is not configured on this server.');
+  const { error } = await S.sb.auth.signInWithOtp({
+    email, options: { emailRedirectTo: location.origin + '/g/' },
+  });
+  if (error) throw new Error(error.message);
+  S.notice = `Check ${email} — we have sent you a sign-in link.`;
+}
+
+async function signOut() {
+  if (S.sb) await S.sb.auth.signOut();
+  S.session = null; S.account = null;
+}
+
+const signedIn = () => !!(S.account && S.account.signedIn);
+const canHost = () => !!(S.account && S.account.canHost);
+const myCompany = () => (S.account && S.account.companies && S.account.companies[0]) || null;
+
+function accountCard() {
+  const p = S.cfg && S.cfg.products && S.cfg.products.host;
+  if (!signedIn()) {
+    return `
+    <div class="card">
+      <h2>Your company</h2>
+      <p class="lede">Joining a game someone invited you to needs nothing at all.
+        Sign in only if you want to <b>host games for your friends</b> and keep a
+        company name that stays yours.</p>
+      <div class="row" style="margin-top:12px;max-width:420px">
+        <div><label for="email">Email</label>
+          <input id="email" type="email" placeholder="you@example.com" autocomplete="email"></div>
+      </div>
+      <button class="primary" id="signin" style="margin-top:10px">Email me a sign-in link</button>
+      <p class="muted" style="margin-top:8px">No password. We send a link you click.</p>
+    </div>`;
+  }
+  const mine = myCompany();
+  if (canHost() && mine) {
+    return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">${esc(mine.name)}</h2>
+        <span class="muted">${esc(S.account.email || '')} · <a href="#" id="signout">sign out</a></span>
+      </div>
+      <p class="muted" style="margin-top:6px">Your company name, kept for good. You can host
+        private games below.</p>
+    </div>`;
+  }
+  /* signed in, nothing bought yet */
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Claim your company</h2>
+      <span class="muted">${esc(S.account.email || '')} · <a href="#" id="signout">sign out</a></span>
+    </div>
+    <p class="lede">${p ? esc(p.blurb) : 'Your company name, kept for good, and the ability to host private games.'}</p>
+    <div class="row" style="margin-top:12px;max-width:420px">
+      <div><label for="claimname">Company name</label>
+        <input id="claimname" type="text" maxlength="28" placeholder="Ravensworth &amp; Co">
+        <div class="muted" id="namestate" style="font-size:11.5px;margin-top:4px">&nbsp;</div></div>
+    </div>
+    <button class="primary" id="buy" style="margin-top:10px" ${p && p.forSale ? '' : 'disabled'}>
+      ${p && p.forSale ? 'Continue to payment' : 'Not on sale yet'}</button>
+    <p class="muted" style="margin-top:8px">The name is held for you while you pay, so nobody
+      can take it out from under you.</p>
+  </div>`;
 }
 
 /* ------------------------------------------------------------------ setup */
@@ -990,16 +1091,16 @@ function screenHome() {
     `<button class="choice" data-preset="${k}" aria-pressed="${k === 'standard'}">
       <div class="n">${esc(p.label)}</div><div class="d">${esc(p.note)}</div></button>`).join('') : '';
 
-  return `
-  <div class="card">
+  const gated = !canHost();
+  return accountCard() + `
+  <div class="card" ${gated ? 'style="opacity:0.55"' : ''}>
     <h2>Start a game</h2>
     <p class="lede">You invite your friends with a link. Empty seats are filled by
       AI companies, and nobody — including you — is told which is which until the
       last round is scored.</p>
-    <div style="max-width:340px;margin:14px 0 4px">
-      <label for="hostname">Your company name</label>
-      <input id="hostname" type="text" maxlength="28" placeholder="Ravensworth &amp; Co">
-    </div>
+    ${gated ? `<p class="muted"><b>Hosting needs a company charter.</b>
+      ${signedIn() ? 'Claim your name above.' : 'Sign in above to claim one.'}</p>` : ''}
+    ${myCompany() ? `<p class="muted">You will play as <b>${esc(myCompany().name)}</b>.</p>` : ''}
     <h3 style="margin-top:14px">How many companies</h3>
     <div class="choices" id="seatchoice">${seatBtns.join('')}</div>
     <h3 style="margin-top:14px">How long is a round</h3>
@@ -1014,7 +1115,7 @@ function screenHome() {
       that is what makes the last few rounds a real decision.</p>
     <h3>Difficulty</h3>
     <div class="choices" id="presetchoice">${presets}</div>
-    <button class="primary" id="create" style="margin-top:12px">Create the game</button>
+    <button class="primary" id="create" style="margin-top:12px" ${gated ? 'disabled' : ''}>Create the game</button>
   </div>
 
   <div class="card">
@@ -1536,6 +1637,7 @@ function render() {
     : 'You choose how long a round lasts. Everyone commits blind.';
   let html = '';
   if (S.error) html += `<div class="card err"><b>${esc(S.error)}</b></div>`;
+  if (S.notice) html += `<div class="card" style="border-color:var(--good)"><b>${esc(S.notice)}</b></div>`;
   if (!v) html += screenHome();
   else if (v.status === 'lobby') html += screenLobby(v);
   else if (v.status === 'over') html += screenOver(v);
@@ -1570,6 +1672,24 @@ document.addEventListener('input', (e) => {
   if (S.view) renderProjection(S.view);
 });
 
+/* Tell people a name is gone before they try to pay for it. */
+let nameTimer = null;
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'claimname') return;
+  const el = $('namestate');
+  const q = e.target.value.trim();
+  clearTimeout(nameTimer);
+  if (!q) { el.textContent = '\u00a0'; return; }
+  el.textContent = 'checking…';
+  nameTimer = setTimeout(async () => {
+    try {
+      const r = await api('name?q=' + encodeURIComponent(q));
+      el.textContent = r.ok ? (r.available ? `${r.name} is available` : `${r.name} is taken`) : r.error;
+      el.style.color = r.ok && r.available ? 'var(--good-text)' : 'var(--muted)';
+    } catch { el.textContent = '\u00a0'; }
+  }, 350);
+});
+
 document.addEventListener('change', (e) => {
   if (e.target.id === 'f_launch') {
     D.launch = e.target.checked;
@@ -1595,6 +1715,26 @@ document.addEventListener('click', (e) => {
   }
   const t = e.target;
 
+  if (t.id === 'signin') {
+    const email = ($('email') || {}).value || '';
+    if (!email.includes('@')) { S.error = 'That does not look like an email address.'; render(); return; }
+    guard(async () => { await signIn(email); });
+    return;
+  }
+  if (t.id === 'signout') {
+    e.preventDefault();
+    guard(async () => { await signOut(); });
+    return;
+  }
+  if (t.id === 'buy') {
+    const name = ($('claimname') || {}).value || '';
+    guard(async () => {
+      const r = await api('checkout', { kind: 'host', companyName: name });
+      /* Stripe hosts the payment page; we never see a card. */
+      location.href = r.url;
+    });
+    return;
+  }
   if (t.id === 'theme') {
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
@@ -1614,7 +1754,6 @@ document.addEventListener('click', (e) => {
        state, which rebuilds this screen and resets the buttons. Reading inside
        the callback silently gave every game the default settings. */
     const opts = {
-      hostName: $('hostname').value.trim(),
       seats: +(pressed('seatchoice').seats || 4),
       rounds: +(pressed('roundchoice').rounds || 10),
       preset: pressed('presetchoice').preset || 'standard',
@@ -1623,7 +1762,7 @@ document.addEventListener('click', (e) => {
     };
     guard(async () => {
       const r = await api('create', opts);
-      const name = opts.hostName;
+      const name = (myCompany() || {}).name || 'Your company';
       S.code = r.code; S.token = r.token; S.view = r.view;
       remember(r.code, r.token, name);
       history.pushState({}, '', '/g/' + r.code);
@@ -1676,6 +1815,15 @@ async function open(code) {
 /* A game code in the URL is how an invitation arrives. */
 async function boot() {
   try { S.cfg = await api('config'); } catch {}
+  await initAuth();
+  await loadAccount();
+  const q = new URLSearchParams(location.search);
+  if (q.get('paid')) {
+    S.notice = 'Payment received — your company name is yours. It can take a moment to appear.';
+    /* the webhook may land a beat after the redirect */
+    setTimeout(() => loadAccount().then(render), 2500);
+  }
+  if (q.get('cancelled')) S.notice = 'Payment cancelled. The name you picked has been released.';
   const m = location.pathname.match(/\/g\/([A-Za-z0-9]{6})/);
   if (m) { await open(m[1]); } else { render(); }
   /* How often to check depends entirely on how fast the game is: a daily round
