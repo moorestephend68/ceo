@@ -8,8 +8,10 @@ import * as A from '../../lib/accounts.mjs';
 import * as B from '../../lib/billing.mjs';
 import * as P from '../../lib/public.mjs';
 import * as R from '../../lib/rating.mjs';
+import * as BOARD from '../../lib/board.mjs';
 import * as CO from '../../lib/cohorts.mjs';
 import * as D from '../../lib/demo.mjs';
+import * as M from '../../lib/mutate.mjs';
 import { requireUser, userFrom } from '../../lib/auth.mjs';
 import { getDb, getVerifier, publicAuthConfig, serverReady } from '../../lib/runtime.mjs';
 import { BUILD } from '../../lib/version.mjs';
@@ -25,11 +27,16 @@ const fail = (message, status = 400) => json({ error: message }, status);
    every request that touches a game first asks whether its clock has run out —
    so the first player to open the page after the deadline triggers the round.
    The schedule is the backstop, not the mechanism. */
+/* Bring a game up to date in place. Called inside mutateGame, so it never writes
+   for itself — the caller owns the write, and the retry, and therefore this is
+   safe to run again on whatever state somebody else just left behind. */
 async function settle(db, game, now) {
   let changed = false;
   /* A public table waiting for players starts when it fills or when its wait
      runs out, whichever comes first — nobody sits looking at an empty lobby. */
-  if (game.status === 'lobby' && game.isPublic && P.shouldStart(game, now)) {
+  /* Any lobby carrying a deadline starts itself: a public table when its wait
+     runs out, and a class group opened by a latecomer after the class began. */
+  if (game.status === 'lobby' && P.shouldStart(game, now)) {
     P.startPublic(game, now);
     changed = true;
   }
@@ -43,9 +50,12 @@ async function settle(db, game, now) {
     await P.scoreGame(db, game);
     changed = true;
   }
-  if (changed) await db.putGame(game);
-  return game;
+  return changed;
 }
+
+/* Read a game, bring it up to date, write only if anything changed. */
+const settled = (db, code, now) =>
+  M.mutateGame(db, code, async (game) => (await settle(db, game, now)) || false);
 
 export default async (req) => {
   const url = new URL(req.url);
@@ -150,23 +160,56 @@ export default async (req) => {
         if (acct.companies[0]) { name = acct.companies[0].name; companyId = acct.companies[0].id; }
       }
       if (!name) return fail('Give your company a name first.');
-      const checked = A.checkName(name);
+      /* Same for a stranger naming a company for one free game — it is not a
+         purchase, so there is nothing to be exact about. */
+      const checked = A.checkName(name, { tidy: !companyId });
       if (!checked.ok) return fail(checked.error);
 
+      /* Matchmaking picks a table, which may be one somebody else is joining at
+         the same moment — so the seat is added under the same retry as everywhere
+         else, and a table that filled underneath us sends the next person to a
+         new one. */
       const joined = await P.joinPublic(db, { name: checked.name, companyId, now });
-      await settle(db, joined.game, now);
-      await db.putGame(joined.game, user ? user.id : null);
-      return json({ code: joined.game.code, token: joined.token, rated: !!companyId,
-                    view: G.viewFor(joined.game, joined.token) });
+      let out = joined;
+      if (joined.created) {
+        await settle(db, joined.game, now);
+        await db.putGame(joined.game, user ? user.id : null);
+      } else {
+        const { game, result } = await M.mutateGame(db, joined.game.code, async (g) => {
+          if (g.status !== 'lobby' || g.seats.length >= g.config.seats) return null;
+          const { token: t } = G.joinGame(g, checked.name, now);
+          const seat = g.seats[g.seats.length - 1];
+          seat.companyId = companyId || null;
+          await settle(db, g, now);
+          return t;
+        }, { host: user ? user.id : null });
+        if (!result) {
+          /* it filled while we were looking at it — open a fresh table */
+          const again = await P.joinPublic(db, { name: checked.name, companyId, now,
+                                                forceNew: true });
+          await db.putGame(again.game, user ? user.id : null);
+          out = again;
+        } else {
+          out = { game, token: result };
+        }
+      }
+      return json({ code: out.game.code, token: out.token, rated: !!companyId,
+                    view: G.viewFor(out.game, out.token) });
     }
 
+    /* The board is the best company anyone has built lately, decayed so that it
+       is winnable this afternoon. The rating still exists and is still what
+       measures skill; it is on your own record rather than on the wall. */
     if (route === 'leaderboard') {
-      const board = await db.leaderboard(50);
+      /* Two days is generous: at 10% an hour a result is worth 0.6% of itself
+         after 48 hours, so nothing older can reach a board of twenty-five. */
+      const since = new Date(Date.parse(now) - 48 * 3600000).toISOString();
+      const rows = await db.recentResults(since);
       return json({
-        board: board.map((r, i) => ({
-          rank: i + 1, name: r.name, rating: r.rating, band: R.band(r.rating),
-          games: r.games, wins: r.wins, bestValue: r.best_value,
-        })),
+        board: BOARD.build(rows, { now, start: P.START_CASH }),
+        decayPerHour: BOARD.DECAY_PER_HOUR,
+        halfLifeHours: Math.round(BOARD.HALF_LIFE_HOURS * 10) / 10,
+        startCash: P.START_CASH,
       });
     }
 
@@ -180,10 +223,22 @@ export default async (req) => {
         db.ratingsFor([mine.id]), db.recordFor(mine.id, 10),
       ]);
       const r = rated[mine.id];
+      /* Where this company stands on the board right now, which is a different
+         question from how good it is and is the one somebody looks for first. */
+      const since = new Date(Date.parse(now) - 48 * 3600000).toISOString();
+      const board = BOARD.build(await db.recentResults(since),
+                                { now, start: P.START_CASH, top: 500 });
+      const standing = board.find((b) => b.name === mine.name) || null;
       return json({
         signedIn: true, rated: true, name: mine.name,
+        /* The rating is kept and is still what measures skill — it simply lives
+           here now rather than on the public board, which is a race. */
         rating: r ? r.rating : R.START, band: R.band(r ? r.rating : R.START),
         games: r ? r.games : 0, wins: r ? r.wins : 0, bestValue: r ? r.best_value : null,
+        onBoard: standing && standing.rank <= BOARD.TOP ? standing.rank : null,
+        boardScore: standing ? standing.score : 0,
+        boardMade: standing ? standing.made : 0,
+        boardAgeHours: standing ? standing.hoursAgo : null,
         recent: recent.map((x) => ({ place: x.place, seats: x.seats,
           value: x.value, delta: x.rating_delta })),
       });
@@ -272,10 +327,12 @@ export default async (req) => {
     if (route === 'class/join' && req.method === 'POST') {
       const cohort = await db.cohortByJoinCode(String(body.code || '').trim());
       if (!cohort) return fail('No class with that code.', 404);
-      const checked = A.checkName(body.name);
+      /* A student is one of forty people with an instructor waiting. Tidy what
+         they typed rather than refusing it — "Group 3 :)" becomes "Group 3" — so
+         nobody is stuck at a validation message in front of the room. */
+      const checked = A.checkName(body.name, { tidy: true });
       if (!checked.ok) return fail(checked.error);
       const joined = await CO.joinCohort(db, cohort, checked.name, now);
-      await db.putGame(joined.game);
       return json({ code: joined.game.code, token: joined.token, group: joined.group,
                     className: cohort.name, view: G.viewFor(joined.game, joined.token) });
     }
@@ -302,8 +359,8 @@ export default async (req) => {
     }
 
     if (route === 'join' && req.method === 'POST') {
-      const game = await db.getGame(code);
-      if (!game) return fail('No game with that code.', 404);
+      const peek = await db.getGame(code);
+      if (!peek) return fail('No game with that code.', 404);
       /* A public table cannot be joined by code, only by matchmaking.
          This is the rule the whole rated tier rests on: a rating is only worth
          something because nobody chooses who they sit with, and a code that can
@@ -311,7 +368,7 @@ export default async (req) => {
          order. It is also the difference somebody paid for — choosing who plays
          is what a private game is. Enforced here rather than by not showing the
          code, because a code that has been seen once has been seen. */
-      if (game.isPublic) {
+      if (peek.isPublic) {
         return fail('That is a public table — they are dealt by matchmaking and cannot '
           + 'be joined with a code. Use "Play now" to be seated at one, or host a '
           + 'private game to choose who plays.', 403);
@@ -327,44 +384,90 @@ export default async (req) => {
       if (!String(name || '').trim()) return fail('Your company needs a name.');
       const checked = A.checkName(name);
       if (!checked.ok) return fail(checked.error);
-      const { token: t } = G.joinGame(game, checked.name, now);
-      await db.putGame(game);
-      return json({ code: game.code, token: t, view: G.viewFor(game, t) });
+      /* Two friends taking the last seat at the same moment used to mean one of
+         them silently did not get it. Now the second attempt re-reads and either
+         seats them or tells them the game is full. */
+      const { game: g2, result: t } = await M.mutateGame(db, code,
+        (g) => G.joinGame(g, checked.name, now).token);
+      return json({ code: g2.code, token: t, view: G.viewFor(g2, t) });
     }
 
     if (route === 'start' && req.method === 'POST') {
-      const game = await db.getGame(code);
-      if (!game) return fail('No game with that code.', 404);
-      G.startGame(game, token, now);
-      await db.putGame(game);
+      const { game } = await M.mutateGame(db, code, (g) => { G.startGame(g, token, now); });
       return json({ view: G.viewFor(game, token) });
     }
 
     if (route === 'submit' && req.method === 'POST') {
-      const game = await db.getGame(code);
-      if (!game) return fail('No game with that code.', 404);
-      await settle(db, game, now);
-      if (game.status !== 'playing') return fail('That round has already closed.', 409);
-      G.submitDecisions(game, token, body.decisions || {});
-      /* Filing may be the last one outstanding, in which case the round closes
-         now rather than waiting for a clock nobody is watching. */
-      await settle(db, game, now);
-      await db.putGame(game);
+      /* The one that was losing orders. Everything inside runs again from scratch
+         if somebody else filed first, against their state rather than ours — which
+         is why re-applying is correct rather than merely convenient. */
+      let closed = false;
+      const { game } = await M.mutateGame(db, code, async (g) => {
+        closed = false;
+        await settle(db, g, now);
+        if (g.status !== 'playing') { closed = true; return false; }
+        G.submitDecisions(g, token, body.decisions || {});
+        /* Filing may be the last one outstanding, in which case the round closes
+           now rather than waiting for a clock nobody is watching. */
+        await settle(db, g, now);
+        return true;
+      });
+      if (closed) return fail('That round has already closed.', 409);
       return json({ view: G.viewFor(game, token) });
     }
 
+    /* Everything this person has on the go at once.
+       One purchased name plays a daily game with friends, a class, and a ranked
+       table on a five-minute clock, all in the same week — so the question that
+       matters is not "which game am I in" but "which of them is waiting for me".
+       The browser holds the seat tokens; this turns them into a state of play.
+       A token that does not match a seat is simply left out. */
+    if (route === 'mine' && req.method === 'POST') {
+      const want = Array.isArray(body.games) ? body.games.slice(0, 12) : [];
+      const out = [];
+      for (const w of want) {
+        const game = await db.getGame(String(w.code || '').toUpperCase());
+        if (!game) continue;
+        const seat = G.seatByToken(game, w.token);
+        if (!seat) continue;
+        const over = game.status === 'over';
+        const ranked = game.seats.slice()
+          .sort((a, b) => G.finalValue(b) - G.finalValue(a));
+        out.push({
+          code: game.code, name: seat.name,
+          isPublic: !!game.isPublic, cohort: game.cohortName || null,
+          status: game.status, round: game.round, totalRounds: game.config.rounds,
+          deadline: game.status === 'lobby' ? game.lobbyDeadline : game.deadline,
+          cadenceMinutes: game.config.cadenceMinutes,
+          cadenceLabel: G.cadenceOf(game).label,
+          seats: game.seats.length,
+          filed: game.status === 'playing' ? seat.submittedRound === game.round : null,
+          autoRounds: seat.autoRounds || 0,
+          out: !!(seat.firm && seat.firm.bankrupt),
+          value: game.status === 'lobby' ? null : Math.round(G.finalValue(seat)),
+          place: over ? ranked.findIndex((s) => s.id === seat.id) + 1 : null,
+        });
+      }
+      /* Whatever is waiting for you first, then whatever ends soonest. */
+      const rank = (g) => (g.status === 'playing' && !g.filed ? 0
+        : g.status === 'playing' ? 1 : g.status === 'lobby' ? 2 : 3);
+      out.sort((a, b) => rank(a) - rank(b)
+        || Date.parse(a.deadline || 0) - Date.parse(b.deadline || 0));
+      return json({ games: out });
+    }
+
     if (route === 'state') {
-      const game = await db.getGame(code);
-      if (!game) return fail('No game with that code.', 404);
+      const peek = await db.getGame(code);
+      if (!peek) return fail('No game with that code.', 404);
       /* A private game can be watched by anyone holding its code — a game with
          friends has spectators, and the view already hides everything private.
          A public table cannot. It is the rated tier, and a code that lets you
          watch is a code that lets you coach; the only people it shows anything to
          are the ones sitting at it. */
-      if (game.isPublic && !G.seatByToken(game, token)) {
+      if (peek.isPublic && !G.seatByToken(peek, token)) {
         return fail('A ranked table is only visible to the people playing it.', 403);
       }
-      await settle(db, game, now);
+      const { game } = await settled(db, code, now);
       return json({ view: G.viewFor(game, token) });
     }
 

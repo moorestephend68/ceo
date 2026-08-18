@@ -121,6 +121,7 @@
       <div class="muted" id="sub">One round a day. Everyone commits blind.</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
+      <button class="ghost hidden" id="mygames">‹ My games</button>
       <span class="chip hidden" id="gamechip"></span>
       <button class="ghost" id="theme">Dark</button>
     </div>
@@ -161,7 +162,7 @@ const S = { code: null, token: null, view: null, cfg: null, busy: false, error: 
              tab: 'orders', sb: null, session: null, account: null, notice: null,
              board: null, record: null, showBoard: false,
              cohorts: null, cohort: null, showClass: false, joinClass: null,
-             demo: null };
+             demo: null, mine: null };
 
 /* The demo class belongs to nobody, so the token that came back with it is the
    only way to get at it again. Kept in the browser so a reload does not silently
@@ -187,6 +188,9 @@ async function guard(fn) {
   S.error = null; setBusy(true);
   try { await fn(); } catch (e) { S.error = e.message; }
   setBusy(false);
+  /* Filing may have made the round about to close, so what happens next has
+     changed and the schedule should reflect it. */
+  schedulePoll();
 }
 
 /* --------------------------------------------------------------- accounts */
@@ -286,9 +290,76 @@ function accountCard() {
   </div>`;
 }
 
+/* ------------------------------------------------------- what you have on */
+
+/* A purchased name is not one game at a time. The same company can be running a
+   daily game with friends, sitting in a class, and taking a five-minute ranked
+   table in a spare three-quarters of an hour — so the list has to answer "which
+   of these is waiting for me", not merely "which games exist". */
+async function loadMine() {
+  const saved = Object.entries(readAll())
+    .sort((a, b) => b[1].at - a[1].at).slice(0, 12)
+    .map(([code, v]) => ({ code, token: v.token }));
+  if (!saved.length) { S.mine = []; return; }
+  try { S.mine = (await api('mine', { games: saved })).games; } catch { S.mine = null; }
+}
+
+function gameLine(g) {
+  if (g.status === 'lobby') {
+    return g.isPublic ? 'finding you a table' : 'waiting for the host to start';
+  }
+  if (g.status === 'over') {
+    return `finished — ${['1st', '2nd', '3rd', '4th', '5th', '6th'][g.place - 1] || g.place + 'th'}` +
+           ` of ${g.seats} · ${money(g.value)}`;
+  }
+  if (g.out) return `out of business · round ${g.round + 1} of ${g.totalRounds}`;
+  const clock = countdown(g.deadline).replace('closes in ', '');
+  return `round ${g.round + 1} of ${g.totalRounds} · ${clock}` +
+         (g.autoRounds ? ` · ${g.autoRounds} filed for you` : '');
+}
+
+function myGamesCard(saved) {
+  const list = S.mine;
+  if (list === null) {
+    /* the fallback, when the server could not be asked */
+    return saved.length ? `<div class="card"><h2>Your games</h2>
+      ${saved.map(([c, v]) => `<div style="display:flex;justify-content:space-between;
+        align-items:center;padding:6px 0;border-bottom:1px solid var(--grid)">
+        <span><b>${esc(v.name)}</b> <span class="muted">${v.pub
+          ? 'at a ranked table' : `in game ${c}`}</span></span>
+        <button class="ghost" data-resume="${c}">Open</button></div>`).join('')}
+      </div>` : '';
+  }
+  if (!list.length) return '';
+  const waiting = list.filter((g) => g.status === 'playing' && !g.filed).length;
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Your games</h2>
+      <span class="muted">${waiting
+        ? `${waiting} waiting on you` : 'nothing waiting on you'}</span>
+    </div>
+    <table style="margin-top:6px"><tbody>
+      ${list.map((g) => `<tr>
+        <td><b>${esc(g.name)}</b>
+          <span class="pill">${g.cohort ? esc(g.cohort)
+            : g.isPublic ? 'ranked' : 'private'}</span>
+          <div class="muted" style="font-size:12px">${esc(gameLine(g))}</div></td>
+        <td class="v">${g.status === 'playing'
+          ? (g.filed ? '<span class="pill in">filed</span>'
+                     : '<span class="pill out">your move</span>') : ''}</td>
+        <td class="v"><button class="ghost" data-resume="${g.code}">Open</button></td>
+      </tr>`).join('')}
+    </tbody></table>
+    <p class="muted" style="margin:10px 0 0">You can be in as many of these at once as you
+      like — a daily game with friends does not stop you taking a ranked table in the
+      meantime. They are all the same company.</p>
+  </div>`;
+}
+
 /* ------------------------------------------------------------------ setup */
 function screenHome() {
-  const saved = Object.entries(readAll()).sort((a, b) => b[1].at - a[1].at).slice(0, 4);
+  const saved = Object.entries(readAll()).sort((a, b) => b[1].at - a[1].at).slice(0, 12);
   const L = S.cfg ? S.cfg.limits : { seats: { min: 3, max: 6, default: 4 }, rounds: { min: 8, max: 14, default: 10 } };
   const seatBtns = [];
   for (let n = L.seats.min; n <= L.seats.max; n++) {
@@ -378,13 +449,7 @@ function screenHome() {
     <button class="primary" id="join" style="margin-top:12px">Join</button>
   </div>
 
-  ${saved.length ? `<div class="card"><h2>Your games</h2>
-    ${saved.map(([c, v]) => `<div style="display:flex;justify-content:space-between;
-      align-items:center;padding:6px 0;border-bottom:1px solid var(--grid)">
-      <span><b>${esc(v.name)}</b> <span class="muted">${v.pub
-        ? 'at a ranked table' : `in game ${c}`}</span></span>
-      <button class="ghost" data-resume="${c}">Open</button></div>`).join('')}
-    </div>` : ''}
+  ${myGamesCard(saved)}
 
   <p class="muted">Practising on your own? The <a href="/">single-player levels</a>
     teach every lever this game uses.</p>`;
@@ -456,11 +521,15 @@ function screenClass() {
           aria-pressed="${r === 10}"><div class="n">${r}</div></button>`).join('')}
       </div>
       <h3 style="margin-top:12px">How long is a round</h3>
-      <div class="choices" id="ccadence">
+      <div class="choices kind" id="ccadence">
         ${Object.entries((S.cfg && S.cfg.cadences) || {}).map(([id, cc]) =>
-          `<button class="choice" data-cadence="${id}" aria-pressed="${id === '15m'}">
-            <div class="n">${esc(cc.label)}</div></button>`).join('')}
+          `<button class="choice kind" data-cadence="${id}" aria-pressed="${id === 'manual'}">
+            <div class="n">${esc(cc.label)}</div>
+            <div class="d">${esc(cc.note || '')}</div></button>`).join('')}
       </div>
+      <p class="muted" style="margin:2px 0 0">Most classes want <b>When I say</b>: nothing
+        expires, and you close each round when the room is ready. A round a week suits a
+        course that meets weekly and files in between.</p>
       <button class="primary" id="makeclass" style="margin-top:12px">Create the class</button>
     </div>`;
   }
@@ -539,6 +608,14 @@ function screenClass() {
     </div>`).join('')}`;
 }
 
+/* A board where age is half the story has to say how old everything is. */
+function agoText(hours) {
+  if (hours == null) return '';
+  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))} min ago`;
+  if (hours < 24) return `${Math.round(hours)}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 function screenBoard() {
   const b = S.board;
   if (!b) return `<div class="card"><h2>Leaderboard</h2><p class="muted">Loading…</p></div>`;
@@ -549,25 +626,48 @@ function screenBoard() {
       <h2 style="margin:0">Leaderboard</h2>
       <button class="ghost" id="closeboard">Back</button>
     </div>
-    <p class="muted" style="margin-top:6px">Only public games count. Private games with
-      friends are unrated, because the host chooses the settings.</p>
+    <p class="muted" style="margin-top:6px">The best company anyone has built lately.
+      Money made above the ${money(b.startCash || 250000)} every company starts with —
+      <b>worth 10% less every hour</b>, so half of it is gone after
+      ${b.halfLifeHours || 6.6} hours and the top is winnable this afternoon.
+      Only public games count; a private game with friends never does.</p>
     ${b.board.length ? `<table style="margin-top:10px">
-      <thead><tr><th>#</th><th>Company</th><th class="v">Rating</th>
-        <th class="v">Games</th><th class="v">Wins</th></tr></thead>
+      <thead><tr><th>#</th><th>Company</th><th class="v">Worth now</th>
+        <th class="v">Made</th><th class="v">When</th></tr></thead>
       <tbody>${b.board.map((r) => `
         <tr class="${me && r.name === me.name ? 'me' : ''}">
           <td>${r.rank}</td>
-          <td>${esc(r.name)} <span class="muted">${esc(r.band)}</span></td>
-          <td class="v">${r.rating}</td><td class="v">${r.games}</td><td class="v">${r.wins}</td>
-        </tr>`).join('')}</tbody></table>`
-      : `<p class="muted">Nobody has finished a rated game yet. Be first.</p>`}
+          <td>${esc(r.name)}${r.place === 1
+            ? ' <span class="pill in">won it</span>' : ''}</td>
+          <td class="v">${money(r.score)}</td>
+          <td class="v muted">${money(r.made)}</td>
+          <td class="v muted">${esc(agoText(r.hoursAgo))}</td>
+        </tr>`).join('')}</tbody></table>
+      <p class="muted" style="margin-top:10px">It is your <b>best single game</b>, not your
+        total — playing more only helps if you play better. Nobody can grind their way up
+        here, and nobody holds the top by having been good yesterday.</p>`
+      : `<p class="muted">Nobody has built anything worth more than they started with in the
+         last day. The board is empty, which means it is yours to take.</p>`}
   </div>
   ${me ? `
   <div class="card">
     <h2>${esc(me.name)}</h2>
-    <div class="big">${me.rating} <span class="muted" style="font-size:15px;font-weight:400">${esc(me.band)}</span></div>
-    <div class="muted" style="margin-bottom:10px">${me.games} rated game${me.games === 1 ? '' : 's'} ·
-      ${me.wins} win${me.wins === 1 ? '' : 's'}${me.bestValue != null ? ` · best company ${money(me.bestValue)}` : ''}</div>
+    ${me.boardScore ? `<div class="big">${money(me.boardScore)}
+        <span class="muted" style="font-size:15px;font-weight:400">on the board${me.onBoard
+          ? `, ${me.onBoard}${['st', 'nd', 'rd'][me.onBoard - 1] || 'th'}` : ''}</span></div>
+      <div class="muted" style="margin-bottom:10px">from a ${money(me.boardMade)} company
+        ${esc(agoText(me.boardAgeHours))}, decaying. Beat it to replace it.</div>`
+      : `<div class="muted" style="margin-bottom:10px">Nothing on the board — your last day
+        has no game that finished above what it started with. One good table fixes that.</div>`}
+    <h3 style="margin-top:14px">Your rating</h3>
+    <div class="muted" style="margin-bottom:10px">
+      <b style="color:var(--text-primary)">${me.rating} — ${esc(me.band)}</b> ·
+      ${me.games} rated game${me.games === 1 ? '' : 's'} ·
+      ${me.wins} win${me.wins === 1 ? '' : 's'}${me.bestValue != null
+        ? ` · best company ${money(me.bestValue)}` : ''}<br>
+      This does not decay and is not on the public board. It measures how you play
+      against who you played, so beating strong opposition moves it and beating weak
+      opposition does not.</div>
     ${me.recent && me.recent.length ? `<table>
       <thead><tr><th>Finish</th><th class="v">Company value</th><th class="v">Rating</th></tr></thead>
       <tbody>${me.recent.map((r) => `<tr>
@@ -649,9 +749,11 @@ function screenLobby(v) {
         <td class="v"><span class="pill">AI company if nobody takes it</span></td></tr>`).join('')}
     </tbody></table>
     <p class="muted" style="margin-top:12px">${v.seatCount} companies · ${v.totalRounds} rounds ·
-      a round every ${esc((v.cadenceLabel || 'day').toLowerCase())}${v.cadenceMinutes >= 1440
-        ? `, closing at ${String(v.closeHour).padStart(2, '0')}:00 UTC` : ''} ·
-      ${esc(v.preset)} difficulty${v.cadenceMinutes < 1440
+      ${!v.cadenceMinutes
+        ? 'rounds close when your instructor closes them'
+        : `a round every ${esc((v.cadenceLabel || 'day').toLowerCase())}${v.cadenceMinutes >= 1440
+            ? `, closing at ${String(v.closeHour).padStart(2, '0')}:00 UTC` : ''}`} ·
+      ${esc(v.preset)} difficulty${v.cadenceMinutes && v.cadenceMinutes < 1440
         ? ` · about ${howLong(v.totalRounds * v.cadenceMinutes)} end to end`
         : ''}</p>
     ${v.isPublic
@@ -665,7 +767,7 @@ function screenLobby(v) {
 /* ----------------------------------------------------------------- playing */
 /* At a day the seconds are noise; at five minutes they are the whole tension. */
 function countdown(iso) {
-  if (!iso) return '';
+  if (!iso) return 'closes when everyone has filed';
   const ms = new Date(iso) - Date.now();
   if (ms <= 0) return 'closing now';
   const s = Math.floor(ms / 1000);
@@ -676,7 +778,66 @@ function countdown(iso) {
 }
 
 /* How urgent the clock is, for the header and how hard we poll. */
-const isFast = () => S.view && S.view.cadenceMinutes && S.view.cadenceMinutes <= 60;
+/* How long to wait before asking the server anything again.
+
+   The page used to ask every six seconds for the whole of a fifty-minute game:
+   five hundred requests per player, of which about twelve found anything new.
+   Ninety-seven per cent of all traffic was a page being told exactly what it had
+   been told six seconds earlier — and at a million games a month that was
+   measured at $22,000, against $3,900 for the same games asked properly.
+
+   Nothing here trades away responsiveness, because the page already knows when
+   the round closes. It can sleep through the middle of a round, where by
+   definition nothing can happen except somebody else filing, and be wide awake
+   for the few seconds where the round actually turns over. */
+/* The stretch before a deadline where the page stays awake. */
+const ENDGAME = 30000;
+
+function pollDelay() {
+  const v = S.view;
+  if (!S.code || !v) return null;
+
+  /* A finished game never changes again. This alone was an open tab asking a
+     question with a known answer, for ever. */
+  if (v.status === 'over') return null;
+
+  /* Nobody is looking. Browsers throttle background timers anyway; this makes it
+     deliberate, and the visibility listener below catches up the moment the tab
+     comes back. */
+  if (typeof document !== 'undefined' && document.hidden) return 120000;
+
+  if (v.status === 'lobby') {
+    /* A public table starts itself within a minute or two, so it is worth
+       watching. A private one waits for a host who may be making tea. */
+    return v.isPublic ? 5000 : 20000;
+  }
+
+  const waiting = (v.waitingOn || []).length;
+  /* The round is closing right now, or is one person away from it. */
+  if (waiting === 0) return 3000;
+  if (waiting === 1 && v.you && v.you.filed) return 5000;
+
+  /* No clock at all: it turns over when the last person files or the instructor
+     says so, and neither is predictable — but neither is urgent either. */
+  if (!v.deadline) return waiting <= 2 ? 20000 : 60000;
+
+  const left = Date.parse(v.deadline) - Date.now();
+
+  /* Overdue, or nearly. The round is about to turn over and this is the only
+     stretch where a few seconds of staleness is actually visible. */
+  if (left <= 0) return 4000;
+  if (left < ENDGAME) return 8000;
+
+  /* Otherwise: sleep until the endgame rather than ramping gradually towards it.
+     Ramping feels careful and is mostly waste — it spends its requests in the
+     middle of a round, which is exactly where nothing can happen. One long sleep
+     lands the page at the end of the round with a handful of requests instead of
+     fifty.
+
+     The cap only exists so "who has filed" is not hours stale on a long round. */
+  const cap = v.cadenceMinutes && v.cadenceMinutes <= 15 ? 120000 : 300000;
+  return Math.min(cap, left - ENDGAME + 2000);
+}
 
 function marketTable(v) {
   return `<table>
@@ -757,7 +918,10 @@ function hydrateFirm(v) {
       produce: Math.round(Math.max(0, Math.min(
         (v.you.products.find((x) => x.name === p.name) || {}).lastDemand || demandPool(p),
         effCapacity(p)) - p.inventory)),
-      rd: 30000, rdProcess: 10000, advertising: 0,
+      /* Not zero. Zero is what the game used to open with, and it cost a player
+         who changed nothing else three quarters of their win rate — see
+         DEFAULT_ADVERTISING in lib/game.mjs. */
+      rd: 30000, rdProcess: 10000, advertising: 5000,
       targetCapacity: Math.round(p.capacity), discontinue: false,
     };
   }
@@ -877,6 +1041,17 @@ function renderProjection(v) {
       w.push(`<div class="warnbox warn"><span class="ic">!</span><span>${label}about
         <b>${Math.round(r.lost)}</b> buyers may find nothing in stock. Demand you cannot
         supply goes straight to whoever can.</span></div>`);
+    }
+    /* The single commonest way to lose, and the one nothing else on the screen
+       would ever tell you about. Measured over 60 games: filing with nothing
+       here wins 5% of the time; $6,000 and no other change wins 28%. Worth a
+       line, because a player who spends nothing has no way of finding out why
+       their perfectly sensible price and production went nowhere. */
+    if (D.orders[r.p.name].advertising < 500 && r.p.awareness < 60) {
+      w.push(`<div class="warnbox warn"><span class="ic">!</span><span>${label}nothing on
+        advertising. Buyers have to know you exist before your price matters —
+        awareness is <b>${Math.round(r.p.awareness)}</b> and it decays every round.
+        This is the commonest way a good plan loses.</span></div>`);
     }
     if (r.leftover > r.sales * 0.35 && r.leftover > 60) {
       w.push(`<div class="warnbox warn"><span class="ic">!</span><span>${label}you may be
@@ -1119,6 +1294,10 @@ function render() {
   const app = $('app');
   const v = S.view;
   if (v && v.status === 'playing') hydrateFirm(v);
+  /* The way out of a game you are in the middle of. One account can have a daily
+     game with friends, a class and a ranked table running at the same time, and
+     until this existed the only way to move between them was to edit the URL. */
+  $('mygames').classList.toggle('hidden', !S.code);
   $('gamechip').classList.toggle('hidden', !S.code);
   /* A private game's code is shown because handing it out is what it is for. A
      public table's is not shown anywhere, because handing it out is the one thing
@@ -1385,7 +1564,15 @@ document.addEventListener('click', (e) => {
     return;
   }
   if (t.dataset.resume) { open(t.dataset.resume); return; }
-  if (t.id === 'home') { S.code = null; S.token = null; S.view = null; history.pushState({}, '', '/g/'); render(); return; }
+  if (t.id === 'home' || t.id === 'mygames') {
+    S.code = null; S.token = null; S.view = null; S.showBoard = false; S.showClass = false;
+    /* ?home=1 so that a reload here stays here. Without it, boot() would see a
+       bare /g/ and helpfully drop you back into the ranked table you just left. */
+    history.pushState({}, '', '/g/?home=1');
+    render();
+    guard(loadMine);
+    return;
+  }
 
   if (t.id === 'create') {
     /* Read every field BEFORE guard() runs — it re-renders to show the busy
@@ -1458,11 +1645,26 @@ async function openDemo(force) {
 
 async function refresh() {
   if (!S.code) return;
+  S.polls = (S.polls || 0) + 1;
   try {
     const r = await api('state?code=' + encodeURIComponent(S.code) +
       (S.token ? '&token=' + encodeURIComponent(S.token) : ''));
     S.view = r.view; render();
   } catch (e) { S.error = e.message; render(); }
+  schedulePoll();
+}
+
+/* One timer that re-arms itself at whatever interval the game currently deserves,
+   rather than a fixed heartbeat that cannot know. */
+let pollTimer = null;
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  const wait = pollDelay();
+  if (wait === null) return;
+  pollTimer = setTimeout(() => {
+    if (S.busy) { schedulePoll(); return; }
+    refresh();
+  }, wait);
 }
 
 async function open(code) {
@@ -1533,20 +1735,20 @@ async function boot() {
     render();
   } else if (m) { await open(m[1]); } else {
     /* No code in the URL. That is either the front page, or a reload of a ranked
-       table — which deliberately keeps its code out of the address bar. */
-    await resumeRankedTable();
+       table — which deliberately keeps its code out of the address bar. ?home=1
+       says the person asked for the front page, so do not drag them back in. */
+    if (!q.get('home')) await resumeRankedTable();
+    if (!S.code) await loadMine();
     render();
   }
   /* How often to check depends entirely on how fast the game is: a daily round
      changes nothing in a minute, a five-minute round changes everything. */
-  let lastPoll = 0;
-  setInterval(() => {
-    if (!S.code || S.busy) return;
-    const gap = isFast() ? 6000 : 25000;
-    if (Date.now() - lastPoll < gap) return;
-    lastPoll = Date.now();
-    refresh();
-  }, 2000);
+  schedulePoll();
+  /* Coming back to the tab should feel instant, however long it was away. */
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && S.code && !S.busy) refresh();
+    schedulePoll();
+  });
   /* and repaint the clock itself, so the countdown actually counts down */
   setInterval(() => {
     const v = S.view;

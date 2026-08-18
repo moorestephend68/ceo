@@ -100,10 +100,13 @@ const stopped = board.groups.find((g) => g.group === D.STORY.stopsFiling.group)
   .companies.find((c) => c.name === D.STORY.stopsFiling.name);
 assert.equal(stopped.missed, D.DEMO.opening - D.STORY.stopsFiling.after,
   'the student who lost interest must show the rounds since');
-/* the point of them: nothing stalled */
-assert(never.value > 0, 'a company nobody files for should still be trading, not frozen');
-console.log(`${never.name} never filed once and is still worth ` +
-  `$${Math.round(never.value).toLocaleString('en-US')} — nothing stalled`);
+/* The point of them: nothing stalled. What matters is that the company is still
+   in the game and its numbers are still moving — not that carrying on without a
+   driver happens to be profitable, which it should not be. */
+assert.equal(never.out, false, 'a company nobody files for should still be trading, not out');
+console.log(`${never.name} never filed once, is still trading, and is worth ` +
+  `${never.value < 0 ? '-' : ''}$${Math.abs(Math.round(never.value)).toLocaleString('en-US')}` +
+  ` — carried, but not for free`);
 
 /* ------------------------------------------------------------- the guide */
 console.log('\nwhat the visitor is told to look at:');

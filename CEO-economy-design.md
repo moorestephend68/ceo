@@ -1738,3 +1738,898 @@ kept the starting product uniform. If the starting kind ever becomes a choice, e
 figure in §10 and §11 needs re-measuring — the shared market, the five bot
 personalities and the price equilibrium were all derived with four identical
 manufacturers in the market.
+
+---
+
+## 21. The clock, and the length of a game
+
+§18 built live sessions around one round a day, because that was the answer to the
+synchronous-or-asynchronous question. Playing it made the limitation obvious: a day
+a round is right for a game running in a group chat across a fortnight, and wrong
+for four people who want to sit down together and run a company's whole life in an
+evening. They are the same game. Only the deadline differs.
+
+### The host picks
+
+| Round lasts | A 20-round game takes | Suits |
+|---|---|---|
+| 5 minutes | **51 minutes measured** | Everyone at their screens at once |
+| 15 minutes | 5 hours | Room to think without losing the thread |
+| An hour | 20 hours | Dipping in across an afternoon |
+| 4 hours | 3 days | A few rounds a day |
+| A day | 20 days | A group chat, at a fixed hour |
+
+**A daily game keeps its fixed hour; nothing shorter has one.** "Closes at 18:00"
+is easier to live with than "23 hours after whenever the last one happened to
+close" — but at five minutes a fixed hour is meaningless, so those simply run from
+the moment the previous round resolved. The close-hour setting hides itself unless
+the game is daily.
+
+**The first round of a fast game gets double time.** Everyone has just arrived and
+is reading the screen for the first time; five minutes to absorb an interface and
+file a first set of orders is not the same as five minutes to adjust them.
+
+### What had to change with it
+
+**The backstop went from hourly to every five minutes.** Rounds normally close when
+the next player opens the page, so the scheduled function is only for a game
+everyone has walked away from — but an hourly sweep would freeze a five-minute game
+for most of an hour if every tab was closed mid-round.
+
+**Polling follows the pace.** The client checked the server every 25 seconds, which
+is generous for a daily round and useless for a five-minute one. It now polls every
+6 seconds when a round is an hour or less, and the countdown shows seconds under
+five minutes — at a day the seconds are noise, at five minutes they are the whole
+tension.
+
+Measured over a full 20-round game at five minutes: 11 rounds closed early because
+everyone had filed, 9 ran out the clock, and standing orders filed 9 sets of orders
+for players who missed a deadline. Both closing paths work at speed, and being late
+still carries you rather than freezing everyone else.
+
+### And the round cap went to 20
+
+§19 measured that the decline plateaus rather than compounding — never launching, a
+20-round game ends at $224k against a 12-round game's $229k — and noted the 8–14 cap
+could go back up "whenever the interface is ready to present a longer game". At five
+minutes a round, 20 rounds is under an hour. It is ready.
+
+---
+
+## 23. The ranked tier
+
+Two tiers, and the split is forced by one problem: a leaderboard over
+host-configured games is a scoreboard for whoever tunes the settings hardest.
+Twenty rounds on Forgiving against two weak bots posts a number nobody playing
+properly can approach.
+
+So **only the public format is rated**, and it is fixed: 5 companies, 8 rounds, a
+round every 5 minutes, standard difficulty — about 40 minutes end to end. Private
+games keep every setting the host wants and count for nothing.
+
+### Length is chosen for strangers
+
+Fifteen minutes a round over ten rounds is two and a half hours of attention from
+people with no obligation to each other. Friends finish a long game because they
+would be letting each other down; strangers close the tab. Five minutes and eight
+rounds is short enough to see through, and standing orders carry anyone who drifts.
+
+A table starts when it fills **or after 90 seconds**, whichever comes first, with
+hidden bots taking the empty seats. So a single player still gets a real game on a
+quiet evening — the cold-start problem that usually kills a public tier is already
+solved by a mechanic built for something else.
+
+### What is rated, and what it costs to farm
+
+Rating is the ordinary pairwise generalisation of Elo over finishing positions.
+Bots are in the pool as ordinary opponents, with ratings taken from the win rates
+measured in §20 — Premium 33%, Discounter 30.5%, Balanced 17%, Operator 10%,
+Marketer 9.5%, against an even split of 20%. So beating a strong bot is worth
+something and beating a weak one is not, with no special case saying so.
+
+Measured:
+
+| Situation | Rating change |
+|---|---|
+| Win against four 1800-rated humans | **+20** |
+| Win against four strong bots | +14 |
+| Win against four weak bots | +9 |
+| **1800-rated player wins against four weak bots** | **+2** |
+| 1800-rated player comes last against them | **−22** |
+
+Farming is not worth the forty minutes it takes, and losing to weak opposition is
+expensive — which is the right way round.
+
+Only companies with a purchased name are rated. Everyone else, bot or human,
+counts as opposition: they affect what a win is worth without having a standing of
+their own. That is also the honest reason to buy a name, and it means the free
+tier stays genuinely free rather than crippled.
+
+### Scored exactly once
+
+A finished game writes one row per company, with a unique index on
+(game, company name). Two requests finishing the same game at the same moment, a
+re-read, and the scheduled sweep all try to score it; the index means one
+succeeds. Verified by scoring a game, clearing the in-memory guard, and scoring it
+again — the database refuses.
+
+---
+
+## 24. Classes
+
+A facilitator's problem is not playing but watching. Forty students is eight games
+of five, and the questions are always the same: who has filed, which group is
+stuck, whose company just went under, and what goes in the gradebook.
+
+### One seed, eight groups
+
+Every group in a class runs from the cohort's seed, so all of them face an
+identical market — the same shocks in the same rounds, the same news. Nobody can
+claim they drew a harder economy, which is what makes comparing groups defensible
+rather than merely convenient.
+
+This is the feature the incumbents charge for, and here it cost nothing: games
+have been seeded since the first prototype, because reproducibility was needed for
+testing. A property added for one reason turning out to be the commercial
+differentiator for another is worth noticing.
+
+Verified rather than assumed: eight groups, one distinct seed between them, and
+identical first-round news across all eight.
+
+### The controls a real room needs
+
+| Control | Why it exists |
+|---|---|
+| Start every group | Nobody wants to start eight games by hand |
+| Pause | A discussion, a fire drill, half the room stuck |
+| Extend by ten minutes | Somebody always says "we are not ready" |
+| Close this round now | The opposite problem: three groups waiting on one |
+| Download results | The artifact that goes in the gradebook |
+
+Pausing is enforced inside `shouldResolve`, so a paused class cannot tick on even
+if the scheduled sweep runs — the check lives in the rule rather than in the
+interface.
+
+### The export, and two things it got wrong first
+
+The CSV is one row per company per group: group, game, company, whether it was a
+student or AI, finishing place, company value, rounds played, **rounds filed** and
+**rounds auto-filed**.
+
+That last column is the social-loafing measure the incumbents approximate with
+peer evaluation, except it is objective — it counts the rounds a student let run
+on standing orders, and the game has tracked it since live sessions existed.
+
+Two defects the test caught:
+
+**Company names are typed by students, and a spreadsheet treats a cell beginning
+with an equals sign as a formula.** A company called `=cmd|calc` is a
+formula-injection attempt aimed at whoever opens the file. Names now get a leading
+apostrophe.
+
+**But the first fix escaped negative numbers too**, so every company value with a
+minus sign arrived as text and the instructor could not sort or total the column —
+which is most of the point of an export. Numbers now pass through untouched; only
+text that looks like a formula is neutralised.
+
+### What is still missing for an institution
+
+Single sign-on and gradebook syncing with Canvas or Blackboard are what make a
+tool *purchasable* by a university rather than merely usable by an instructor.
+Neither is built, and neither should be until an instructor has actually run a
+class and said which five things matter — which will not be the five anyone would
+guess.
+
+## 25. The demo class
+
+Stage 3 built the thing an instructor needs. This is about whether they will ever
+find out it exists.
+
+### The door is the product
+
+An instructor evaluating a teaching tool is doing it at eleven at night, between
+other things, having clicked a link somebody sent them. Everything that happens
+before they see the thing itself is attrition, and the single largest piece of it
+is a sign-up form. So the demo has none: no email, no password, no name, no
+"start your free trial". One button, and the class opens.
+
+What makes that safe rather than reckless is that the demo class **belongs to
+nobody**. Its `facilitator` column is null. Control comes from a random token
+handed back with the class, which opens that one throwaway cohort and nothing
+else — it is not an account, it grants no entitlement, and it expires. The tests
+that matter here are the refusals: the same token on somebody else's class, a
+second visitor's token on the first visitor's class, the token used to create a
+*real* class (402 — running a class still needs the licence).
+
+### An empty dashboard demos terribly
+
+The obvious version of a demo is an empty class with a join code, which shows the
+instructor precisely nothing and asks them to imagine the rest. So the demo is a
+class that is already running: six groups of five, five rounds played, caught
+mid-round with about a quarter of the room still to file.
+
+Everything in it is the ordinary code. The thirty companies are human seats with
+tokens the demo module happens to hold, filing ordinary orders through the
+ordinary submit path. There is no demo branch inside the engine, the cohort logic
+or the game logic. If the demo works, the product works — which is the only kind
+of demo worth showing.
+
+### The story it tells
+
+A dashboard of six groups explains nothing on its own, so the demo is written
+rather than merely generated. Three things are on it deliberately:
+
+**A price war in group three.** Two companies running the *same* strategy, so the
+only thing separating them from each other and from the rest of the group is the
+war. Neither follows a script that says "charge sixty per cent": each undercuts
+what the other charged last round by six per cent, one round late. That is what a
+price war is, and it is why they do not stop — there is no round in which cutting
+is the wrong move for either of them, and they arrive at the bottom together. By
+round twelve four of the five companies in that group are out of business and the
+one that stayed out of it is worth $748,000. Nobody scripted that outcome; it
+falls out of the economy.
+
+**A student who has never filed.** This is the instructor's actual fear, and the
+answer to it has to be visible rather than asserted: their last orders repeat,
+nothing stalls, the company keeps trading, and the count follows them into the
+spreadsheet as `rounds_auto_filed`. A second student files twice and then stops,
+because that one is commoner than the first.
+
+**Why so many are underwater.** Five rounds in, seventeen of thirty companies
+show a negative company value, and an instructor reading that cold would
+reasonably conclude the simulation is broken. It is the ramp: a product loses
+money for its first rounds and a company is valued on what it earns. Saying so
+turns a confusing signal into the reason to press the button.
+
+The guide is computed from the board rather than hard-coded, so if the simulation
+ever stops producing the story the guide stops claiming it. Its numbers move when
+the class moves — which the API test checks by comparing the sentence before and
+after a fast-forward.
+
+### The same story every time
+
+The seed is fixed and every scripted decision is deterministic, so "look at group
+three" means the same thing in every session — the demo can be screenshotted,
+written about, and narrated in a call. Two visitors opening it a second apart get
+byte-identical boards, which is asserted rather than hoped for.
+
+Two things had to be fixed to make that true. Joins are staggered by a second,
+because cohorts number groups by creation time and thirty games created in the
+same millisecond number themselves differently on every run. And each company is
+nudged off its archetype by an amount derived from its own name: six groups of
+five people running the same five strategies produced three *identical* columns of
+numbers, and an instructor scanning that would rightly conclude they were looking
+at a mock-up.
+
+### Time compression
+
+Nobody watches fifteen-minute rounds in an evaluation. The demo can be pushed
+forward one, three or five rounds at a time — the scripted students file, the
+class resolves, and the visitor's own seat is left to its standing orders, which
+demonstrates the standing-order rule without a word of explanation. Five rounds is
+the cap on one click, so a single button cannot silently run the whole class out.
+
+Fast-forward exists **only** for demos. A real class's rounds belong to the people
+playing them, and the route refuses the action on a non-demo cohort even for its
+owner.
+
+### The seat
+
+The one thing a dashboard cannot show is what a student sees, so the visitor is
+handed a real seat in group one — played for them up to the moment they arrive, so
+it has a history to read. It is a seat and not a skeleton key: mid-game it reveals
+no more than any student's would, which the API test checks by confirming the
+who-was-who column is still null.
+
+### Letting them take the spreadsheet
+
+The export is on the demo, unauthenticated, with the same content as a paying
+facilitator's. That is deliberate. Software spreads inside an institution by
+somebody forwarding a file to somebody else, and a gradebook export is the most
+forwardable thing this produces.
+
+### What it costs
+
+A demo is six games written on creation and swept afterwards, so demos carry an
+expiry and the scheduled tick deletes them; `games.cohort_id` cascades, so nothing
+is orphaned. Building one takes about 35ms — thirty round resolutions — which is
+cheap enough to do inside the request that asked for it.
+
+### The tuning that was needed
+
+The first version was unusable as a demo and the reason is worth recording. The
+scripted students spent far more than the archetypes they were modelled on —
+heavier R&D, heavier advertising, and compounding capacity growth funded on the
+credit line — and **fifteen of thirty companies were bankrupt by round twelve**. A
+demo class where half the room has gone under does not demonstrate a simulation;
+it demonstrates a broken one.
+
+Pulling the spending back towards the measured baseline (§20's bot archetypes)
+brought it to seven of thirty, concentrated where the story wants them: the price
+war group, the student who never files, and the one who stopped. That is a class
+an instructor recognises.
+
+## 26. Going live, and what it cost
+
+The game was finished and tested for weeks before it was deployed. Deploying it
+took an evening, and none of that evening was spent on the game. It is worth
+writing down, because every hour of it was spent on something that could have
+been made impossible.
+
+### Four failures, in the order they were hit
+
+**The functions had no dependencies.** `package.json` in the repository was the
+one from before accounts existed, listing `@netlify/blobs` and
+`@netlify/functions` and neither of the two things every request actually needs.
+The site is deployed by uploading files, folders were re-uploaded one at a time,
+and the root files were never among them. The build succeeded. Every request
+returned a 502 with an empty body.
+
+**The server crashed before it could say why.** `getDb()` was called on the way
+into the handler, outside the try block, so a server with no database threw before
+any route existed — including `/api/config`, the one the page uses to find out
+what it is talking to. The interface had no way to report a problem because the
+first thing it asks is the thing that was broken. Storage is opened lazily now,
+`/api/config` and `/api/public/format` answer without it, and a missing database
+produces a 503 that names the setup step.
+
+**Node 20 has no WebSocket.** The Supabase client builds a realtime connection as
+it is constructed and looks for a global `WebSocket`; Node did not have one until
+22. `netlify.toml` pinned 20. The constructor threw during module import, so
+again: dead function, empty 502, no clue. Nothing here uses realtime — the
+dependency was on the constructor, not on us — so the client is now given a
+transport that would refuse to dial, and the server no longer cares which Node it
+is handed. `netlify.toml` says 22 as well, because two of these is not excessive
+for a failure that presents as silence.
+
+**Nobody could tell which version was live.** Diagnosing the above meant
+comparing git blob hashes between the working copy and the GitHub tree API, and
+probing routes for fields that only exist in newer code. Twice, a fix was assumed
+live when the file had never been uploaded — the fix was correct and the
+conclusion drawn from its apparent failure was wrong.
+
+### What actually fixed it
+
+A label. `lib/version.mjs` exports a build string; it is returned by
+`/api/config`, stamped into `public/live.html` at build time, and printed at the
+bottom of every screen:
+
+```
+page 2026-08-17 · ranked tables are private · server 2026-08-17 · ranked tables are private
+```
+
+Two of them, because the page and the server are uploaded separately and having
+one without the other is precisely the confusion that cost the most time. "Is my
+change live?" is now a thing anyone can read off the screen.
+
+### The pattern
+
+Three of the four failures presented identically — an empty 502 — and had
+completely different causes. That is the signature of a system that cannot
+describe its own state. The tests were excellent at proving the code correct and
+useless at proving the deployment correct, because every one of them ran against
+a filesystem where the files were, by construction, the right ones.
+
+So there are now two tests that assert the *absence* of a working environment
+rather than the presence of one: `test/unconfigured.mjs` runs the real handler
+with no database and no environment and requires a readable message on every
+route, and `test/nodeversion.mjs` deletes the global `WebSocket` and requires the
+whole API to load anyway. Neither tests a feature. Both test the half-hour after
+somebody presses deploy, which is when a thing is at its most fragile and least
+observed.
+
+### And two things the deployment surfaced about the game
+
+Neither was a deployment problem; both were found by a real person opening the
+real site, which is the argument for shipping.
+
+**A free public table handed out a shareable code.** The lobby screen had been
+written for private games — where the code is the whole point — and public tables
+were routed through it without anyone asking whether the code still belonged. Two
+consequences: four friends could fill a "public" table and settle the finishing
+order between them, which is the end of the rating meaning anything; and the
+thing a host pays for, choosing who plays, was available for nothing. Removing the
+share box was not the fix. The code was also in the header chip, in the saved
+games list and in the address bar — and hiding a code is not a rule anyway. The
+rule is on the server: a public table refuses to be joined by code, and refuses to
+be watched without a seat token. A code that lets you watch is a code that lets
+you coach.
+
+**The first round of a fast game is twice as long, and said nothing about it.**
+That was a deliberate decision — at round one of a five-minute game everyone is
+reading the screen for the first time — and an accidental lie, because the front
+page promises a round every five minutes and the clock then reads nine and a half.
+The player's available conclusion is that the game is broken, which is the
+conclusion that was drawn. The number was right; the silence was the defect. Round
+one now says what it is doing and why.
+
+## 27. The leaderboard, and what eight rounds was hiding
+
+The board was a rating. Ratings are the right way to measure skill and the wrong
+thing to put on a shop window: they are stable by design, so the top belongs to
+whoever got there first, and somebody who buys a company name on Tuesday and
+plays brilliantly sees no evidence of it anywhere. The board is the *reason* to
+buy a name. It has to be winnable this afternoon.
+
+### The measurement that changed the question
+
+The proposal was "money made over the starting amount, decaying". Measuring what
+the public format actually produces killed that idea in its original form and
+turned up something worse.
+
+Forty public games, one competent player, current bots:
+
+| rounds | median final value | profit over the $250,000 start | players in profit |
+|---|---|---|---|
+| 8 | $187,916 | **−$62,084** | 25% |
+| 10 | $302,571 | **+$52,571** | 60% |
+| 12 | $365,073 | +$115,073 | 65% |
+| 14 | $506,198 | +$256,198 | 65% |
+
+**The ranked tier ended before the company was worth anything.** Eight rounds
+stops the game inside the ramp: everyone has spent cash building a business that
+has not paid back yet, so the median company finishes worth less than it started
+and the winner of a ranked table is whoever lost least. That is a strange thing to
+be best at, and nothing about the leaderboard would have revealed it — the Elo
+board ranks *relative* finishes, so it looked perfectly healthy while measuring a
+race to the bottom of a hole.
+
+Ten rounds, at ten more minutes, moves the median to +$52,571 and puts 60% of
+players in profit instead of 25%. Twelve is better still, and an hour is too long
+to ask of a stranger with no social reason to see it out. §21 measured game length
+before launching existed and concluded the decline plateaus; this is a different
+question — not "how long stays interesting" but "how long before there is anything
+to show" — and it needed its own measurement.
+
+### Best game, not total
+
+The decay rate was proposed at 10% an hour, which is fast: half a result gone in
+6.6 hours, ninety per cent inside a day. That is right for the purpose. Nobody
+holds the top by having been good yesterday, and every entry is quietly making
+room.
+
+The decision that actually matters is what decays. Adding a player's recent games
+up sounds fairer and is not. At 10% an hour a player going back to back settles at
+about twelve games' worth, so the board ranks free time rather than judgement —
+measured directly: twenty-four games at $120,000 each totals $1,237,552 against
+one $300,000 game an hour ago, **4.6 times the score**. Six mediocre games would
+beat one brilliant one, and the leaderboard would be a stamina contest with a
+company-simulation theme.
+
+Taking each company's *best single recent game* fixes it exactly. Playing more
+only helps if you play better. The test that proves it also computes what the
+totalling rule would have paid, because a claim about a design choice is worth
+nothing unless the rejected alternative really would have won.
+
+A game that finished below its starting cash scores zero rather than a negative.
+A leaderboard of losses is not a leaderboard, and somebody having a bad afternoon
+should not be ranked below somebody who has never played.
+
+### The rating is kept
+
+It moved rather than died. The board answers "who has built the best company
+lately"; the rating answers "how good is this player", which is a different
+question with a different right answer, and the Elo work — pairwise, K by
+experience, bot ratings from the measured win rates in §20, farming-resistant —
+is still the honest answer to it. It now sits on your own record, where a
+permanent number belongs, next to the thing that decays.
+
+Nothing new is stored for any of this. A result already recorded what the company
+was worth and when; the board is that table, read over two days, with one
+exponent applied. Anything older has decayed below a hundredth of itself and
+cannot reach a board of twenty-five, which is why two days is the whole window.
+
+## 28. Should paid and unpaid players be kept apart?
+
+The worry is reasonable: a beginner who has not bought anything gets seated with
+people who have been playing for weeks, is beaten every time, and leaves. Splitting
+the queue looks like it protects them.
+
+Measured over 400 public tables — bots dealt as they normally are, then the games
+sorted by how strong a table each player happened to draw:
+
+**A competent player:**
+
+| table drawn | avg opponent | won | median company | in profit |
+|---|---|---|---|---|
+| softest third | 1463 | 32% | $252,507 | 50% |
+| middle third | 1484 | 31% | $258,887 | 50% |
+| hardest third | 1497 | 32% | **$294,117** | 58% |
+
+**A beginner filing the defaults:**
+
+| table drawn | avg opponent | won | median company | in profit |
+|---|---|---|---|---|
+| softest third | 1463 | 29% | $232,107 | 47% |
+| middle third | 1484 | 26% | $238,746 | 49% |
+| hardest third | 1497 | 30% | **$284,494** | 58% |
+
+**A harder table makes you better off, not worse.** $41,610 more company value for
+the competent player and $52,386 more for the beginner, between the softest third
+and the hardest — and the chance of finishing first is flat across all three.
+
+The mechanism was designed in and its consequence was not noticed until now: in
+this economy **a firm brings its own customers**. The category is not a fixed pot
+to be divided; demand grows with the quality and awareness of the companies in it
+(§4, §13). Strong rivals advertise more and research more, so they enlarge the
+market you are selling into. You take a similar share of a bigger thing.
+
+Three conclusions fall out.
+
+**Splitting the queue would hurt the people it was meant to protect.** A beginners'
+table is a smaller market. They would finish just as often and be worth $50,000
+less for it.
+
+**The money board is not farmable by drawing weak opponents.** This was the real
+risk in moving the board from a finishing position to an absolute number, and the
+incentive turns out to run the other way — a soft table is the one you would rather
+not have. Nobody can pick their table anyway, but it is worth knowing that if they
+could, they would want the hard one.
+
+**Payment is not skill.** Matching on it sorts by the wrong variable: somebody who
+buys a name on their first day is still a beginner, and a strong player who never
+pays is still strong. The rating already measures the right thing, and the bot
+archetypes already carry measured standings (§20), so if the queue is ever split
+it should be split on that — not on who has spent money.
+
+There is also an arithmetic point that decides it at this size. At launch the
+public pool is small. A paid-only queue is an empty queue, and the outcome is that
+the people who paid sit alone with bots while everyone else gets a full table.
+Whatever the theory, that is the wrong way round.
+
+No change was made. The measurement is the deliverable.
+
+## 29. What a million games a month costs
+
+Measured from the code rather than estimated, because the answer turns on one
+number and it is not the one people expect.
+
+### One public game
+
+| | |
+|---|---|
+| stored game document | 47.2 KB |
+| a view sent to one player | 4.0 KB at round one → 17.4 KB at the end |
+| game length | 50 minutes |
+| **polls, at the current 6-second interval** | **500 per player, 2,500 a table** |
+| order submissions | 50 |
+
+**Storage is not the bill and never was.** A million finished games is 45 GB —
+about $5 a month of Supabase disk, and nothing at all if the game document is
+dropped a week after the game ends and only the result row kept.
+
+**The bill is the poll.** 2,550 function calls per game becomes **2.55 billion a
+month**, which is 984 database queries a second sustained, 26.6 TB of bandwidth,
+and 70,833 GB-hours of function compute.
+
+### The bill
+
+Netlify is credit-based: 2 credits per 10,000 requests, 20 per GB of bandwidth,
+10 per GB-hour of compute, at roughly $0.0067 a credit. Supabase charges for the
+instance, the disk and egress rather than per query.
+
+| polling | calls/month | queries/sec | Netlify | Supabase egress | total |
+|---|---|---|---|---|---|
+| **every 6s (as shipped)** | 2.55bn | 984 | $11,813 | $10,308 | **$22,121** |
+| every 15s | 1.05bn | 405 | $4,864 | $4,231 | $9,095 |
+| every 30s | 0.55bn | 212 | $2,548 | $2,206 | $4,753 |
+| every 60s | 0.30bn | 116 | $1,390 | $1,193 | $2,583 |
+| adaptive | 0.45bn | 174 | $2,085 | $1,801 | $3,885 |
+
+Plus a Postgres big enough to take the query rate — at 984/s that is a large
+compute add-on, several hundred dollars a month, and at 100/s a small one.
+
+So: **about $22,000 a month as it stands, and about $4,000 for the same million
+games with a smarter client.** The difference is entirely in how often a page that
+has nothing new to say asks anyway.
+
+### Why it is so wasteful
+
+Of the 500 polls a player makes in a game, about twelve find anything new. **97%
+of all traffic is a page being told exactly what it was told six seconds ago.**
+
+Three fixes, in order of how much they return for the work:
+
+**Poll adaptively.** The client already knows the deadline. Between rounds the only
+thing that can change is whether somebody else has filed, which is not urgent —
+so poll every 30 seconds, then burst in the last few seconds before the deadline
+when the round is actually about to turn over. Eight polls a round instead of
+fifty. That is the $22,000 → $3,900 line and it is perhaps thirty lines of client
+code.
+
+**Answer an unchanged poll with nothing.** A round number and a "who has filed"
+count are enough to know whether a full view is needed. Sending an empty response
+instead of 11 KB takes the bandwidth line from $3,650 to about $109. It does not
+reduce the invocation count, which is the larger half.
+
+**Do not read the game document to answer a poll.** A poll currently loads the
+whole 47 KB game to produce a view. A tiny `games(code, round, updated_at)` read
+answers "has anything changed" for a fraction of the egress, and that is where the
+Supabase side of the bill lives.
+
+### The honest caveat
+
+A million games a month is 33,000 a day, or roughly 1,400 concurrent tables in the
+evening. Nothing at this scale should be believed from arithmetic alone — the
+first thousand real games will move these numbers. But the *shape* is reliable and
+it is worth knowing now rather than at ten thousand games: the cost is polling,
+polling is 97% waste, and the fix is in the client rather than the bill.
+
+### What you would have to charge
+
+The direct answer, from the costs above:
+
+| | cost of one game | per player |
+|---|---|---|
+| as it ships | $0.0221 | $0.0044 |
+| adaptive polling | $0.0039 | $0.0008 |
+
+For a 90% margin that is **$0.22 a game now, or $0.04 with adaptive polling** —
+under a penny either way, which is the finding rather than the answer. Nobody can
+charge four cents a game, and more importantly nobody should try: the friction of
+asking for money at all is worth more than the money.
+
+What the numbers actually say is that **a one-off purchase funds a lifetime of
+play**. A $25 name is $23.98 after Stripe, which covers 30,856 of that player's
+own games — decades, at twenty games a month. Even at the wasteful polling rate it
+is 5,419 games, or twenty-three years. There is no version of this where a paying
+customer costs you more than they paid.
+
+And the free rider, which is the thing a free public tier is supposed to make you
+nervous about, is not frightening either: a thousand public games by somebody who
+never buys anything costs **78 cents** with adaptive polling, or $4.42 without.
+
+### Where the decision actually is
+
+A million games a month at five seats is five million player-games; at twenty
+games a month each, a quarter of a million active players. Against an
+infrastructure floor of about $455 a month (Supabase Pro, Netlify Pro, a 2XL
+Postgres) plus $3,885 of usage:
+
+**Break-even is 0.1% of active players buying a $25 name in a month.** One in a
+thousand. At the un-optimised polling rate it is 0.4%.
+
+| conversion in a month | buyers | revenue | cost | margin |
+|---|---|---|---|---|
+| 0.2% | 500 | $11,988 | $4,340 | 64% |
+| 0.5% | 1,250 | $29,969 | $4,340 | 86% |
+| 1.0% | 2,500 | $59,938 | $4,340 | 93% |
+| 2.0% | 5,000 | $119,875 | $4,340 | 96% |
+
+So the business is not sensitive to price and it is not sensitive to
+infrastructure. It is sensitive to one number — **what fraction of people who play
+ever buy anything** — and that is a product question, not a pricing one. Doubling
+the price from $25 to $49 moves break-even from 0.1% to 0.0%; doubling conversion
+from 0.5% to 1% adds $30,000 a month. The second lever is worth roughly ten times
+the first.
+
+The facilitator tier is a different business with different arithmetic. A class of
+forty is eight games — three pence of infrastructure. A $199 licence covers six
+thousand classes. That tier is priced entirely on what it is worth to an
+institution and not at all on what it costs to run, which is the usual shape for
+software sold to schools.
+
+### The caution
+
+These are the costs of *serving* games, and they are the easy costs. What is not
+in this table: payment disputes, support, the person who emails at midnight
+because their class will not start, moderation of company names on a public
+leaderboard, and the fixed cost of your own time. At a quarter of a million active
+players those dominate, and none of them appear on a Netlify invoice.
+
+## 30. The classroom, and the bug it exposed
+
+An instructor was going to put forty students in front of this. Rather than
+imagine how that goes, it was simulated: forty joins issued at the same moment,
+the way a room of students actually presses a button.
+
+```
+the dashboard shows 40 students in 40 groups
+group sizes: 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ... (×40)
+```
+
+Forty groups of one. Every student got a private game against bots. The product
+is "students are seated into groups automatically", and it failed completely at
+the only moment it is ever asked to work.
+
+The cause was a read-modify-write with nothing guarding it: each request read the
+list of groups, saw none with room because none of the others had been written
+yet, and opened a new one.
+
+### The same flaw, during play, on every game
+
+If joining raced, filing would too. Five players filing at once, which is what
+happens at every deadline:
+
+```
+five submissions sent, 1 recorded
+LOST: Sableworth Ltd, Dunmore & Sons, Ketteridge, Ravensworth
+      — each was told 200 OK
+```
+
+Four players in five lost their orders, were told everything was fine, and were
+then carried by standing orders and marked as not having filed. This was not a
+classroom problem. It was every game, all along.
+
+The README had even named it, of the previous storage layer: *"Blobs has no
+compare-and-swap, so two players filing in the same second could overwrite one
+another. Moving storage to Postgres is the fix."* Postgres happened months ago.
+The fix did not. A migration completed and the reason for the migration was
+quietly forgotten.
+
+### What fixed it
+
+**Every write is conditional.** `games` carries a `version`; the update says
+`where code = $1 and version = $2`, so a write built on stale state matches no row
+and changes nothing. Silent loss became a loud error.
+
+**Every mutation retries.** `lib/mutate.mjs` reads, applies, writes, and on
+conflict re-reads and re-applies against whatever the other writer left behind.
+This is only correct because each change is expressed against *whatever the game
+currently is* — "record this seat's orders", "add this player", "resolve if due" —
+rather than against a snapshot. Re-applying is therefore doing it right, not doing
+it twice.
+
+**Seats are allocated, not searched for.** A student takes a number from an atomic
+counter on the cohort and their group is arithmetic. The group's game is created
+exactly once by a unique index on `(cohort_id, group_no)`; students who lose that
+race read the winner's row.
+
+Forty simultaneous joins now produce eight groups of five, forty distinct seats,
+every one of them openable. Five simultaneous filings produce five sets of orders
+used. Both are permanent tests, and both do the thing genuinely concurrently
+rather than in a loop, because a loop would have passed all along.
+
+### The classroom clock
+
+The same simulation turned up smaller things, of which one was a design error
+rather than a bug. **The default class was ten rounds at fifteen minutes — two and
+a half hours.** No lesson period is two and a half hours.
+
+The fix is not a better default number, because there isn't one. An MBA course
+meets weekly and plays a round between classes; a workshop plays three rounds in
+an afternoon; a lesson overruns and needs to stop mid-round. Two cadences were
+added:
+
+**A week**, which is how the established classroom simulations are actually run,
+and which the clock simply could not express before — it stopped at "a day".
+
+**When I say**, which has no deadline at all. Rounds close when a group has all
+filed, or when the facilitator closes them. This is now the default for a class,
+because in a room the instructor *is* the clock, and it covers all three shapes
+above without anyone having to pick a number that suits none of them.
+
+A weekly game also needed its own lead time: the daily anchor would have closed
+the first round the same evening, because six hours of lead is enough for a day
+and absurd for a week.
+
+### Still outstanding
+
+The same simulation found things not yet fixed, recorded here so they are not
+rediscovered by an instructor: a student arriving after the class has started
+lands in a lobby of one that never begins unless the facilitator presses start
+again, and the name filter refuses `Scunthorpe Ltd`, `Group 3 :)`, anything over
+28 characters and anything under 3 — all of which happen in front of a room.
+
+### The two the classroom simulation had left
+
+**The latecomer.** A student joining after the class began was given a group of
+one that never started, because starting groups is something the facilitator does
+and they had already done it. The student watched "waiting to start" for the rest
+of the lesson and the instructor had no way of knowing.
+
+Groups opened while a class is running now carry their own starting deadline —
+two minutes, long enough for a couple of stragglers to find each other, short
+enough that nobody is stranded — and start themselves with AI companies filling
+the rest, exactly as a public table does. The mechanism already existed; it was
+gated on `isPublic` for no reason other than that public tables were where it was
+first needed.
+
+The second latecomer found the next problem: their seat number mapped to the group
+that had just started, and joining a started game is refused. Seating now walks
+forward to the next group rather than failing on the first one that is unavailable.
+
+**The name filter, in both directions.** It refused `Scunthorpe Trading`,
+`Rapeseed Oil Company` and `Shitake Farms` — a town, a crop and a mushroom — by
+matching banned words as substrings of a name flattened to bare letters. That
+refusal lands on the payment page, on somebody about to hand over money, and they
+do not write in to complain about it.
+
+Matching is now on whole words, which costs the ability to catch declensions and
+buys back every legitimate name that happens to contain four unlucky letters. Two
+prefixes survive, being the two with no innocent continuation. Digit substitution
+is undone first, so `Sh1t Holdings` is caught. `f u c k it ltd` is still caught,
+but by recognising the *shape* — three or more single letters in a row, which
+nobody types by accident — rather than by flattening every name ever submitted.
+Trademarks match as words too, so `Pineapple Ltd` is no longer refused for
+containing `apple`.
+
+And a name typed by a student is now tidied rather than refused. A purchased name
+is exact, because that is what was bought; a student is one of forty people with
+an instructor waiting, so `Group 3 :)` quietly becomes `Group 3` and a
+thirty-six-character name is trimmed instead of rejected. Blocked words are still
+blocked.
+
+None of this makes the filter complete, and no filter is. `Barclays Bank plc` and
+`Elon Musk Ltd` still pass. The honest answer to those is a report link and the
+ability to revoke a name and refund it, neither of which exists yet — which is
+recorded here rather than pretended away.
+
+## 31. Adaptive polling
+
+§29 found that the entire cost of running this is the page asking the server
+whether anything has happened. Five hundred requests per player per game, of which
+about twelve found anything new: **97% of all traffic was a page being told what it
+had been told six seconds earlier.**
+
+The fix is not to poll less often. It is to stop pretending the page does not know
+what is going on.
+
+### What the page already knows
+
+It knows when the round closes. Between now and then, the only thing that can
+change is whether somebody else has filed — which is worth knowing eventually and
+never worth knowing within six seconds. So the page can sleep through the middle
+of a round and be awake for the part where the round actually turns over.
+
+| situation | it waits |
+|---|---|
+| a public lobby, filling | 5s |
+| a private lobby, waiting for a host | 20s |
+| mid-round, an hour to go | 300s |
+| two minutes to go | 72s |
+| twenty seconds to go | 8s |
+| past the deadline | 4s |
+| everyone has filed | 3s |
+| one person left, and it is not you | 5s |
+| a class with no clock | 60s |
+| **the game is over** | **never again** |
+
+That last row was a bug on its own: a finished game polled for ever, asking a
+question whose answer could not change.
+
+### The mistake in the middle of it
+
+The first version ramped: poll every 30 seconds, then 15, then 3, as the deadline
+approached. It felt careful and it only got traffic down 2.6x, because a gradual
+ramp spends most of its requests in the middle of a round — precisely where
+nothing can happen.
+
+Sleeping *to* the endgame rather than ramping towards it took it to **7.1x**. One
+long sleep lands the page at the end of the round having spent one request instead
+of forty.
+
+### The property that makes it safe
+
+Sleeping is only safe if the page never sleeps far past the moment a round closes.
+That is checked directly rather than argued: for every second of remaining time
+from 1 to 3,600, the chosen wait is compared with the time left. **Worst case
+across 3,600 starting points: never more than 10 seconds late.** A browser cannot
+wake at a finer grain than its shortest interval, so the bar is that interval and
+not zero.
+
+Two other things fall out of taking the question seriously. A hidden tab waits two
+minutes and refreshes the instant it is looked at again — people leave tabs open,
+and browsers throttle background timers anyway, so this makes deliberate what was
+already happening by accident. And filing re-arms the schedule immediately,
+because having filed may have made the round the last one outstanding.
+
+### What it costs now
+
+| | before | after |
+|---|---|---|
+| requests per game | 2,550 | **400** |
+| invocations at a million games | 2.55bn | **0.40bn** |
+| database queries per second | 984 | **154** |
+| Netlify | $11,813 | **$1,853** |
+| Supabase egress | $10,308 | **$1,598** |
+| **total** | **$22,121** | **$3,451** |
+
+And the number that matters this year rather than that one: the free tiers now
+cover about **275 games a month** instead of about 40. That is the difference
+between paying $45 a month during the quiet period and not paying anything.
+
+Two further reductions are known and not yet built, recorded so they are not
+rediscovered: answering an unchanged poll with an empty response rather than 11 KB
+of view, and not reading the whole 47 KB game document to decide that nothing has
+changed. Together they are most of what is left, and neither is urgent at $3,451.

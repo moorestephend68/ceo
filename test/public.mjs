@@ -97,16 +97,38 @@ await db.putGame(live);
 /* the first request to touch it afterwards scores it */
 const done = ok(await call('GET', `/api/state?code=${a1.code}&token=${a1.token}`), 'final');
 assert.equal(done.view.status, 'over');
+/* The board is money made above what every company starts with, so a company
+   that finished below its starting cash is not on it — that is the rule, not an
+   omission. What must hold either way is that nothing else can get on it. */
+const mine = done.view.market.find((m) => m.you);
+const made = Math.round(mine.finalValue) - board_start();
+function board_start() { return 250000; }        // the standard preset's cash
 const board = ok(await call('GET', '/api/leaderboard'), 'board');
-console.log('\nleaderboard after one game:');
-board.board.forEach((r) => console.log(`  ${r.rank}. ${r.name.padEnd(14)} ${r.rating}  ${r.band}  ${r.games} game`));
-assert.equal(board.board.length, 1, 'only the claimed company is on the board');
-assert.equal(board.board[0].name, 'Ravensworth');
+console.log(`\nRavensworth finished at ${Math.round(mine.finalValue).toLocaleString('en-US')}` +
+            ` — ${made > 0 ? 'made' : 'lost'} ${Math.abs(made).toLocaleString('en-US')}`);
+console.log('leaderboard:', board.board.length
+  ? board.board.map((r) => `${r.rank}. ${r.name} ${r.score}`).join(' · ') : '(empty)');
+console.log(`decays ${board.decayPerHour * 100}% an hour, half gone after ${board.halfLifeHours}h`);
+
+if (made > 0) {
+  assert.equal(board.board.length, 1, 'the one company that made money should be on it');
+  assert.equal(board.board[0].name, 'Ravensworth');
+  assert.equal(board.board[0].made, made, 'the board should show what it actually made');
+} else {
+  assert.equal(board.board.length, 0, 'a company that lost money must not be on the board');
+  console.log('  it lost money, so the board is empty — which is the rule working');
+}
+/* nobody without a purchased name gets on it, whatever they scored */
+assert(!board.board.some((r) => r.name === 'Passing Stranger'),
+  'an unnamed player must never reach the board');
 
 const rec = ok(await call('GET', '/api/record', null, 'tok:alice'), 'record');
-console.log('alice’s record:', JSON.stringify({ rating: rec.rating, games: rec.games, recent: rec.recent }));
+console.log('alice’s record:', JSON.stringify({ rating: rec.rating, games: rec.games,
+  onBoard: rec.onBoard, boardScore: rec.boardScore }));
 assert.equal(rec.games, 1);
 assert.equal(rec.recent.length, 1);
+/* the rating is kept and is still hers, even though it is off the public board */
+assert(typeof rec.rating === 'number' && rec.band, 'the rating must survive off the board');
 
 /* a second pass must not score it again */
 await call('GET', `/api/state?code=${a1.code}&token=${a1.token}`);
@@ -115,9 +137,14 @@ const again = ok(await call('GET', '/api/record', null, 'tok:alice'), 'record 2'
 console.log('after re-reading and another sweep, games played:', again.games);
 assert.equal(again.games, 1, 'the game must not be scored twice');
 
-/* a signed-out visitor can read the board */
+/* a signed-out visitor can read the board — it is the shop window, so it must
+   never need an account, and it must say how it works to somebody who has not
+   played yet */
 const anonBoard = ok(await call('GET', '/api/leaderboard'), 'anon board');
-assert(anonBoard.board.length >= 1);
-console.log('signed out, the board is readable:', anonBoard.board.length, 'entry');
+assert(Array.isArray(anonBoard.board), 'the board must be readable signed out');
+assert.equal(anonBoard.startCash, 250000, 'and say what "money made" is measured from');
+assert(anonBoard.halfLifeHours > 6 && anonBoard.halfLifeHours < 7,
+  'and how fast it decays');
+console.log('signed out, the board is readable:', anonBoard.board.length, 'entries');
 
 console.log('\npublic OK');

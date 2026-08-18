@@ -10,6 +10,7 @@
 import * as G from '../../lib/game.mjs';
 import * as P from '../../lib/public.mjs';
 import { getDb } from '../../lib/runtime.mjs';
+import { mutateGame } from '../../lib/mutate.mjs';
 
 export default async () => {
   const now = new Date().toISOString();
@@ -18,27 +19,32 @@ export default async () => {
   /* Public tables whose wait has run out start with bots filling the rest,
      so a lobby nobody else joined still becomes a game. */
   const lobbies = await db.dueLobbies(now);
-  for (const game of lobbies) {
-    if (!P.shouldStart(game, now)) continue;
-    P.startPublic(game, now);
-    await db.putGame(game);
+  for (const stale of lobbies) {
+    /* Somebody may be joining this very table as the sweep runs, so the same
+       read-apply-retry as everywhere else rather than a blind overwrite. */
+    await mutateGame(db, stale.code, (game) => {
+      if (!P.shouldStart(game, now)) return false;
+      P.startPublic(game, now);
+    }).catch(() => {});
   }
 
   const due = await db.dueGames(now);
   let closed = 0, rated = 0;
-  for (const game of due) {
-    let changed = false;
-    while (game.status === 'playing' && G.shouldResolve(game, now)) {
-      G.resolveRound(game, now);
-      closed += 1;
-      changed = true;
-    }
-    if (game.status === 'over' && game.isPublic && !game.scored) {
-      const out = await P.scoreGame(db, game);
-      if (out.scored) rated += 1;
-      changed = true;
-    }
-    if (changed) await db.putGame(game);
+  for (const stale of due) {
+    await mutateGame(db, stale.code, async (game) => {
+      let changed = false;
+      while (game.status === 'playing' && G.shouldResolve(game, now)) {
+        G.resolveRound(game, now);
+        closed += 1;
+        changed = true;
+      }
+      if (game.status === 'over' && game.isPublic && !game.scored) {
+        const out = await P.scoreGame(db, game);
+        if (out.scored) rated += 1;
+        changed = true;
+      }
+      return changed || false;
+    }).catch(() => {});
   }
 
   /* Names held by someone who never finished paying go back on the market. */

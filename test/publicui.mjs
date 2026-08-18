@@ -27,12 +27,48 @@ if (!(await guest.$('#publicname'))) throw new Error('a signed-out player was no
 
 await guest.fill('#publicname', 'Ketteridge');
 await guest.click('#playnow');
-await guest.waitForSelector('.code', { timeout: 10000 });
+await guest.waitForSelector('text=Finding you a table', { timeout: 10000 });
 const lobby = await guest.evaluate(() => document.body.innerText);
-console.log('joined a public table:', /Waiting for players/.test(lobby));
+console.log('seated at a public table:', /Finding you a table/.test(lobby));
 console.log('lobby explains itself:', /empty seats become AI/i.test(lobby));
 console.log('no host start button on a public table:', !(await guest.$('#start')));
 if (await guest.$('#start')) throw new Error('a public table offered a host start button');
+
+/* A ranked table with an invite link is not a ranked table: four friends could
+   fill it and settle the finishing order between them, and the thing a host pays
+   for — choosing who plays — would be free. */
+const shareBox = await guest.$('#sharelink');
+const copyBtn = await guest.$('#copy');
+const takeSeat = await guest.$('#joinname');
+console.log('no share link on a public table:', !shareBox && !copyBtn);
+console.log('no "take a seat" form either:', !takeSeat);
+if (shareBox || copyBtn) throw new Error('a public table offered an invite link');
+if (takeSeat) throw new Error('a public table offered a join form');
+console.log('and it says why:', /no link to share, on purpose/i.test(lobby));
+if (!/no link to share, on purpose/i.test(lobby)) {
+  throw new Error('the missing invite link is unexplained, which reads as a bug');
+}
+console.log('duration reads sensibly:',
+            (lobby.match(/about [^\n·]+ end to end/) || ['—'])[0]);
+
+/* The code is not in the address bar either, because that is the one place a page
+   cannot un-show it. Which means a refresh has to find the table another way —
+   and losing an in-progress ranked game to a reload would be far worse than the
+   thing this is protecting against. */
+const url = guest.url();
+console.log('the address bar:', url, '— carries no code:', !/\/g\/[A-Z0-9]{6}/.test(url));
+if (/\/g\/[A-Z0-9]{6}/i.test(url)) throw new Error('the table code is in the URL');
+const chip = await guest.textContent('#gamechip');
+console.log('the header chip says:', JSON.stringify(chip.trim()));
+if (/[A-Z0-9]{6}/.test(chip)) throw new Error('the table code is in the header chip');
+
+await guest.reload();
+await guest.waitForSelector('text=Finding you a table', { timeout: 15000 });
+const back = await guest.evaluate(() => document.body.innerText);
+console.log('after a refresh, still at the same table:', /Ketteridge/.test(back));
+if (!/Ketteridge/.test(back)) throw new Error('a refresh lost the ranked table');
+
+
 const notice = /unrated/.test(lobby);
 console.log('told the game is unrated:', notice);
 if (!notice) throw new Error('an unnamed player was not told the game is unrated');
@@ -54,6 +90,14 @@ if (!/Only public games count/.test(board)) throw new Error('the board does not 
 await member.click('#closeboard');
 await member.waitForTimeout(300);
 console.log('closes again:', /Play now/.test(await member.evaluate(() => document.body.innerText)));
+
+/* ---- which build is running --------------------------------------------- */
+/* Page and server are uploaded separately, and having one without the other is
+   exactly the confusion this line exists to end. */
+const stamp = await member.evaluate(() => document.body.innerText.match(/page .*server .*/)?.[0] || '');
+console.log('\nbuild stamp on the page:', stamp || '(none)');
+if (!/page \S/.test(stamp)) throw new Error('the page does not say which build it is');
+if (!/server \S/.test(stamp)) throw new Error('the page does not say which build the server is');
 
 await browser.close();
 console.log('\nconsole errors:', errs.length ? errs.join(' | ') : 'none');

@@ -199,5 +199,42 @@ const late = await call('POST', '/api/submit', { code: host.code, token: host.to
 assert.equal(late.status, 409);
 console.log('\nfiling after the game ended:', late.status, late.body.error);
 
+/* ---------------------------------------- a public table is not a private one */
+/* The rated tier rests entirely on nobody choosing who they sit with. If a code
+   from a public table could be passed to three friends, four people could arrange
+   the finishing order between them — and the thing somebody paid for, choosing
+   who plays, would be free. */
+const pub = ok(await call('POST', '/api/public/join', { name: 'Ketteridge' }), 'public join');
+console.log('\na public table was opened:', pub.code, `(${pub.view.joined.length} seated)`);
+
+const smuggled = await call('POST', '/api/join', { code: pub.code, name: 'A Friend' });
+console.log('a friend given that code:', smuggled.status, '-', smuggled.body.error);
+assert.equal(smuggled.status, 403, 'a public table must not be joinable by code');
+
+const stillThere = ok(await call('GET', `/api/state?code=${pub.code}&token=${pub.token}`), 'public state');
+assert.equal(stillThere.view.joined.length, pub.view.joined.length,
+  'and nobody should have been seated by the attempt');
+console.log('seats at that table, unchanged:', stillThere.view.joined.length);
+
+/* Nor watched. A code that lets you watch is a code that lets you coach. */
+const peek = await call('GET', `/api/state?code=${pub.code}`);
+console.log('watching that table without a seat:', peek.status, '-', peek.body.error);
+assert.equal(peek.status, 403, 'a ranked table must not be spectatable');
+const badToken = await call('GET', `/api/state?code=${pub.code}&token=not-a-real-token`);
+assert.equal(badToken.status, 403, 'nor with a made-up token');
+console.log('with an invented token:', badToken.status);
+
+/* And a private game is still shareable by code, which is the whole point of
+   paying for one. The rule has to cut exactly here and nowhere else. */
+const priv = ok(await call('POST', '/api/create',
+  { seats: 4, rounds: 8, cadence: '5m' }, 'tok:host'), 'private game');
+const friend = await call('POST', '/api/join', { code: priv.code, name: 'A Friend' });
+console.log('the same request against a private game:', friend.status,
+            friend.status === 200 ? '— seated' : '- ' + friend.body.error);
+assert.equal(friend.status, 200, 'private games must stay joinable by code');
+const pv = ok(await call('GET', `/api/state?code=${priv.code}&token=${priv.token}`), 'private state');
+console.log('  now seated there:', pv.view.joined.map((j) => j.name).join(', '));
+assert.equal(pv.view.joined.length, 2);
+
 console.log('database rows:', JSON.stringify(db._counts()));
 console.log('\napi OK');
