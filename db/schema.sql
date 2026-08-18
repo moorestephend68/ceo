@@ -125,11 +125,22 @@ $$ language plpgsql;
 -- A new sign-up gets a profile row automatically.
 create or replace function handle_new_user() returns trigger as $$
 begin
-  insert into profiles (id, email) values (new.id, new.email)
+  insert into public.profiles (id, email) values (new.id, new.email)
   on conflict (id) do nothing;
   return new;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer set search_path = public, pg_temp;
+
+-- `set search_path` and the explicit `public.` are not decoration.
+--
+-- This function runs inside Supabase's auth schema when a user is created, and a
+-- security-definer function with no fixed search path resolves `profiles`
+-- against whatever path the caller happens to have. When that path does not
+-- include `public`, the insert fails with "relation profiles does not exist",
+-- the trigger aborts the user creation, and the only thing the person signing in
+-- ever sees is **"Database error saving new user"** — a message that names
+-- neither the table nor the trigger. Pinning both removes the class of failure
+-- rather than the instance.
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
