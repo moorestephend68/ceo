@@ -168,12 +168,17 @@
   .warnbox.bad .ic{color:var(--critical)}
   .warnbox.warn .ic{color:var(--warning)}
 
-  button.primary{
+  button.primary, a.primary{
     width:100%;margin-top:14px;padding:12px 16px;font-size:15px;font-weight:650;
     font-family:inherit;background:var(--series-1);color:#fff;border:none;
     border-radius:9px;cursor:pointer;letter-spacing:-0.01em;
   }
-  button.primary:hover{filter:brightness(1.08)}
+  /* The route to the live game is an anchor, not a button — it is a link to
+     somewhere else and should behave like one for middle-click, for opening in a
+     new tab, and for anybody reading the page with something other than eyes. It
+     just has to look like the button next to it. */
+  a.primary{display:block;box-sizing:border-box;text-align:center;text-decoration:none}
+  button.primary:hover, a.primary:hover{filter:brightness(1.08)}
   button.primary:disabled{opacity:0.45;cursor:not-allowed}
   button.ghost{
     padding:9px 14px;font-size:13px;font-family:inherit;font-weight:600;
@@ -246,6 +251,11 @@
     <div class="stat"><div class="k">Cash</div><div class="v tnum" id="s-cash">—</div></div>
     <div class="stat"><div class="k">Company value</div><div class="v tnum" id="s-value">—</div></div>
     <div class="stat"><div class="k">Borrowing</div><div class="v tnum" id="s-credit">—</div></div>
+    <!-- LIVE-LINK 1 of 3. The single-player game had no route to the live one at
+         all: somebody could arrive, play three levels, enjoy it and never learn
+         that playing other people existed. -->
+    <a class="icon-btn" href="/g/" id="tolive" style="text-decoration:none"
+       title="Play against other people">Play people →</a>
     <button class="icon-btn" id="theme-toggle" title="Toggle light/dark">Dark</button>
     <button class="icon-btn" id="restart">New game</button>
   </header>
@@ -350,6 +360,12 @@
       In the first two levels you are running against the market. In the shared market
       you are running against companies who want the same customers.</p>
     <button class="primary" id="start">Start</button>
+    <!-- LIVE-LINK 2 of 3. This modal is not hidden on load, so it is the first
+         thing every visitor sees — the actual front door of the whole site. -->
+    <p class="muted" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+      Rather play <b>real people</b>? <a href="/g/">Join a live table</a> — five companies,
+      ten rounds, about fifty minutes. Free, and it needs no account. Empty seats fill
+      with AI companies and you find out who was who at the end.</p>
   </div>
 </div>
 
@@ -358,6 +374,17 @@
     <h2>Game over</h2>
     <div id="final"></div>
     <button class="primary" id="again">Play again</button>
+    <!-- LIVE-LINK 3 of 3. The moment somebody has just finished a company is the
+         moment they are deciding what to do next, and it was a dead end. -->
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+      <p style="margin:0 0 10px">You have just run a company against the market.
+        <b>Running one against other people is a different game</b> — they are guessing
+        your price while you guess theirs, and nobody finds out who was human until
+        the last round is scored.</p>
+      <a class="primary" href="/g/">Play against people →</a>
+      <p class="muted" style="margin:10px 0 0">Free, no account needed. There is also a
+        version for running a class, and a league for bots.</p>
+    </div>
   </div>
 </div>
 
