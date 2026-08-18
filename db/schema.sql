@@ -239,3 +239,64 @@ create index if not exists cohorts_demo_idx on cohorts (expires_at) where is_dem
 -- facilitator matches nobody — so a demo cohort is invisible to the anon key.
 -- Only the service role inside the functions can see it, which is what the demo
 -- token is checked against.
+
+-- ============================================================ stage 5
+-- The decaying leaderboard.
+--
+-- The public board is no longer the rating. It is the best company anybody has
+-- built lately — money made over the starting cash, worth 10% less every hour,
+-- so half a result is gone in under seven hours and the top of the board is
+-- winnable this afternoon rather than owned by whoever got there first.
+--
+-- Nothing new is stored for it: a result already records what the company was
+-- worth and when. All it needs is to be able to ask for the last two days
+-- cheaply, which is this index. Anything older has decayed to under a
+-- hundredth of itself and cannot reach a board of twenty-five.
+create index if not exists results_recent_idx on results (created_at desc)
+  where company_id is not null;
+
+-- ============================================================ stage 6
+-- Concurrency. This is a correctness fix, not a feature.
+--
+-- A game is one JSON document, so every change is read-modify-write. Two of
+-- those overlapping meant one of them vanished: five players filing in the same
+-- second produced five reads of the same state and five writes, of which four
+-- were lost — and all five were answered 200 OK. Near a deadline, which is when
+-- everyone files, that was the normal case rather than an edge case.
+--
+-- `version` makes the write conditional. The application updates
+--   ... where code = $1 and version = $2
+-- so a write built on stale state matches no row, changes nothing, and is
+-- reported instead of silently applied. lib/mutate.mjs then re-reads and
+-- re-applies against whatever the other writer left behind.
+alter table games add column if not exists version integer not null default 1;
+
+-- Seating a class, without forty students racing each other.
+--
+-- Joining used to read the list of groups, look for one with room, and open a
+-- new group if there was none. Correct when students arrive one at a time;
+-- catastrophic when they arrive together, because they all read the list before
+-- any of them had written to it. Forty students pressing Join in the same ten
+-- seconds produced forty groups of one.
+--
+-- Now each student takes a number in a single atomic statement and their group
+-- is arithmetic.
+alter table cohorts add column if not exists seats_taken integer not null default 0;
+
+create or replace function take_cohort_seat(c_id uuid) returns integer as $$
+declare
+  n integer;
+begin
+  update cohorts set seats_taken = seats_taken + 1
+   where id = c_id
+  returning seats_taken into n;
+  return n;
+end;
+$$ language plpgsql;
+
+-- And the game for a group is created exactly once, however many of its five
+-- students arrive at the same instant: the unique index decides, and the losers
+-- read the winner's row.
+alter table games add column if not exists group_no integer;
+create unique index if not exists games_cohort_group_idx
+  on games (cohort_id, group_no) where cohort_id is not null;
