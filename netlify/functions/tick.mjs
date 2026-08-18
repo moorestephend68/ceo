@@ -38,7 +38,7 @@ export default async () => {
         closed += 1;
         changed = true;
       }
-      if (game.status === 'over' && game.isPublic && !game.scored) {
+      if (game.status === 'over' && (game.isPublic || game.league === 'bot') && !game.scored) {
         const out = await P.scoreGame(db, game);
         if (out.scored) rated += 1;
         changed = true;

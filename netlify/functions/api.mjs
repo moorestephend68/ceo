@@ -12,6 +12,11 @@ import * as BOARD from '../../lib/board.mjs';
 import * as CO from '../../lib/cohorts.mjs';
 import * as D from '../../lib/demo.mjs';
 import * as M from '../../lib/mutate.mjs';
+import * as AN from '../../lib/analysis.mjs';
+import { classReport } from '../../lib/report.mjs';
+import * as L from '../../lib/league.mjs';
+import * as T from '../../lib/talent.mjs';
+import * as PR from '../../lib/progress.mjs';
 import { requireUser, userFrom } from '../../lib/auth.mjs';
 import { getDb, getVerifier, publicAuthConfig, serverReady } from '../../lib/runtime.mjs';
 import { BUILD } from '../../lib/version.mjs';
@@ -46,7 +51,7 @@ async function settle(db, game, now) {
   }
   /* Ratings move when the game ends, and only for public games. scoreGame is
      idempotent at the database, so two requests finishing it together is fine. */
-  if (game.status === 'over' && game.isPublic && !game.scored) {
+  if (game.status === 'over' && (game.isPublic || game.league === 'bot') && !game.scored) {
     await P.scoreGame(db, game);
     changed = true;
   }
@@ -83,6 +88,23 @@ export default async (req) => {
 
   /* A class board, plus — for the demo only — the two or three sentences that
      say what to look at. A dashboard of six groups explains nothing on its own. */
+  /* Every eligible player's average, for the percentile on a profile. Read when
+     needed and not cached: the pool is small, and a stale percentile is a number
+     that is wrong about a person. */
+  const population = async () => {
+    const opted = await database().liveTalentOptIns();
+    const out = [];
+    for (const o of opted) {
+      const acct = await A.accountState(database(), o.owner);
+      const c = acct.companies[0];
+      if (!c) continue;
+      const rows = await database().resultsForCompany(c.id);
+      if (rows.length < T.MIN_GAMES) continue;
+      out.push(rows.reduce((a, r) => a + (Number(r.value) - P.START_CASH), 0) / rows.length);
+    }
+    return out;
+  };
+
   const boardOf = async (co) => {
     const b = await CO.board(database(), co);
     if (co.is_demo) b.guide = D.guide(b);
@@ -244,6 +266,134 @@ export default async (req) => {
       });
     }
 
+    /* -------------------------------------------------------- the bot league */
+    /* Somebody was always going to automate this. Rather than policing it, there
+       is a pool where it is the point — bots against bots, on their own board.
+       We never run anybody's code: a bot lives on its author's machine and talks
+       to this API with a key. */
+    if (route === 'bot/key' && req.method === 'POST') {
+      const user = await requireUser(req, db, verify);
+      const key = await L.issueKey(db, user.id);
+      /* Shown once. Stored hashed, so nobody — including us — can read it back;
+         asking for another simply revokes this one. */
+      return json({ key, shownOnce: true });
+    }
+
+    if (route === 'bot/join' && req.method === 'POST') {
+      const owner = await L.whoseKey(db, body.key || req.headers.get('x-bot-key'));
+      if (!owner) return fail('That is not a bot key. Create one from your account page.', 401);
+
+      const since = new Date(Date.parse(now) - 3600000).toISOString();
+      const started = await db.leagueGamesSince(owner, since);
+      if (started >= L.GAMES_PER_HOUR) {
+        return fail(`A key may start ${L.GAMES_PER_HOUR} games an hour, and this one has `
+          + `started ${started}. Wait a little.`, 429);
+      }
+
+      const acct = await A.accountState(db, owner);
+      const mine = acct.companies[0];
+      const name = mine ? mine.name : `Bot ${owner.slice(0, 6)}`;
+
+      const seated = await L.joinLeague(db, {
+        owner, name, companyId: mine ? mine.id : null, now,
+      });
+      if (seated.created) {
+        seated.game.leagueOwner = owner;
+        await db.putGame(seated.game, owner);
+        return json({ code: seated.game.code, token: seated.token,
+                      ranked: !!mine, view: G.viewFor(seated.game, seated.token) });
+      }
+      /* Joining a table somebody else opened, under the same retry as anywhere. */
+      let token = null;
+      const { game } = await M.mutateGame(db, seated.game.code, (g) => {
+        if (g.status !== 'lobby' || g.seats.length >= g.config.seats) return false;
+        token = G.joinGame(g, name, now).token;
+        const seat = g.seats[g.seats.length - 1];
+        seat.botOwner = owner;
+        seat.companyId = mine ? mine.id : null;
+        return true;
+      });
+      if (!token) return fail('That table filled up. Try again.', 409);
+      return json({ code: game.code, token, ranked: !!mine,
+                    view: G.viewFor(game, token) });
+    }
+
+    if (route === 'bot/board') {
+      return json({
+        board: L.board(await db.leagueResults()),
+        format: { seats: L.FORMAT.seats, rounds: L.FORMAT.rounds,
+                  roundSeconds: L.FORMAT.roundSeconds },
+        window: L.WINDOW, minGames: L.MIN_GAMES,
+        gamesPerHour: L.GAMES_PER_HOUR, startCash: L.START_CASH,
+      });
+    }
+
+    /* ------------------------------------------------- being findable */
+    /* A company pays to browse a pool of players, sees a company name and a
+       record, and can send one thing: an invitation to apply. It never learns
+       who anybody is. Nobody is in the pool who did not ask to be, nobody under
+       eighteen is in it at all, and nobody appears on a record too thin to mean
+       anything. The rules live in lib/talent.mjs and are enforced there rather
+       than here, so a second route cannot forget one. */
+
+    /* What a company would see about you — built by the same call that would
+       build it for them, because a profile you cannot see is one you cannot
+       correct. Answers whether or not you are opted in: knowing what would be
+       shown is exactly what you need in order to decide. */
+    if (route === 'talent/me') {
+      const user = await requireUser(req, db, verify);
+      const acct = await A.accountState(db, user.id);
+      const mine = acct.companies[0] || null;
+      const status = await T.statusOf(db, user.id);
+      if (!mine) {
+        return json({ status, company: null, minGames: T.MIN_GAMES,
+          profile: { visible: false, games: 0, needs: T.MIN_GAMES,
+                     why: 'A profile needs a company name.' } });
+      }
+      const rows = await db.resultsForCompany(mine.id);
+      const p = T.profile(rows, { population: await population(),
+                                  optIn: await db.talentOptIn(user.id) });
+      /* A sibling of the profile, not part of it.
+
+         The rule is that a company never sees anything the player is not also
+         shown — one-directional, so the player may be shown more. A curve is
+         somebody's own history with the game and is nobody else's business, so
+         it lives outside `profile` and cannot travel with it by accident. */
+      const progress = PR.curveFor(rows, { start: P.START_CASH });
+      return json({ status, company: { id: mine.id, name: mine.name }, profile: p, progress,
+                    minGames: T.MIN_GAMES, traitGames: T.TRAIT_GAMES,
+                    /* Shown alongside, so nobody has to guess what an invitation
+                       would look like before agreeing to receive one. */
+                    example: p.visible ? T.invitation({
+                      companyName: 'An employer', role: 'the role they are hiring for',
+                      url: 'their application page', profile: p,
+                    }) : null });
+    }
+
+    /* Does anybody get better at this?
+
+       Public and anonymous — it is an aggregate over everybody and names
+       nobody, and a claim about whether the game teaches anything should be
+       checkable by the people being asked to believe it. It answers "not enough
+       data yet" until there is, which for a while is the honest answer. */
+    if (route === 'learning') {
+      const rowsAll = await db.resultsForLearning();
+      return json({ learning: PR.learning(rowsAll, { n: 5, start: P.START_CASH }) });
+    }
+
+    if (route === 'talent/optin' && req.method === 'POST') {
+      const user = await requireUser(req, db, verify);
+      await T.optIn(db, user.id, { adult: !!body.adult, openTo: body.openTo,
+                                   region: body.region, now });
+      return json({ status: await T.statusOf(db, user.id) });
+    }
+
+    if (route === 'talent/optout' && req.method === 'POST') {
+      const user = await requireUser(req, db, verify);
+      await T.optOut(db, user.id, now);
+      return json({ status: await T.statusOf(db, user.id) });
+    }
+
     /* ------------------------------------------------------------ cohorts */
     /* Running a class is the facilitator licence; joining one is free, the same
        way joining a private game is. */
@@ -289,6 +439,32 @@ export default async (req) => {
       }
 
       if (!action) return json({ cohort: await boardOf(cohort) });
+
+      /* What happened, and what is worth talking about. The dashboard reads it
+         live; the report and the deep export are the same computation. */
+      if (action === 'analysis') {
+        return json({ analysis: AN.analyse(cohort, await db.gamesOfCohort(cohort.id)) });
+      }
+
+      if (action === 'report') {
+        const a = AN.analyse(cohort, await db.gamesOfCohort(cohort.id));
+        const safe = cohort.name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'class';
+        return new Response(classReport(a), { status: 200, headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'content-disposition': `attachment; filename="${safe}-debrief.html"`,
+          'cache-control': 'no-store',
+        } });
+      }
+
+      if (action === 'rounds') {
+        const csv = AN.roundsCsv(cohort, await db.gamesOfCohort(cohort.id));
+        const safe = cohort.name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'class';
+        return new Response(csv, { status: 200, headers: {
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': `attachment; filename="${safe}-rounds.csv"`,
+          'cache-control': 'no-store',
+        } });
+      }
 
       if (action === 'export') {
         const csv = await CO.exportCsv(db, cohort);
@@ -431,8 +607,13 @@ export default async (req) => {
         const seat = G.seatByToken(game, w.token);
         if (!seat) continue;
         const over = game.status === 'over';
-        const ranked = game.seats.slice()
-          .sort((a, b) => G.finalValue(b) - G.finalValue(a));
+        /* Only once there are companies to value. A game still in its lobby has
+           seats with no firm behind them, and asking what they are worth threw —
+           which took the whole list down to its fallback and quietly lost the
+           "your move" column, in exactly the situation the list exists for. */
+        const ranked = over
+          ? game.seats.slice().sort((a, b) => G.finalValue(b) - G.finalValue(a))
+          : [];
         out.push({
           code: game.code, name: seat.name,
           isPublic: !!game.isPublic, cohort: game.cohortName || null,
@@ -444,7 +625,7 @@ export default async (req) => {
           filed: game.status === 'playing' ? seat.submittedRound === game.round : null,
           autoRounds: seat.autoRounds || 0,
           out: !!(seat.firm && seat.firm.bankrupt),
-          value: game.status === 'lobby' ? null : Math.round(G.finalValue(seat)),
+          value: game.status === 'lobby' || !seat.firm ? null : Math.round(G.finalValue(seat)),
           place: over ? ranked.findIndex((s) => s.id === seat.id) + 1 : null,
         });
       }
@@ -484,7 +665,7 @@ export default async (req) => {
       return fail('This site has not finished being set up: its database is not '
         + 'connected yet. See SETUP.md, step 3 — the Netlify environment variables.', 503);
     }
-    if (/is_demo|demo_token|schema cache|column .* does not exist/i.test(msg)) {
+    if (/is_demo|demo_token|bot_keys|talent_optin|schema cache|column .* does not exist|relation .* does not exist/i.test(msg)) {
       return fail('The database is missing the latest tables. Re-run db/schema.sql '
         + 'in the Supabase SQL editor — it is idempotent and will not drop anything.', 503);
     }

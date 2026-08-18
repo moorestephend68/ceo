@@ -300,3 +300,97 @@ $$ language plpgsql;
 alter table games add column if not exists group_no integer;
 create unique index if not exists games_cohort_group_idx
   on games (cohort_id, group_no) where cohort_id is not null;
+
+-- ============================================================ stage 7
+-- The bot league.
+--
+-- Somebody was always going to automate this. The client is HTTP, the state is
+-- JSON, and an evening's work turns a browser tab into a program. Measured, a
+-- straightforward optimiser wins 35% of ranked tables against a thoughtful
+-- human's 30% — enough of an edge to quietly sour the human board, not enough
+-- to be worth an arms race over.
+--
+-- So it gets somewhere to go instead. Bots play bots, on their own board, with
+-- their own key. Nothing here runs anybody's code: a bot lives on its author's
+-- machine and talks to the ordinary API.
+
+-- One key per account, stored hashed. A key can act on its owner's behalf, so
+-- it is treated the way such a thing should be: shown once at creation, never
+-- readable back, and replaced rather than recovered. Asking for a new key
+-- revokes the old one, which is the only revocation anybody actually needs.
+create table if not exists bot_keys (
+  owner      uuid primary key references profiles on delete cascade,
+  key_hash   text not null unique,
+  created_at timestamptz not null default now()
+);
+
+alter table bot_keys enable row level security;
+-- No policy at all: this table is reachable only by the service role, from the
+-- server. A hashed key is not a secret worth publishing even so.
+
+-- Which pool a game belongs to. Null is the ordinary world — private games,
+-- classes, ranked public tables. 'bot' is the league, and it is the flag that
+-- keeps league results off the human board and out of the human rating.
+alter table games   add column if not exists league text;
+alter table results add column if not exists league text;
+
+-- Finding the open league table, and counting what one key has started lately.
+-- Both are asked on every join, so both are indexed.
+create index if not exists games_league_lobby_idx on games (league, created_at)
+  where league is not null and status = 'lobby';
+create index if not exists games_league_owner_idx on games (league, host, created_at desc)
+  where league is not null;
+
+-- The league board reads its own results and nothing else. The partial index
+-- means the human board's rows are not even walked.
+create index if not exists results_league_idx on results (league, created_at desc)
+  where league is not null;
+
+-- ============================================================ stage 8
+-- Being findable by somebody who is hiring.
+--
+-- A company pays to browse a pool of players, sees a company name and a record,
+-- and can send one thing: an invitation to apply. It never learns who the person
+-- is. The player decides whether to answer, and answering is what reveals them.
+--
+-- The schema is small because most of the product is refusals, and the refusals
+-- live in lib/talent.mjs. What has to be stored is: who asked to be listed, that
+-- they said they are an adult, when they said it, and — separately — enough of
+-- how each game was played that a profile can describe more than a number.
+
+-- Explicitly opted in. Not a column on profiles with a default, because a
+-- default is a decision nobody made: a row here exists only because somebody
+-- pressed a button, and `revoked_at` is set rather than the row deleted so that
+-- "did they ever consent, and when" stays answerable.
+create table if not exists talent_optin (
+  owner      uuid primary key references profiles on delete cascade,
+  adult      boolean not null default false,
+  open_to    text,
+  region     text,
+  opted_at   timestamptz not null default now(),
+  revoked_at timestamptz
+);
+
+alter table talent_optin enable row level security;
+-- No policy: reachable only by the service role. A list of people open to being
+-- approached is exactly the kind of table that should not be publicly readable,
+-- and the anon key is public by design.
+
+-- One index, for the only question the pool ever asks.
+create index if not exists talent_live_idx on talent_optin (opted_at desc)
+  where revoked_at is null and adult;
+
+-- How a game was played, not merely what it made.
+--
+-- A finished game is a large document and it is thrown away; a result row is
+-- kept. So the description has to be computed while the game still exists. Each
+-- figure is measured against the rest of that particular table — "4% under the
+-- room" means the same thing across markets and shocks, where "charged $1,240"
+-- does not.
+--
+-- Stored for every rated seat. Only two of the figures are ever shown to
+-- anybody: price and quality settle within 10% of their long-run value after a
+-- single game, while advertising, borrowing and margin are still wrong more
+-- often than not after twenty. The rest are kept because they cost nothing to
+-- keep and are worth having in aggregate.
+alter table results add column if not exists traits jsonb;
