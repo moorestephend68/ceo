@@ -91,6 +91,49 @@ const lobby = await rich.evaluate(() => document.body.innerText);
 console.log('game created, host seat is named:', /Ravensworth & Co/.test(lobby));
 if (!/Ravensworth & Co/.test(lobby)) throw new Error('the game did not use the account company name');
 
+/* ---- the licence an instructor would buy --------------------------------
+   The demo is what convinces them; the moment after being convinced is the
+   worst possible time to have nowhere to pay. For a while this card did not
+   exist at all when you were unlicensed, which meant exactly that. */
+console.log('\nThe facilitator licence:');
+{
+  const anon = await page(null);
+  const t = await anon.evaluate(() => document.body.innerText);
+  console.log('  offered to a signed-out visitor:', /Run it with your own class/.test(t));
+  if (!/Run it with your own class/.test(t)) {
+    throw new Error('an instructor who has just used the demo is offered no way to buy');
+  }
+  console.log('  and told to sign in first:', /Sign in above first/.test(t));
+  if (await anon.$('#buyfacilitator')) {
+    throw new Error('a signed-out visitor was sent to checkout');
+  }
+
+  /* Signed in, nothing bought: the button must be there and must lead to
+     Stripe rather than to nothing. */
+  const buyer = await page('tok:nobody');
+  await buyer.waitForTimeout(600);
+  const bt = await buyer.evaluate(() => document.body.innerText);
+  console.log('  signed in without it, the card is still offered:',
+              /Run it with your own class/.test(bt));
+  const btn = await buyer.$('#buyfacilitator');
+  const forSale = await buyer.evaluate(async () =>
+    (await (await fetch('/api/config')).json()).products.facilitator.forSale);
+  console.log(`  a buy button when it is configured for sale (${forSale}):`, !!btn === forSale);
+  if (!!btn !== forSale) {
+    throw new Error('the buy button and whether it is on sale disagree');
+  }
+
+  /* And the licence holder sees the dashboard rather than the offer. */
+  const owner = await page('tok:demo');
+  await owner.waitForSelector('text=Run a class', { timeout: 10000 });
+  const ot = await owner.evaluate(() => document.body.innerText);
+  console.log('  somebody who owns it sees the dashboard, not the offer:',
+              /Run a class/.test(ot) && !/Run it with your own class/.test(ot));
+  if (/Run it with your own class/.test(ot)) {
+    throw new Error('a licence holder is being sold the licence again');
+  }
+}
+
 await browser.close();
 console.log('\nconsole errors:', errs.length ? errs.join(' | ') : 'none');
 if (errs.length) process.exit(1);

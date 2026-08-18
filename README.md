@@ -39,9 +39,15 @@ explicitly or the pages ship and every game request returns 404.
 | `lib/engine.mjs` | The economy. **Generated** — see below |
 | `lib/cohorts.mjs` | Classes: seating, the board, the clock, the export |
 | `lib/demo.mjs` | The demo class — a real cohort that belongs to nobody |
+| `lib/league.mjs` | The bot league — keys, seating, and the average-based board |
+| `lib/talent.mjs` | Being findable by an employer — consent, the floor, and what may be published |
+| `lib/progress.mjs` | Whether anybody gets better — matched cohorts and a permutation null |
+| `lib/traits.mjs` | How a game was played — including what happens after a bad round |
+| `bots/reference-bot.mjs` | A complete runnable bot, no dependencies. See `BOTS.md` |
 | `netlify/functions/api.mjs` | create · join · start · submit · state · demo · cohorts |
 | `netlify/functions/tick.mjs` | Sweep that closes rounds nobody opened, and clears expired demos |
 | `db/schema.sql` | The Postgres schema. Idempotent; run it in the Supabase SQL editor |
+| `BOTS.md` | The bot protocol — three endpoints, and the rules of the league |
 | `test/` | See below |
 
 ### Three things here are generated, not written
@@ -55,6 +61,13 @@ explicitly or the pages ship and every game request returns 404.
 All three inline the same engine source, so **the solo game, the multiplayer page
 and the server run byte-identical economy code**. Editing a generated file by hand
 will be overwritten — edit the template and rebuild.
+
+> **`public/index.html` currently carries three hand-made edits** — the routes from
+> the solo game to the live one, marked `LIVE-LINK 1 of 3` and so on. They were
+> added directly to the generated file because `template.html` and `build.py` live
+> in the other repository. **They will be lost the next time the solo game is
+> rebuilt**, so port them into `template.html` before that happens. Search the
+> file for `LIVE-LINK` to find all three.
 
 The multiplayer page carries the engine for one specific reason: its projection
 panel is computed by running the real `resolve()` arithmetic against the orders

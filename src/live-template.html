@@ -161,8 +161,10 @@ const tokenFor = (code) => (readAll()[code] || {}).token || null;
 const S = { code: null, token: null, view: null, cfg: null, busy: false, error: null,
              tab: 'orders', sb: null, session: null, account: null, notice: null,
              board: null, record: null, showBoard: false,
+             league: null, showLeague: false, botKey: null,
+             talent: null, showTalent: false,
              cohorts: null, cohort: null, showClass: false, joinClass: null,
-             demo: null, mine: null };
+             demo: null, mine: null, analysis: null, showAnalysis: false };
 
 /* The demo class belongs to nobody, so the token that came back with it is the
    only way to get at it again. Kept in the browser so a reload does not silently
@@ -221,6 +223,13 @@ async function initAuth() {
 
 async function loadAccount() {
   try { S.account = await api('account'); } catch { S.account = { signedIn: false }; }
+  /* Whether you are listed for companies to find is part of the state of your
+     account, so the card can say so without being opened first. Only asked for
+     when there is a company to list, and a failure here must not take the
+     account down with it. */
+  if (S.account && S.account.signedIn && (S.account.companies || []).length) {
+    try { S.talent = await api('talent/me'); } catch { S.talent = null; }
+  }
 }
 
 async function signIn(email) {
@@ -411,7 +420,8 @@ function screenHome() {
     <button class="primary" id="playnow" style="margin-top:6px">Find me a game</button>
     <button class="ghost" id="showboard" style="margin-top:6px">Leaderboard</button>
   </div>`;
-  return publicCard + accountCard() + classCard() + demoCard() + `
+  return publicCard + accountCard() + demoCard() + classCard() + leagueCard()
+       + talentCard() + `
   <div class="card" ${gated ? 'style="opacity:0.55"' : ''}>
     <h2>Start a game</h2>
     <p class="lede">You invite your friends with a link. Empty seats are filled by
@@ -455,9 +465,243 @@ function screenHome() {
     teach every lever this game uses.</p>`;
 }
 
+/* ---------------------------------------------------------- the bot league */
+
+/* Somebody was always going to write a program to play this. Rather than
+   pretending otherwise and losing, quietly, on the human board, there is a
+   league for it — and it is advertised on the front page, because the people
+   who would write one are exactly the people worth having here. */
+function leagueCard() {
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Write a bot</h2>
+      <button class="ghost" id="showleague">The bot league</button>
+    </div>
+    <p class="muted" style="margin-top:6px">There is a separate league for programs, with its
+      own board. Your bot runs on your machine and plays through a documented API — bots
+      against bots, never against people.</p>
+  </div>`;
+}
+
+function screenLeague() {
+  const L = S.league;
+  const f = (L && L.format) || {};
+  const key = S.botKey;
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">The bot league</h2>
+      <button class="ghost" id="closeleague">Back</button>
+    </div>
+    <p class="lede" style="margin-top:8px">Write a program to play CEO. This is a supported way
+      to play, not a loophole — the league is separate from the human game on purpose.</p>
+    <p class="muted">Your bot runs on <b>your</b> machine and talks to the ordinary API with a
+      key. We never run anybody's code. A bot key plays league games and nothing else: it
+      cannot enter a ranked table, a private game or a class, so the human boards stay human.</p>
+    <p class="muted">${f.seats || 5} bots · ${f.rounds || 10} rounds ·
+      a round closes the moment the last program files, so a game takes under a minute ·
+      ${L ? L.gamesPerHour : 20} games an hour per key.</p>
+    <p class="muted">The protocol is three endpoints and is written up in
+      <b>BOTS.md</b>, with a runnable reference bot in about 150 lines.</p>
+  </div>
+
+  <div class="card">
+    <h2>Your key</h2>
+    ${!signedIn()
+      ? `<p class="muted">Sign in on the home page to create one. A key is tied to your
+         account, and if you have claimed a company name your results appear on the board
+         under it.</p>`
+      : key
+        ? `<p class="muted">Here it is. This is the <b>only</b> time it is shown — it is stored
+             hashed, so nobody, including us, can read it back afterwards. Keep it somewhere
+             your program can find it and out of anything you commit.</p>
+           <div class="row" style="max-width:520px">
+             <div style="flex:1"><label for="botkey">Bot key</label>
+               <input id="botkey" type="text" readonly value="${esc(key)}"></div>
+           </div>
+           <button class="ghost" id="copykey" style="margin-top:8px">Copy</button>
+           <p class="muted" style="margin-top:10px">Lost it? Make another — that revokes this
+             one, which is the only revocation anybody needs.</p>
+           <pre style="margin-top:12px;white-space:pre-wrap;font-size:12px;background:var(--lock);padding:10px;border-radius:6px">export CEO_BOT_KEY=${esc(key)}
+node bots/reference-bot.mjs --site ${esc(location.origin)} --games 3</pre>`
+        : `<p class="muted">One key per account. It is shown once when it is made and stored
+             hashed afterwards${myCompany()
+               ? `, and your league results will be recorded as <b>${esc(myCompany().name)}</b>`
+               : `. Without a claimed company name your bot can still play — there is just
+                  nothing to rank`}.</p>
+           <button class="primary" id="makekey">Create a bot key</button>
+           <p class="muted" style="margin-top:8px">Making a new one revokes the old one.</p>`}
+  </div>
+
+  <div class="card">
+    <h2>The board</h2>
+    <p class="muted" style="margin-top:6px">Ranked by <b>average money made over the last
+      ${L ? L.window : 20} games</b>, minimum ${L ? L.minGames : 5} games. Not a total — that
+      would rank whoever left their bot running longest. Not a best — that would rank whoever
+      drew the luckiest market. An average ranks the program.</p>
+    ${L && L.board && L.board.length ? `<table style="margin-top:10px">
+      <thead><tr><th>#</th><th>Bot</th><th class="v">Average made</th>
+        <th class="v">Best</th><th class="v">Won</th><th class="v">Games</th></tr></thead>
+      <tbody>${L.board.map((r) => `<tr>
+        <td>${r.rank}</td>
+        <td>${esc(r.name)}</td>
+        <td class="v">${money(r.average)}</td>
+        <td class="v muted">${money(r.best)}</td>
+        <td class="v muted">${Math.round(r.winRate * 100)}%</td>
+        <td class="v muted">${r.games}${r.totalGames > r.games ? ` of ${r.totalGames}` : ''}</td>
+      </tr>`).join('')}</tbody></table>`
+      : `<p class="muted">Nobody has played ${L ? L.minGames : 5} league games yet. The board is
+         empty, which means it is yours to take.</p>`}
+  </div>`;
+}
+
+/* -------------------------------------------------- being findable */
+
+/* The record you build here is worth something outside the game, and the only
+   honest way to make it available is to ask. This card is the ask; the screen
+   behind it shows exactly what would be shown about you, before you decide. */
+function talentCard() {
+  if (!signedIn() || !myCompany()) return '';
+  const on = S.talent && S.talent.status && S.talent.status.optedIn;
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Your record${on ? ' <span class="pill in">listed</span>' : ''}</h2>
+      <button class="ghost" id="showtalent">${on ? 'What companies see' : 'See your record'}</button>
+    </div>
+    <p class="muted" style="margin-top:6px">What you have actually done across ranked games —
+      and, if you want it, the option to let companies invite you to apply for jobs without
+      ever learning who you are.</p>
+  </div>`;
+}
+
+/* Their own history with the game. Shown to them and to nobody else — a
+   company sees the profile, and this is not part of it. */
+function progressBlock(pr) {
+  if (!pr) return '';
+  if (!pr.enough) {
+    return `<p class="muted" style="margin-top:12px">${esc(pr.why || '')}</p>`;
+  }
+  const up = pr.change > 0;
+  const n = pr.made.length;
+  const lo = Math.min(...pr.made), hi = Math.max(...pr.made);
+  const span = (hi - lo) || 1;
+  /* A sparkline in plain HTML — no library, no canvas, and it prints. */
+  const bars = pr.made.map((m, i) => {
+    const h = Math.max(2, Math.round(((m - lo) / span) * 46));
+    return `<span title="Game ${i + 1}: ${money(m)}" style="display:inline-block;width:9px;
+      height:${h}px;margin-right:3px;vertical-align:bottom;border-radius:2px;
+      background:${m >= 0 ? 'var(--good)' : 'var(--critical)'};opacity:${0.45 + 0.55 * (i + 1) / n}"></span>`;
+  }).join('');
+  return `
+  <h3 style="margin-top:18px">Your first games against your last</h3>
+  <div style="margin:8px 0 6px;line-height:1">${bars}</div>
+  <p class="muted">Your first ${pr.span === 1 ? 'game' : `${pr.span} games`} came to
+    ${money(pr.early)}; your last ${pr.span === 1 ? 'game' : pr.span}, ${money(pr.late)} —
+    a difference of <b style="color:var(--${up ? 'good' : 'critical'}-text, var(--text-primary))">${money(pr.change)}</b>
+    over ${pr.games} games. Whether that is you improving or the tables being kind is
+    not something ${pr.games} games can answer; it is here because it is yours, not
+    because it proves anything.</p>`;
+}
+
+function screenTalent() {
+  const t = S.talent;
+  if (!t) return `<div class="card"><h2>Your record</h2><p class="muted">Loading…</p></div>`;
+  const p = t.profile || {};
+  const on = t.status && t.status.optedIn;
+
+  const record = p.visible ? `
+    <div style="display:flex;gap:2.2rem;flex-wrap:wrap;margin:10px 0 6px">
+      <div><div class="big">${money(p.average)}</div>
+        <div class="muted">average a game</div></div>
+      <div><div class="big">${Math.round(p.winRate * 100)}%</div>
+        <div class="muted">won</div></div>
+      <div><div class="big">${p.games}</div>
+        <div class="muted">ranked games</div></div>
+      ${p.percentile ? `<div><div class="big">top ${100 - p.percentile}%</div>
+        <div class="muted">of listed players</div></div>` : ''}
+    </div>
+    <p class="muted">Confidence: <b>${esc(p.confidence.label)}</b> — ${esc(p.confidence.note)}.</p>
+    <table style="margin-top:8px">
+      <tbody>${p.how.map((h) => `<tr>
+        <td style="width:7rem;vertical-align:top"><b>${esc(h.label)}</b></td>
+        <td>${esc(h.text)}${h.note
+          ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(h.note)}</div>` : ''}</td>
+      </tr>`).join('')}</tbody></table>
+    ${progressBlock(t.progress)}
+    <h3 style="margin-top:16px">What is deliberately not shown</h3>
+    <p class="muted">Everything below was measured and then left out. It is listed because a
+      profile that quietly omits things is one you cannot argue with.</p>
+    <table>
+      <tbody>${p.withheld.map((w) => `<tr>
+        <td style="width:11rem;vertical-align:top">${esc(w.what)}</td>
+        <td class="muted">${esc(w.why)}</td>
+      </tr>`).join('')}</tbody></table>`
+    : `<p class="muted" style="margin-top:8px">${esc(p.why || '')} Nothing about you is shown to
+       anybody until then, whatever you choose below.</p>`;
+
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">${esc((t.company && t.company.name) || 'Your record')}</h2>
+      <button class="ghost" id="closetalent">Back</button>
+    </div>
+    ${record}
+  </div>
+
+  <div class="card">
+    <h2>Being invited to apply for jobs</h2>
+    <p class="lede" style="margin-top:8px">Off unless you turn it on.</p>
+    <p class="muted">A company that pays for access sees a page identical to the one above —
+      <b>your company name and your record, and nothing else</b>. Not your name, not your email,
+      not where you are unless you fill it in. They cannot message you. The only thing they can
+      send is an invitation to apply for a specific job, and you are under no obligation to
+      answer one. Replying is what tells them who you are; nothing else does.</p>
+    <p class="muted">You must be 18 or over. Nobody under 18 appears at all — not "cannot be
+      hired", cannot be seen.</p>
+
+    ${t.example ? `<div style="border-left:3px solid var(--good);padding:.1rem 0 .1rem .9rem;margin:14px 0">
+      <div class="muted" style="margin-bottom:4px">An invitation would look like this:</div>
+      <div><b>${esc(t.example.from)}</b> invites <b>${esc(t.example.to)}</b> to apply for
+        ${esc(t.example.role)}.</div>
+      <div class="muted" style="font-style:italic;margin-top:4px">${esc(t.example.reason)}</div>
+    </div>` : ''}
+
+    ${on ? `
+      <p class="muted"><b>You are listed.</b>${t.status.since
+        ? ` Since ${esc(new Date(t.status.since).toLocaleDateString())}.` : ''}
+        ${t.status.openTo ? ` Open to: ${esc(t.status.openTo)}.` : ''}
+        ${t.status.region ? ` ${esc(t.status.region)}.` : ''}</p>
+      <button class="ghost" id="talentoff">Take me off the list</button>
+      <p class="muted" style="margin-top:8px">Immediate. You can come back whenever you like.</p>`
+    : `
+      <div class="row" style="max-width:560px;margin-top:10px">
+        <div><label for="opento">What you would consider (optional)</label>
+          <input id="opento" type="text" maxlength="120" placeholder="Commercial strategy, operations"></div>
+        <div><label for="region">Where you are (optional)</label>
+          <input id="region" type="text" maxlength="80" placeholder="UK"></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin:12px 0;max-width:560px">
+        <input type="checkbox" id="adult" style="width:auto;margin-top:3px">
+        <span class="muted">I am 18 or over, and I am happy for companies to see my company
+          name and the record above, and to invite me to apply for jobs.</span>
+      </label>
+      <button class="primary" id="talenton">List me</button>`}
+  </div>`;
+}
+
 /* ------------------------------------------------------------ facilitator */
 function classCard() {
-  if (!signedIn() || !(S.account && S.account.canFacilitate)) return '';
+  /* Not licensed yet — this is where somebody who has just played the demo and
+     liked it is supposed to be able to buy it.
+
+     For a while there was nothing here at all: the card appeared only once you
+     already had the licence, so an instructor could open the demo, be
+     convinced, and find no way on the entire site to pay for it. The one
+     customer worth chasing, with the money in their hand and nowhere to put
+     it. */
+  if (!(S.account && S.account.canFacilitate)) return facilitatorOffer();
   return `
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
@@ -466,6 +710,31 @@ function classCard() {
     </div>
     <p class="muted" style="margin-top:6px">One code for the whole room. Students are seated
       into groups automatically, and every group faces an identical market.</p>
+  </div>`;
+}
+
+
+/* The facilitator licence, for sale. Placed immediately under the demo, because
+   the demo is the thing that does the convincing and the worst moment to make
+   somebody go looking is straight after they have been convinced. */
+function facilitatorOffer() {
+  const p = S.cfg && S.cfg.products && S.cfg.products.facilitator;
+  if (!p) return '';
+  return `
+  <div class="card">
+    <h2>Run it with your own class</h2>
+    <p class="lede">${esc(p.blurb)}</p>
+    <p class="muted">One code for the whole room. Students join free, with no account and
+      no app — every group faces an identical market, so a difference between groups is a
+      difference in what people decided. You get the dashboard, the debrief document and
+      the round-by-round spreadsheet.</p>
+    ${!signedIn()
+      ? `<p class="muted"><b>Sign in above first</b> — the licence is attached to your
+         account, and the demo above needs nothing at all if you are still deciding.</p>`
+      : p.forSale
+        ? `<button class="primary" id="buyfacilitator">${esc(p.label)} — continue to payment</button>`
+        : `<p class="muted">Not on sale yet. If you want it for a course starting soon,
+           say so and it will be.</p>`}
   </div>`;
 }
 
@@ -550,6 +819,7 @@ function screenClass() {
       <button class="ghost" id="cadv3">Play three rounds</button>
       <button class="ghost" id="cadv5">Play five rounds</button>`}
       <button class="ghost" id="cseat">Open a student's screen</button>
+      <button class="ghost" id="showanalysis">What happened — analysis</button>
       <button class="ghost" id="cexport">Download the gradebook</button>
     </div>
     ${(c.guide || []).map((g) => `<div class="news" style="margin-top:10px">
@@ -579,6 +849,7 @@ function screenClass() {
         ${c.status === 'paused' ? 'Resume' : 'Pause the class'}</button>
       <button class="ghost" id="cextend">Give everyone 10 more minutes</button>
       <button class="ghost" id="cresolve">Close this round now</button>
+      <button class="ghost" id="showanalysis">What happened — analysis</button>
       ${c.isDemo ? '' : '<button class="ghost" id="cexport">Download results</button>'}
     </div>
     ${c.status === 'paused' ? `<div class="warnbox warn" style="margin-top:10px"><span class="ic">!</span>
@@ -614,6 +885,84 @@ function agoText(hours) {
   if (hours < 1) return `${Math.max(1, Math.round(hours * 60))} min ago`;
   if (hours < 24) return `${Math.round(hours)}h ago`;
   return `${Math.round(hours / 24)}d ago`;
+}
+
+/* What happened, and what to ask about it.
+
+   The dashboard says who has filed. This says what the class did — which is the
+   thing an instructor needs for the hour after, and which nobody supervising
+   forty students has had any chance to work out for themselves. */
+function screenAnalysis() {
+  const a = S.analysis;
+  const c = S.cohort;
+  if (!a) return `<div class="card"><h2>Analysis</h2><p class="muted">Reading the class…</p></div>`;
+  const t = a.totals;
+  const pctFrom = (i) => {
+    const d = Math.round((i - 1) * 100);
+    return d === 0 ? 'same as class' : `${Math.abs(d)}% ${d > 0 ? 'above' : 'below'}`;
+  };
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">${esc(a.name)} — what happened</h2>
+      <button class="ghost" id="closeanalysis">Back to the groups</button>
+    </div>
+    <p class="muted" style="margin-top:6px">${t.groups} groups · ${t.students} students ·
+      ${t.rounds} of ${t.totalRounds} rounds${a.identical
+        ? ` · every group ran the identical market (seed ${a.seed})` : ''}</p>
+    <div class="row" style="margin-top:12px">
+      <div><div class="big">${money(a.spread.best)}</div><div class="muted">best company</div></div>
+      <div><div class="big">${money(a.spread.median)}</div><div class="muted">median</div></div>
+      <div><div class="big">${money(a.spread.worst)}</div><div class="muted">worst</div></div>
+      <div><div class="big">${t.out}</div><div class="muted">went under</div></div>
+    </div>
+    ${a.identical ? `<p class="muted" style="margin-top:12px">Same customers, same costs, the
+      same shocks in the same rounds. Nobody drew a harder economy, so what follows is
+      differences in what people decided.</p>` : ''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="ghost" id="areport">Download the debrief</button>
+      <button class="ghost" id="arounds">Round-by-round spreadsheet</button>
+      <button class="ghost" id="cexport">Gradebook</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>The groups, ranked</h2>
+    <table><thead><tr><th>Group</th><th class="v">Median company</th><th class="v">Best</th>
+      <th class="v">Price</th><th class="v">Advertising</th><th class="v">Out</th></tr></thead>
+      <tbody>${a.table.map((g) => `<tr>
+        <td>Group ${g.group}</td>
+        <td class="v">${money(g.medianValue)}</td>
+        <td class="v muted">${money(g.bestValue)}</td>
+        <td class="v muted">${esc(pctFrom(g.priceIndex))}</td>
+        <td class="v muted">${esc(pctFrom(g.adsIndex))}</td>
+        <td class="v">${g.out || ''}</td></tr>`).join('')}</tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>Things worth discussing</h2>
+    ${a.findings.length ? a.findings.map((f) => `
+      <div class="news" style="margin:12px 0">
+        <b>Group ${f.group} — ${esc(f.headline)}</b><br>
+        ${esc(f.detail)}<br>
+        <span class="muted" style="font-style:italic">${esc(f.ask)}</span>
+      </div>`).join('')
+      : '<p class="muted">Nothing has stood out yet. Play a few more rounds.</p>'}
+  </div>
+
+  <div class="card">
+    <h2>Who filed, and who was carried</h2>
+    <p class="muted">Missing a deadline does not strand anybody — their last orders repeat.
+      It is here because it is the difference between a company that was run and one that
+      was left running.</p>
+    <table><thead><tr><th>Group</th><th>Company</th><th class="v">Filed</th>
+      <th class="v">Carried</th><th class="v">Worth</th></tr></thead>
+      <tbody>${a.students.map((s) => `<tr>
+        <td>${s.group}</td><td>${esc(s.name)}${s.out ? ' <span class="pill dead">out</span>' : ''}</td>
+        <td class="v">${s.filed} of ${s.played}</td>
+        <td class="v">${s.missed ? `<span class="pill out">${s.missed}</span>` : ''}</td>
+        <td class="v">${money(s.value)}</td></tr>`).join('')}</tbody></table>
+  </div>`;
 }
 
 function screenBoard() {
@@ -1320,8 +1669,11 @@ function render() {
   }
   if (S.error) html += `<div class="card err"><b>${esc(S.error)}</b></div>`;
   if (S.notice) html += `<div class="card" style="border-color:var(--good)"><b>${esc(S.notice)}</b></div>`;
-  if (S.showClass) html += screenClass();
+  if (S.showAnalysis) html += screenAnalysis();
+  else if (S.showClass) html += screenClass();
   else if (S.showBoard) html += screenBoard();
+  else if (S.showLeague) html += screenLeague();
+  else if (S.showTalent) html += screenTalent();
   else if (!v) html += screenHome();
   else if (v.status === 'lobby') html += screenLobby(v);
   else if (v.status === 'over') html += screenOver(v);
@@ -1493,22 +1845,24 @@ document.addEventListener('click', (e) => {
       return;
     }
   }
-  if (t.id === 'cexport' && S.cohort) {
-    /* the file has to arrive with the auth header, so fetch it and hand it over */
+  if (t.id === 'showanalysis' && S.cohort) {
     guard(async () => {
-      const headers = {};
-      if (S.session && S.session.access_token) headers.authorization = `Bearer ${S.session.access_token}`;
       const q = S.demo ? '?demo=' + encodeURIComponent(S.demo.token) : '';
-      const res = await fetch(`/api/cohort/${S.cohort.id}/export${q}`, { headers });
-      if (!res.ok) throw new Error('Could not build the export.');
-      const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = ((S.cohort.name || 'class').replace(/[^A-Za-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '') || 'class') + '-results.csv';
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      S.analysis = (await api(`cohort/${S.cohort.id}/analysis${q}`)).analysis;
+      S.showAnalysis = true;
     });
+    return;
+  }
+  if (t.id === 'closeanalysis') { S.showAnalysis = false; render(); return; }
+  if ((t.id === 'areport' || t.id === 'arounds') && S.cohort) {
+    const what = t.id === 'areport'
+      ? { path: 'report', ext: '-debrief.html' }
+      : { path: 'rounds', ext: '-rounds.csv' };
+    guard(() => download(`cohort/${S.cohort.id}/${what.path}`, what.ext));
+    return;
+  }
+  if (t.id === 'cexport' && S.cohort) {
+    guard(() => download(`cohort/${S.cohort.id}/export`, '-results.csv'));
     return;
   }
   if (t.id === 'playnow') {
@@ -1532,6 +1886,60 @@ document.addEventListener('click', (e) => {
     return;
   }
   if (t.id === 'closeboard') { S.showBoard = false; render(); return; }
+
+  if (t.id === 'showleague') {
+    guard(async () => {
+      S.league = await api('bot/board');
+      S.showLeague = true;
+    });
+    return;
+  }
+  if (t.id === 'closeleague') { S.showLeague = false; S.botKey = null; render(); return; }
+
+  if (t.id === 'showtalent') {
+    guard(async () => { S.talent = await api('talent/me'); S.showTalent = true; });
+    return;
+  }
+  if (t.id === 'closetalent') { S.showTalent = false; render(); return; }
+  if (t.id === 'talenton') {
+    /* The checkbox is not a formality. Refusing here rather than sending it and
+       letting the server refuse puts the reason next to the box. */
+    if (!($('adult') && $('adult').checked)) {
+      S.error = 'You have to confirm you are 18 or over before you can be listed.';
+      render(); return;
+    }
+    /* Read before guard(), not inside it. guard() sets the busy flag, which
+       re-renders, which replaces these inputs with empty ones — so reading them
+       in the callback quietly posted two blank strings. */
+    const openTo = ($('opento') || {}).value || '';
+    const region = ($('region') || {}).value || '';
+    guard(async () => {
+      await api('talent/optin', { adult: true, openTo, region });
+      S.talent = await api('talent/me');
+    });
+    return;
+  }
+  if (t.id === 'talentoff') {
+    guard(async () => {
+      await api('talent/optout', {});
+      S.talent = await api('talent/me');
+    });
+    return;
+  }
+  if (t.id === 'makekey') {
+    guard(async () => {
+      /* Held in memory only, and only until this screen is left. A key that can
+         act on your behalf has no business in localStorage. */
+      const r = await api('bot/key', {});
+      S.botKey = r.key;
+    });
+    return;
+  }
+  if (t.id === 'copykey') {
+    const el = $('botkey'); el.select();
+    navigator.clipboard.writeText(el.value).then(() => { t.textContent = 'Copied'; });
+    return;
+  }
   if (t.id === 'signin') {
     const email = ($('email') || {}).value || '';
     if (!email.includes('@')) { S.error = 'That does not look like an email address.'; render(); return; }
@@ -1541,6 +1949,13 @@ document.addEventListener('click', (e) => {
   if (t.id === 'signout') {
     e.preventDefault();
     guard(async () => { await signOut(); });
+    return;
+  }
+  if (t.id === 'buyfacilitator') {
+    guard(async () => {
+      const r = await api('checkout', { kind: 'facilitator' });
+      location.href = r.url;
+    });
     return;
   }
   if (t.id === 'buy') {
@@ -1566,6 +1981,7 @@ document.addEventListener('click', (e) => {
   if (t.dataset.resume) { open(t.dataset.resume); return; }
   if (t.id === 'home' || t.id === 'mygames') {
     S.code = null; S.token = null; S.view = null; S.showBoard = false; S.showClass = false;
+    S.showLeague = false; S.showTalent = false;
     /* ?home=1 so that a reload here stays here. Without it, boot() would see a
        bare /g/ and helpfully drop you back into the ranked table you just left. */
     history.pushState({}, '', '/g/?home=1');
@@ -1641,6 +2057,23 @@ async function openDemo(force) {
   try { localStorage.setItem(DEMOKEY, JSON.stringify(S.demo)); } catch {}
   remember(r.student.code, r.student.token, r.student.name);
   history.pushState({}, '', '/g/?demo=1');
+}
+
+/* Files have to arrive with the authorisation header, so they are fetched and
+   handed to the browser rather than linked. */
+async function download(path, suffix) {
+  const headers = {};
+  if (S.session && S.session.access_token) headers.authorization = `Bearer ${S.session.access_token}`;
+  const q = S.demo ? (path.includes('?') ? '&' : '?') + 'demo=' + encodeURIComponent(S.demo.token) : '';
+  const res = await fetch('/api/' + path + q, { headers });
+  if (!res.ok) throw new Error('Could not build that file.');
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = ((S.cohort && S.cohort.name || 'class').replace(/[^A-Za-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'class') + suffix;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
 async function refresh() {

@@ -2633,3 +2633,494 @@ Two further reductions are known and not yet built, recorded so they are not
 rediscovered: answering an unchanged poll with an empty response rather than 11 KB
 of view, and not reading the whole 47 KB game document to decide that nothing has
 changed. Together they are most of what is left, and neither is urgent at $3,451.
+
+## 32. Analysis for the instructor
+
+The dashboard tells an instructor the state of play. It does not help with the
+hour afterwards, which is the hour the whole exercise exists for — and an
+instructor who has spent fifty minutes supervising forty students has had no
+chance to work out what happened.
+
+Two things make this answerable rather than decorative. **Every group ran the
+identical market**, so a difference between groups is a difference in decisions —
+a sentence no generic dashboard can say. And **every decision is on the record**:
+each round already stored what each company charged, spent on advertising and
+research, sold, could not supply, and was worth afterwards.
+
+### The groups, ranked
+
+The single most useful table, because the market was the same for all of them:
+
+| group | median company | price | advertising | went under |
+|---|---|---|---|---|
+| 2 | $338,074 | same as class | 15% above | 1 |
+| 6 | $270,537 | 2% above | 5% above | 1 |
+| 4 | $211,628 | 4% above | 23% above | — |
+| 1 | $181,491 | 3% above | 7% below | — |
+| 5 | $139,491 | 1% below | 12% below | 2 |
+| 3 | **−$210,810** | **8% below** | **24% below** | **4** |
+
+Read down it and the lesson reads itself: the group that charged least and
+advertised least lost four of its five companies.
+
+### Findings, not prose
+
+Nothing here is generated writing. Each finding is a **shape somebody looked for**
+— a price war, a company nobody had heard of, customers turned away, borrowing
+while losing money, a second product line, what the leader did differently — with
+the numbers attached and a question to ask the room. An instructor will be
+challenged in front of thirty people and has to be able to answer.
+
+Two things went wrong in the first version, and both are the same mistake.
+
+**A finding argued against itself.** "Oakhanger Ltd spent almost nothing on
+advertising, and ended worth $737,316 against −$210,810" — read aloud, that
+contradicts its own claim in the same sentence. The check now requires the quiet
+companies to have actually done *worse*. A company that spent nothing and won is
+not this finding; manufacturing one is worse than staying quiet.
+
+**Everything was a finding.** "Borrowed while losing money" fired in all six
+groups, which is not six findings but one observation printed six times. Each kind
+now has a cap and the survivors are the most pronounced instances. A list where
+everything is important is a list nobody reads to the end.
+
+### Three surfaces, one computation
+
+The **dashboard view** for during and after class. A **debrief document** —
+self-contained HTML, no scripts, prints and emails — for handing out. And a
+**round-by-round spreadsheet**, one row per company per round with price,
+advertising, research, quality, demand, sales, lost sales, share, inventory,
+profit, cash and debt, for instructors who would rather do their own analysis.
+All three read `lib/analysis.mjs`; none of them recomputes anything.
+
+### And a bug it uncovered
+
+Building the participation column exposed that `rounds filed` had been inferred as
+`rounds played − rounds missed`, which looked equivalent and was not: a company
+that goes under stops being counted, so a student who **never filed once in twelve
+rounds was reported as having filed three of them**. Every round carries a flag
+saying whether the orders were the player's own, so that is what is counted now.
+
+Separately, the games list crashed on any game still in its lobby — seats with no
+company behind them yet, and `finalValue` asked what they were worth. It failed
+quietly into a fallback that dropped the "your move" column, which is the one
+thing that list exists for. It presented as an intermittent test failure for two
+sessions before being read properly.
+
+## 33. The bot league
+
+Somebody was always going to write a program to play this. The client is HTTP,
+the state is JSON, and an afternoon's work turns a browser tab into a player.
+The question is not whether it happens but what it does to the game when it
+does — and that is measurable rather than arguable.
+
+### How much of an edge is it, actually
+
+An optimiser was written the way a competent person would write one in an
+evening: it uses the same projection the page already shows every player,
+searches over price, production and advertising, and takes the best expected
+profit. It has no information a human does not have — rivals still commit
+blind. Sixty ranked tables each:
+
+| player | won | top half | in profit | median made |
+|---|---|---|---|---|
+| a beginner (the defaults) | 28% | 47% | 48% | −$5,589 |
+| somebody who has worked it out | 30% | 47% | 52% | +$9,773 |
+| a machine searching every round | 35% | 55% | **43%** | **−$22,607** |
+
+The machine wins more tables and **makes less money** — it optimises the round
+in front of it, so it underspends on research and advertising, both of which pay
+back two rounds later. It is better at finishing first and worse at building a
+company.
+
+So the edge is real but small: five percentage points of win rate over a
+thoughtful human. Not enough to justify an arms race of timing analysis and
+typing-pattern detection, which would be a losing game that also insults every
+person it got wrong. And large enough that ignoring it would slowly sour the
+human board.
+
+### The response: somewhere to go
+
+A separate league. Bots play bots, on their own board, with their own key. The
+human tier is unchanged and league results never touch it.
+
+Three decisions shape it, and each one is a refusal of an obvious alternative.
+
+**We never run anybody's code.** A bot lives on its author's machine and talks
+to the ordinary API with a key. Accepting uploaded programs would mean
+sandboxing them — a different and much larger product, and a security problem
+nobody needs on day one.
+
+**Rounds close when everyone has filed.** Bots do not need five minutes to
+think, so a league game finishes in under a minute. There is still a
+forty-five-second deadline, because one crashed program must not freeze a table
+for everyone else — and a crashed bot's previous orders simply repeat, which is
+the same treatment a person who closes their laptop gets.
+
+**The board is an average, not a total or a best.** A total ranks whoever left
+their bot running longest. A best ranks whoever drew the luckiest market. An
+average over the last twenty games, minimum five, ranks the program — which is
+the only thing worth ranking. Twenty games an hour per key, which is far more
+than anybody needs to tune and far less than anybody could use to run up our
+bill.
+
+### The key
+
+One per account, shown once, stored hashed — a key that can act on your behalf
+should be treated the way such a thing is treated everywhere else. Nobody
+including us can read it back; asking for another revokes the first, which is
+the only revocation anybody actually needs. It is held in memory in the browser
+and never written to storage, and the interface test asserts that.
+
+### What it costs to be honest about it
+
+The league is advertised on the front page rather than hidden in documentation.
+The people who would write a bot are exactly the people worth having here — a
+university teaching analytics has a term's project sitting in `BOTS.md`, and it
+runs against a real economy with real opponents rather than a toy.
+
+The reference bot is deliberately plain: price a little under what the market
+thinks the product is worth, build what you expect to sell, spend steadily on
+both kinds of research, add capacity only when you keep selling out. Against the
+built-in archetypes over eighty league games it wins 63% and makes a median
+$220,370, which is a respectable floor and an obvious thing to beat. Every
+sentence in this section is testable and `test/league.mjs` tests the ones that
+matter: that a key gets you into the league and nowhere else, that league
+results never move a human rating or reach the human board, that the rate limit
+is per key, that grinding does not move the average, and that a table with a
+dead program in it still finishes.
+
+## 34. Being findable — the record as something worth money outside the game
+
+A company pays to browse a pool of players, sees a company name and a record,
+and can send one thing: an invitation to apply. It never learns who anybody is.
+The player decides whether to answer, and answering is what reveals them.
+
+That is a product only if the record is true. Whether it is true is a property
+of the game, and therefore measurable rather than arguable.
+
+### Does a number here mean anything about a person
+
+Twelve policies, 500 real ranked tables, each policy's *true* skill defined as
+what it averaged over every game it played. Then: how much of that does a short
+record recover? (Spearman against the truth.)
+
+| games seen | average made | best single game | win rate |
+|---|---|---|---|
+| 1 | 0.80 | 0.80 | 0.52 |
+| 5 | 0.92 | 0.89 | 0.80 |
+| 10 | 0.95 | 0.89 | 0.86 |
+| 40 | 0.98 | **0.90** | 0.91 |
+
+Sorting a player into thirds is right 88% of the time after ten games. The
+signal is real.
+
+### The number the leaderboard shows is the wrong one to sell
+
+A recruiter never asks "is this person better than someone who has never thought
+about it". They ask "is this one of the strong ones", which means telling the top
+of the distribution apart from itself. Among the top five players only:
+
+| games seen | average made | best single game |
+|---|---|---|
+| 1 | 0.25 | 0.25 |
+| 10 | 0.67 | 0.45 |
+| 40 | 0.87 | **0.21** |
+| 80 | 0.91 | **0.14** |
+
+**Best-single-game gets worse the more somebody plays.** With enough attempts
+everyone's best game is their luckiest one, so among strong players it converges
+on who played the most tables. The public leaderboard is a fine *game* mechanic
+— it is winnable this afternoon, which is the point of it — and it is the worst
+statistic on the site for saying anything about a person. The profile is built
+from the average and the game count instead.
+
+### What a customer actually experiences
+
+Correlation is an abstraction. Invite the three who look best out of twelve:
+
+| games on record | truly top 3 | at least above average | a genuine dud |
+|---|---|---|---|
+| 1 | 61% | 93% | **0%** |
+| 5 | 77% | 99% | **0%** |
+| 10 | 83% | 100% | **0%** |
+| 40 | 94% | 100% | **0%** |
+
+The failure that would end the business — inviting somebody who turns out to be
+hopeless — does not happen, even on a one-game record. What a thin record costs
+is only the fine ordering among the good ones. An invitation to apply is a
+low-stakes action that has to clear "worth a conversation", and it does. **Five
+games is the floor** for appearing at all, and the game count travels with every
+number so nobody has to take the floor on trust.
+
+### Which traits may be published
+
+A profile that says *how* somebody plays is worth more than one that says how
+much they made — and most of the candidates do not survive being checked. Asking
+how many games before a trait sits within 10% of its own long-run value:
+
+| trait | 1 game | 5 | 10 | 20 | published |
+|---|---|---|---|---|---|
+| price index | 91% | 100% | 100% | 100% | yes, immediately |
+| quality index | 96% | 100% | 100% | 100% | yes, immediately |
+| stock-out rate | 33% | 66% | 80% | 89% | at ten games |
+| advertising | 24% | 20% | 31% | 44% | **never** |
+| borrowing | 10% | 21% | 31% | 40% | **never** |
+| margin | 8% | 15% | 23% | 29% | **never** |
+
+The last three are ratios with small, noisy denominators. They are stored,
+because storing them is free and they are useful in aggregate, and they are
+never shown: a number still wrong more often than not after twenty games is not
+a fact about a person. The profile **names what it is withholding**, so nobody
+has to wonder whether it was considered.
+
+Every figure is measured against the rest of that particular table. "Charged
+$1,240" means nothing across markets and shocks; "4% under the room" means the
+same thing everywhere, which is what makes an average over games legitimate.
+
+### Sourcing, not selection
+
+This distinction is the one that matters legally rather than technically, and it
+was the deciding factor in the design.
+
+An invitation to apply is the same object as a recruiter's approach on any
+professional network. A score handed to an employer to screen candidates with is
+an **employment selection procedure**, and in the US that engages EEOC selection
+guidelines and, in New York City, a bias-audit requirement — obligations that
+attach to the tool as well as to the employer using it. So: nothing here ranks a
+shortlist for a customer, the profile shows a percentile rather than a rank, and
+nothing should be added that changes that. (Not legal advice; this needs a
+lawyer before anything is sold.)
+
+### The refusals, and why each one is where it is
+
+Almost the whole of `lib/talent.mjs` is refusals.
+
+**Nobody is in the pool who did not ask.** Opted *in*, explicitly, with a date
+recorded. Revoking sets the date rather than deleting the row, so "did they ever
+consent, and when" stays answerable.
+
+**Nobody under eighteen is in the pool at all** — not "cannot be hired", cannot
+be *seen*. The harm is not the job application, it is being placed in a database
+that adults browse and target, and a sixteen-year-old can and does apply for
+jobs. Enforced at the pool, at the profile and at the invitation, because a rule
+that matters should not be enforced in only one place. (The classroom tier is
+excluded for free: a student joins a class without an account, and class games
+are never scored into results at all.)
+
+**Nothing is shown to a company that is not shown to the player.** The same
+function builds both, and `test/talent.mjs` asserts the two objects are equal
+rather than merely similar. A profile somebody cannot see is a profile they
+cannot correct.
+
+**The invitation has no free text.** A fixed object — company, role, link, and a
+generated line saying why this player — has no harassment vector, no spam
+vector, and nothing to moderate.
+
+### What is deliberately not built yet
+
+The company-facing side: browsing, paying, sending. It is the last piece, not
+the first, because it needs a population and there is not one yet. Everything
+above accumulates that population from the first sign-up, and none of it is
+wasted if the company side is never built — the profile is a good thing for a
+player to have on its own.
+
+### A bug the screen found
+
+The opt-in form posted two empty strings. Reading the inputs inside `guard()`
+meant reading them *after* the busy flag had re-rendered the page and replaced
+them, so whatever the player typed was silently discarded and the confirmation
+repeated nothing back. The rest of the client already read inputs before calling
+`guard()`; this was the one place that did not, and only the browser test caught
+it — because at the API level the request was perfectly well-formed.
+
+## 35. When it goes wrong, do they keep going?
+
+The most valuable thing a profile could say about somebody, and the one where
+the strongest statistic turned out to be the one that must not be published.
+
+A setback is identifiable from what is already stored: a round that **lost money
+and left them in the bottom half** of the table. Losing money while leading is an
+investment; losing money while last is trouble. Every game contains some — 4.6 on
+average — so this is a measure that fires rather than one that merely sounds
+good.
+
+### It is there, and it is the fastest signal on the site
+
+Players identical in every respect except how often they walk away after a bad
+round:
+
+| quit chance | setbacks faced | kept filing afterwards |
+|---|---|---|
+| 0% | 808 | **100%** |
+| 25% | 868 | 47% |
+| 50% | 917 | 18% |
+| 85% | 917 | 5% |
+
+**Three games** separate a persister from a quarter-of-the-time quitter with 97%
+reliability; five gives 99%. For comparison, telling two *strong* players apart
+on skill took forty. And it is almost untouched by ability — the same quit
+behaviour given to a strong and a weak player reads within 5–6 points.
+
+### And it is the one thing that must never be sold
+
+In a five-minute-a-round game, "stopped filing" means a meeting started, a
+battery died, or a child woke up. Publishing that as character would be wrong
+about individual people, and — worse, because it is systematic — it would rank
+players by how much **uninterrupted time** they have. That is precisely the
+mechanism by which a hiring signal acquires a disparate impact on carers, shift
+workers and anybody playing on a phone between other obligations.
+
+So the strongest number measured on this project is computed, stored, and shown
+to nobody. The profile lists it among what it is withholding, with that reason
+attached, because a profile that quietly omits things is one nobody can argue
+with.
+
+### The fair version, and two wrong turns getting there
+
+Restrict to bad rounds the player was **demonstrably present for** — they filed
+the following round — and ask whether they changed what they were doing.
+
+**Wrong turn one: comparing with their own last price.** A player filing one
+fixed rule scored as "changed tack" **89% of the time**, higher than a genuine
+adapter. The natural price moves every round on its own as quality grows and
+products age, so the detector was measuring the market rather than the decision.
+Measuring the player's position *relative to the room* fixes it:
+
+| player | moved after a bad round |
+|---|---|
+| changes tack when hurt | 68% |
+| files the same rule regardless | 47% |
+
+Ten games gets this to 94% reliability — weaker and slower than the abandonment
+signal, and fair. It is unaffected by absence: a player missing 40% of rounds at
+random still reads 75%, because missed rounds are skipped rather than counted
+against them.
+
+It is also not skill wearing a hat, which is the test that killed most of the
+candidates. Giving the same behaviour to a strong and a weak player:
+
+| ability | changes tack | files the same rule | gap |
+|---|---|---|---|
+| strong | 69% | 52% | 17 points |
+| weak | 64% | 47% | 17 points |
+
+The behaviour moves it 17 points; ability moves it 5.
+
+**Wrong turn two: assuming it was a virtue.** Five different responses to a bad
+round, same player otherwise, 250 tables each:
+
+| response after a bad round | median made | in profit | won |
+|---|---|---|---|
+| does nothing different | −$39,397 | 42% | 21% |
+| cuts price a little | −$30,790 | 43% | 20% |
+| cuts price hard | −$46,457 | 40% | 18% |
+| spends on advertising | −$37,944 | 42% | 19% |
+| cuts price and advertises | −$44,023 | 41% | 18% |
+
+All five within $16,000 of each other. Doing nothing different is middle of the
+pack; cutting price hard is the worst of them. **Responding to a setback does not
+predict what you finish with.**
+
+So the line on the profile is a description of temperament, not a score, it is
+worded that way, and it carries the finding with it — "neither way is better" is
+printed next to the number rather than left for somebody to assume. Nothing
+ranks on it.
+
+### Two kinds of withholding
+
+The profile now distinguishes them, because conflating them would hide the
+important one.
+
+**Too noisy to be a fact.** Advertising, borrowing and margin are still wrong
+more often than not after twenty games. That is a measurement problem, and more
+data would fix it.
+
+**Not ours to infer.** Whether somebody finished, or missed rounds. More data
+would not fix that; it would sharpen a number that should not exist. It is the
+only entry in the second category, and it is the one worth having a category
+for.
+
+## 36. Does anybody actually get better at this?
+
+Every player-facing claim rests on it — that the game teaches something, that a
+record means anything, that a fifth game is worth playing after a disappointing
+first one. It has never been measured and could not be: every measurement in
+this document used simulated policies, and a simulated player learns nothing
+because it was born knowing. Only people can answer it. So the arithmetic is
+built and waiting for them, and it was built now rather than later because the
+data it needs is generated the moment players arrive and cannot be recovered
+afterwards.
+
+The whole difficulty is that the obvious way to measure it lies.
+
+### The naive curve rises even when nobody learns
+
+Plot "median money made at game 1, at game 2, at game 5". It will go up. It will
+go up even if not one person improved, because the people still playing at game
+five are not the people who played game one — somebody whose first game went
+badly is likelier to leave, so every later point is measured on a population
+that has quietly had its worst members removed.
+
+`test/progress.mjs` builds exactly that world: fixed skill, nobody improves at
+all, and a player whose first game loses money quits with probability 0.45 a
+round instead of 0.08.
+
+| | median made | players |
+|---|---|---|
+| game 1 | $7,682 | 400 |
+| game 2 | $31,217 | 291 |
+| game 3 | $48,991 | 224 |
+| game 5 | $50,700 | 167 |
+
+Read straight, that is **$43,018 of improvement** in a world with none. It is not
+a subtle effect and it is the number anybody would have shipped.
+
+### Holding the population still, then shuffling
+
+**Matching.** Take only players who reached game *n* and compare *those same
+people's* first game with their own *n*th. The same people at both ends, so
+nothing can be improved by leaving. On the fake population above this reports
+**−$62,435** rather than +$43,018 — a survivorship effect of **$105,453**, which
+is reported next to the answer because it is the most interesting number there.
+
+**A permutation null.** Matching fixes who is measured, not whether the order
+matters. So each player's own games are shuffled into a random order and the
+whole thing recomputed, two hundred times. If the real ordering does not stand
+outside the reshuffles, there is no learning — only variance wearing a hat. On
+the fake population the real ordering lands at the 0th percentile. On a
+population where players truly gain $26,000 a game it lands at the 100th, with
+reshuffles falling between −$27,329 and $26,378.
+
+### The residual bias, and why it is left alone
+
+Building the fake population exposed a second problem that reasoning had missed.
+If leaving depends on the first game, then everybody who reached game five had
+an unusually good first game — that is *why* they are still here — so measuring
+from it starts the comparison too high. In the world where players truly gained
+$26,000 a game, this recovers **$53,706 of a true $104,000**.
+
+It understates by about half, and that is left alone deliberately, because it is
+the right direction to be wrong in:
+
+- **a positive result can be believed** — it is a floor, not a ceiling
+- **a null result is not proof that nobody learned**
+
+Both sentences are printed with the answer rather than left in a comment. The
+test asserts the direction of the bias rather than hoping for it: an estimator
+that overstated would be one whose positive results were worthless.
+
+### Where it lives
+
+`GET /api/learning` is public and anonymous — it is an aggregate over everybody
+and names nobody, and a claim about whether the game teaches anything ought to
+be checkable by the people being asked to believe it. It answers *not enough data
+yet*, with the count, until twenty players have reached five games.
+
+A player also sees their own first games against their last, as a sparkline on
+their record. It sits *outside* the profile object rather than inside it: the
+rule is one-directional — a company never sees anything the player is not also
+shown, but the player may be shown more — and somebody's own history with the
+game is nobody else's business. The browser test asserts it cannot reach the
+profile a company would be handed, and the page says in plain words that a dozen
+games cannot tell you whether it is you improving or the tables being kind.

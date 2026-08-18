@@ -216,3 +216,22 @@ console.log('once every player has filed, it resolves:',
             G.shouldResolve(man.game, new Date(t0).toISOString()));
 assert.equal(G.shouldResolve(man.game, new Date(t0).toISOString()), true,
   'a group that has all filed should not wait for anybody');
+
+/* A game still in its lobby has seats with no company behind them yet. Asking
+   what they are worth used to throw, which took the whole list down to a fallback
+   that does not say which game is waiting on you — the one thing it is for. */
+const { game: waiting, token: waitingToken } = G.createGame({
+  hostName: 'Not Started Yet', seats: 3, rounds: 8, cadence: '1d', seed: 9,
+  now: new Date().toISOString(),
+});
+await db.putGame(waiting);
+const withLobby = ok(await call('POST', '/api/mine', {
+  games: [{ code: waiting.code, token: waitingToken }, { code: table.code, token }],
+}), 'mine with a lobby').games;
+console.log(`\na list containing a game that has not started: ${withLobby.length} entries`);
+for (const g of withLobby) {
+  console.log(`  ${g.name.padEnd(16)} ${g.status.padEnd(8)} worth ${g.value === null ? '—' : g.value}`);
+}
+assert.equal(withLobby.length, 2, 'a lobby must not take the whole list down');
+assert.equal(withLobby.find((g) => g.status === 'lobby').value, null,
+  'a company that does not exist yet is worth nothing, not an error');

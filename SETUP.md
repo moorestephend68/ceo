@@ -56,6 +56,15 @@ in test mode with card `4242 4242 4242 4242`, any future expiry, any CVC.
 Save it, then copy the **price ID** — it looks like `price_1ABC...`, and it is the
 price you need, not the product ID.
 
+**Then create the second product**, the same way:
+
+- Name: **Facilitator licence**
+- Price: one-off, your number. This is the one an instructor buys, and it is the
+  only product on the site with an obvious comparison — a class of forty running
+  a commercial simulation is usually paying per student.
+
+Copy its price ID too.
+
 **Create the webhook.** *Developers → Webhooks → Add endpoint*:
 
 - URL: `https://ceo-the-game.netlify.app/hooks/stripe`
@@ -70,7 +79,7 @@ same as the purchase being recorded; the webhook is the part that records it.
 
 ## 3. Netlify — the environment variables
 
-*Site configuration → Environment variables*. Add all six:
+*Site configuration → Environment variables*. Add all seven:
 
 ```
 SUPABASE_URL                 https://xxxxx.supabase.co
@@ -79,7 +88,13 @@ SUPABASE_SERVICE_ROLE_KEY    eyJhbGci...        ← secret
 STRIPE_SECRET_KEY            sk_test_...        ← secret
 STRIPE_WEBHOOK_SECRET        whsec_...          ← secret
 STRIPE_PRICE_HOST            price_1ABC...
+STRIPE_PRICE_FACILITATOR     price_1DEF...
 ```
+
+`STRIPE_PRICE_FACILITATOR` is the one that is easy to miss, and missing it fails
+quietly: the facilitator licence simply reports "not on sale yet" and an
+instructor who wants to buy it cannot. It needs its own product and its own
+price in Stripe, the same way the charter does.
 
 Then **redeploy** — environment variables are read at build time, so an existing
 deploy won't pick them up.
@@ -109,6 +124,14 @@ file into the SQL editor again after any update — it will not drop anything. T
 Stage 4 section makes `cohorts.facilitator` nullable and adds `is_demo`,
 `demo_token` and `expires_at`, which the demo class needs. Without it, the
 **Open the facilitator demo** button will error.
+
+The Stage 7 section adds the bot league: a `bot_keys` table and a `league`
+column on `games` and `results`. Without it, **Create a bot key** returns a 503
+saying exactly this.
+
+The Stage 8 section adds `talent_optin` and a `traits` column on `results`,
+which the player record and the opt-in need. Without it, **See your record**
+returns a 503 saying so.
 
 The demo is the one part of the site with no sign-in at all: anyone can open a
 class that is already running, push it forward, sit in a student's chair and
