@@ -17,6 +17,7 @@ import { classReport } from '../../lib/report.mjs';
 import * as L from '../../lib/league.mjs';
 import * as T from '../../lib/talent.mjs';
 import * as PR from '../../lib/progress.mjs';
+import { pulse } from '../../lib/pulse.mjs';
 import { requireUser, userFrom } from '../../lib/auth.mjs';
 import { getDb, getVerifier, publicAuthConfig, serverReady } from '../../lib/runtime.mjs';
 import { BUILD } from '../../lib/version.mjs';
@@ -379,6 +380,22 @@ export default async (req) => {
     if (route === 'learning') {
       const rowsAll = await db.resultsForLearning();
       return json({ learning: PR.learning(rowsAll, { n: 5, start: P.START_CASH }) });
+    }
+
+    /* Is anything happening?
+
+       Web analytics answers "did anybody arrive". This answers "did anybody
+       play", which is a different question and the one that matters after you
+       have shown the thing to somebody. Joining a game changes the URL without
+       asking the server for a page, so no analytics product can see it; the
+       games table can. */
+    if (route === 'pulse') {
+      const hours = Math.max(1, Math.min(168, Number(url.searchParams.get('hours')) || 24));
+      const since = new Date(Date.parse(now) - hours * 3600000).toISOString();
+      const [rowsIn, resultsIn] = await Promise.all([
+        db.gamesSince(since), db.resultsSince(since),
+      ]);
+      return json({ pulse: pulse(rowsIn, resultsIn, { hours, now }) });
     }
 
     if (route === 'talent/optin' && req.method === 'POST') {

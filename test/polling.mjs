@@ -148,6 +148,38 @@ console.log(`  the fixed six-second heartbeat made ${was}.`);
 console.log(`  that is ${(was / total).toFixed(1)}x less traffic, per player, per game.`);
 if (total > was / 3) throw new Error('adaptive polling did not actually reduce anything');
 
+/* ---- a game that has ceased to exist ------------------------------------
+   The live site was measured doing this 32,002 times in a week: an expired demo
+   class is deleted along with its games, and any tab still open kept asking
+   about a game that was gone, every few seconds, for as long as it stayed open.
+   Nothing on screen said anything was wrong. */
+console.log('\n--- a game that no longer exists ---');
+{
+  const gp = await ctx.newPage();
+  let gone404 = 0;
+  gp.on('response', (r) => {
+    if (/\/api\/state/.test(r.url()) && r.status() === 404) gone404 += 1;
+  });
+  /* A code that has never existed behaves exactly as a deleted one does. */
+  await gp.goto(BASE + '/g/ZZZZZZ');
+  await gp.waitForTimeout(2000);
+  const first = gone404;
+  console.log(`  it asks once and is told 404: ${first >= 1}`);
+
+  await gp.waitForTimeout(18000);
+  console.log(`  after a further 18 seconds, total 404s: ${gone404}`);
+  if (gone404 > 3) {
+    throw new Error(`kept polling a game that does not exist — ${gone404} requests in 20s`);
+  }
+
+  const text = await gp.evaluate(() => document.body.innerText);
+  console.log(`  and the page says so: ${/no longer on the server|No game with that code/i.test(text)}`);
+  if (!/no longer on the server|No game with that code/i.test(text)) {
+    throw new Error('the page does not tell the player the game is gone');
+  }
+  await gp.close();
+}
+
 await browser.close();
 console.log('\nconsole errors:', errs.length ? errs.join(' | ') : 'none');
 if (errs.length) process.exit(1);

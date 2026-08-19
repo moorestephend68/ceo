@@ -181,7 +181,14 @@ async function api(path, body) {
   const opt = body ? { method: 'POST', headers, body: JSON.stringify(body) } : { headers };
   const res = await fetch('/api/' + path, opt);
   const data = await res.json().catch(() => ({ error: 'The server sent something unreadable.' }));
-  if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+  if (!res.ok) {
+    /* The status travels with the message. Without it every failure looks the
+       same to the caller, and "this game no longer exists" is not the same kind
+       of thing as "the wifi dropped". */
+    const err = new Error(data.error || ('Request failed (' + res.status + ')'));
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 
@@ -1146,6 +1153,14 @@ function pollDelay() {
   const v = S.view;
   if (!S.code || !v) return null;
 
+  /* Gone. Not slow, not busy — gone. */
+  if (S.gone) return null;
+
+  /* The server is refusing for some other reason. Back off rather than lean on
+     it: a page that cannot reach the server is not helped by asking harder, and
+     a server having a bad minute should not be given a thousand friends. */
+  if (S.failures) return Math.min(60000, 5000 * Math.pow(2, S.failures - 1));
+
   /* A finished game never changes again. This alone was an open tab asking a
      question with a known answer, for ever. */
   if (v.status === 'over') return null;
@@ -1667,7 +1682,15 @@ function render() {
       games cannot be created or joined. If this is your site: Netlify → Site
       configuration → Environment variables, then redeploy. SETUP.md, step 3.</p></div>`;
   }
-  if (S.error) html += `<div class="card err"><b>${esc(S.error)}</b></div>`;
+  if (S.gone) {
+    html += `<div class="card err"><b>This game is no longer on the server.</b>
+      <p class="muted" style="margin:8px 0 0">Games from an expired demo class are cleared
+      away a few hours after it is opened, and this page has stopped asking about it.
+      Anything shown below is the last thing we saw, not what is true now.</p>
+      <button class="ghost" id="home" style="margin-top:10px">Back to your games</button></div>`;
+  } else if (S.error) {
+    html += `<div class="card err"><b>${esc(S.error)}</b></div>`;
+  }
   if (S.notice) html += `<div class="card" style="border-color:var(--good)"><b>${esc(S.notice)}</b></div>`;
   if (S.showAnalysis) html += screenAnalysis();
   else if (S.showClass) html += screenClass();
@@ -2082,8 +2105,22 @@ async function refresh() {
   try {
     const r = await api('state?code=' + encodeURIComponent(S.code) +
       (S.token ? '&token=' + encodeURIComponent(S.token) : ''));
-    S.view = r.view; render();
-  } catch (e) { S.error = e.message; render(); }
+    S.view = r.view; S.gone = false; S.failures = 0; render();
+  } catch (e) {
+    S.failures = (S.failures || 0) + 1;
+    /* A game that no longer exists will never exist again, so asking a second
+       time is pointless and asking for ever is what this actually did.
+
+       Measured on the live site before this existed: 32,002 requests to
+       /api/state came back 404 in a single week. A demo class expires after four
+       hours and is deleted with its games; any tab still open then held a view
+       of a game that was gone, so pollDelay() saw a live-looking game and
+       re-armed the timer every few seconds until the tab was closed. Nothing
+       in the interface said anything was wrong. */
+    if (e.status === 404) S.gone = true;
+    S.error = e.message;
+    render();
+  }
   schedulePoll();
 }
 
