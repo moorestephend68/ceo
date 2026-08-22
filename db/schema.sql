@@ -405,3 +405,125 @@ create index if not exists talent_live_idx on talent_optin (opted_at desc)
 -- often than not after twenty. The rest are kept because they cost nothing to
 -- keep and are worth having in aggregate.
 alter table results add column if not exists traits jsonb;
+
+-- ============================================================ stage 9
+-- Two changes: what is for sale, and who may approach a player.
+
+-- ---------------------------------------------------------------- unbundling
+-- The charter used to be one purchase covering two quite different things: a
+-- company name kept for good, and the ability to host private games. They are
+-- now sold separately, so `kind` needs a third value.
+--
+-- Dropping and re-adding the constraint is the only way to widen a check. It is
+-- safe: every existing row holds 'host' or 'facilitator', both of which the new
+-- constraint still allows.
+alter table entitlements drop constraint if exists entitlements_kind_check;
+alter table entitlements add constraint entitlements_kind_check
+  check (kind in ('name', 'host', 'facilitator', 'recruiter'));
+
+-- Nobody who already paid loses anything.
+--
+-- Anyone holding 'host' bought it when it meant "name and hosting", so they are
+-- given the 'name' entitlement the split has now separated out. Without this,
+-- unbundling would quietly take something away from the people who paid first,
+-- which is the worst possible group to take something away from.
+insert into entitlements (owner, kind, stripe_event, stripe_ref)
+select owner, 'name', 'grandfathered:' || owner, 'held a charter before the split'
+  from entitlements where kind = 'host'
+on conflict do nothing;
+
+-- ---------------------------------------------------------------- invitations
+-- A company that has paid for access can send one thing to a player: an
+-- invitation to apply for a named job. It never learns who they are. Replying
+-- happens on the employer's own site, so we are not in the middle of it — this
+-- table records that an approach was made, not a conversation.
+--
+-- The unique index is the anti-pestering rule: one approach per recruiter per
+-- player, for ever. A company that wants to ask twice has to have something new
+-- to say, and this is not the place to say it.
+create table if not exists invitations (
+  id           uuid primary key default gen_random_uuid(),
+  recruiter    uuid not null references profiles on delete cascade,
+  company_id   uuid not null references companies on delete cascade,
+  -- Who it is from. The player is anonymous; the employer is not, because an
+  -- invitation from nobody in particular is worthless to receive.
+  from_name    text not null,
+  role         text not null,
+  url          text,
+  blurb        text,
+  reason       text,
+  created_at   timestamptz not null default now(),
+  seen_at      timestamptz,
+  dismissed_at timestamptz,
+  unique (recruiter, company_id)
+);
+
+-- Belt and braces. `create table if not exists` does nothing to a table that
+-- already exists, so a database where an earlier draft of this stage was run
+-- would silently keep the old shape and fail on the first invitation. Naming
+-- the column explicitly costs a line and removes the whole class of problem.
+alter table invitations add column if not exists from_name text;
+update invitations set from_name = 'Unnamed employer' where from_name is null;
+alter table invitations alter column from_name set not null;
+
+alter table invitations enable row level security;
+-- No policy: the service role reaches this from the server and nothing else
+-- does. A table listing who has been approached is not one to leave readable.
+
+-- The player's own list, newest first, and the recruiter's daily count.
+create index if not exists invitations_company_idx
+  on invitations (company_id, created_at desc);
+create index if not exists invitations_recruiter_idx
+  on invitations (recruiter, created_at desc);
+
+-- ============================================================ stage 10
+-- Tournaments: a league with a final, not a bracket.
+--
+-- §43 measured both. A knockout crowns the strongest entrant about one time in
+-- four, and playing more games inside one does not help — elimination throws
+-- the information away. Ranking on aggregate over the same number of tables is
+-- better on every count, and it keeps every paying attendee playing rather than
+-- sending five of every six home after the first hour.
+--
+-- A tournament is a cohort with stages, so almost nothing new is needed.
+
+-- Which stage a game belongs to. Classes have one stage and keep the default,
+-- so every game that already exists is stage 0 and nothing changes for them.
+alter table games add column if not exists stage integer not null default 0;
+
+-- A class has one game per group. A tournament has one per group per stage, so
+-- the uniqueness that stops two students opening the same group has to widen to
+-- match — otherwise stage two cannot create a group 1 because stage one already
+-- did.
+drop index if exists games_cohort_group_idx;
+create unique index if not exists games_cohort_stage_group_idx
+  on games (cohort_id, stage, group_no) where cohort_id is not null;
+
+-- Somebody entered in an event, as opposed to somebody sitting at one table.
+--
+-- A class needs no such thing: a student joins one group and stays in it, so
+-- the seat in the game is the whole of their identity. A tournament re-draws
+-- the groups every stage, so an entrant needs a name and a token that outlive
+-- any particular table — their seat token changes underneath them and they
+-- should never notice.
+create table if not exists entrants (
+  id         uuid primary key default gen_random_uuid(),
+  cohort_id  uuid not null references cohorts on delete cascade,
+  name       text not null,
+  -- What the entrant holds. Never shown to anybody else, and it is the only
+  -- thing that identifies them across the re-draws.
+  token      text not null unique,
+  created_at timestamptz not null default now()
+);
+
+-- Two companies called Ravenscarr in one event is a scoreboard nobody can read,
+-- so the name is claimed rather than shared. Case-insensitively: "ravenscarr"
+-- and "Ravenscarr" are the same name to everyone reading the board.
+create unique index if not exists entrants_name_idx
+  on entrants (cohort_id, lower(name));
+create index if not exists entrants_cohort_idx on entrants (cohort_id, created_at);
+
+alter table entrants enable row level security;
+-- No policy: the server reaches this with the service role and nothing else
+-- does. The tokens in this table are what let somebody play, so a table anybody
+-- can read is a table anybody can play from.

@@ -79,7 +79,7 @@ same as the purchase being recorded; the webhook is the part that records it.
 
 ## 3. Netlify — the environment variables
 
-*Site configuration → Environment variables*. Add all seven:
+*Site configuration → Environment variables*. Add all nine:
 
 ```
 SUPABASE_URL                 https://xxxxx.supabase.co
@@ -87,14 +87,20 @@ SUPABASE_ANON_KEY            eyJhbGci...
 SUPABASE_SERVICE_ROLE_KEY    eyJhbGci...        ← secret
 STRIPE_SECRET_KEY            sk_test_...        ← secret
 STRIPE_WEBHOOK_SECRET        whsec_...          ← secret
-STRIPE_PRICE_HOST            price_1ABC...
-STRIPE_PRICE_FACILITATOR     price_1DEF...
+STRIPE_PRICE_NAME            price_1ABC...
+STRIPE_PRICE_HOST            price_1DEF...
+STRIPE_PRICE_FACILITATOR     price_1GHI...
+STRIPE_PRICE_RECRUITER       price_1JKL...
 ```
 
-`STRIPE_PRICE_FACILITATOR` is the one that is easy to miss, and missing it fails
-quietly: the facilitator licence simply reports "not on sale yet" and an
-instructor who wants to buy it cannot. It needs its own product and its own
-price in Stripe, the same way the charter does.
+There are now four products, each needing its own Stripe product and price:
+**Company name**, **Private games**, **Facilitator licence** and **Hiring
+access**. A missing price fails quietly — that product simply reports "not on
+sale yet" and nobody can buy it — so it is worth checking all four.
+
+Note that `STRIPE_PRICE_HOST` now means *hosting alone*, not the old bundle of
+name-plus-hosting. If you are upgrading an existing site, point it at a new
+product priced for hosting on its own and create a separate one for the name.
 
 Then **redeploy** — environment variables are read at build time, so an existing
 deploy won't pick them up.

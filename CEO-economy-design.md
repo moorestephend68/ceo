@@ -3124,3 +3124,941 @@ shown, but the player may be shown more — and somebody's own history with the
 game is nobody else's business. The browser test asserts it cannot reach the
 profile a company would be handed, and the page says in plain words that a dozen
 games cannot tell you whether it is you improving or the tables being kind.
+
+## 37. Unbundling the charter, and the hiring side
+
+Two changes that arrived together and pull in opposite directions: one makes the
+product cheaper to start with, the other is the first thing here sold to
+somebody other than a player.
+
+### The charter was two products in a coat
+
+It bought a company name kept for good *and* the ability to host private games.
+Those are different things — one is an identity you keep, the other is something
+you do — and bundling them meant anybody who only wanted to be called something
+had to buy a feature they had no use for. They are now separate purchases:
+**Company name** at $19.99, **Private games** as its own.
+
+Three things fall out of that, and two of them are refusals.
+
+**Nobody who already paid loses anything.** Everyone holding the old `host`
+entitlement bought it when it meant both, so stage 9 of the schema grants them
+the `name` entitlement the split separated out. Unbundling would otherwise
+quietly take something away from the people who paid first, which is the worst
+imaginable group to take something from. The migration is idempotent and the
+test asserts that running it twice leaves two rows rather than three.
+
+**Hosting with no name is refused before any money moves.** A private game is
+created *under* a company, so hosting without one is a purchase that cannot be
+used — and finding that out on the far side of a payment page is the worst
+possible moment. Checked in `startCheckout`, not at the point of use.
+
+**Buying the same thing twice is refused**, which sounds obvious and was not
+true of the old code.
+
+An observation that shaped none of this but is worth recording: at the moment
+the split was built, **there had been no private games at all in a week**.
+Hosting is the least-used thing on the site, and it now has a price on it. That
+may well be the wrong order — the argument for doing it anyway is that the
+plumbing is easier to build before there are customers than after.
+
+### The hiring side, and what it refuses to do
+
+A company pays for access, browses players who asked to be found, and sends one
+thing: an invitation to apply for a named job. `lib/recruit.mjs` is almost
+entirely a list of things a paying customer may not do.
+
+**They see a record, never a person.** The profile handed to a recruiter is
+built by the same function that builds the player's own, so there is no second
+code path down which a field could leak. `test/recruit.mjs` asserts that no
+email, no account id and no name of a person appears anywhere in the payload.
+
+**One approach per player, for ever.** Not per week. A company that has been
+ignored once does not get to ask again, and a unique index on
+`(recruiter, company_id)` enforces it rather than good manners — two requests in
+the same instant cannot both win.
+
+**Twenty invitations a day.** Enough to work a shortlist, not enough to mail the
+pool and see who bites. The property that makes an invitation worth opening is
+that it is not spam, and that has to be defended *from the people paying us*.
+
+**Nothing ranks the pool.** It comes back newest-first with a percentile on each
+profile and no sort control. The order a customer is handed a list in is itself
+a recommendation, and a ranked shortlist handed to an employer is a selection
+procedure under a different body of law. An invitation to apply is sourcing. See
+§34.
+
+**Eligibility is re-checked at the moment of sending.** Somebody may have taken
+themselves off the list between the browse and the send, so a company id kept
+from an earlier page is worth nothing — asserted directly in the test.
+
+**The player is anonymous; the employer is not.** Only one side of this needs
+protecting. An invitation from nobody in particular is worthless to receive and
+sinister to get, so the employer's name is required and travels with it. That is
+the one place free-ish text exists, and it is a fact about the employer rather
+than a message to a person.
+
+### What the player gets
+
+Invitations appear on their own record, above their own numbers, each carrying
+the sentence explaining why it was sent. Dismissing one is a single press. There
+is no reply button: applying happens on the employer's own site, so we are the
+introduction and not the middle of a conversation — which is also why there is
+nothing here for anybody to moderate.
+
+### The honest state of it
+
+The pool is empty. Seventeen people played in the week this was written and
+none of them had opted in. Everything above is a mechanism waiting for a
+population, built now because the rules are far easier to get right before
+anybody is relying on them than after.
+
+## 38. Negotiating with somebody — supplier contracts
+
+An investor asked whether the player ever negotiates with anyone: for raw
+materials, for space, for a raise. It is a fair question about a game whose
+whole surface is seven numbers a round.
+
+The honest answer for two of the three was that the lever already exists under a
+different name. Leasing more space is `targetCapacity` — you set the size of
+the plant and pay upkeep on it. Paying people better to get more out of them is
+process R&D — you spend, and throughput and unit cost both improve on a delay. A
+second control doing the same arithmetic would make the screen longer without
+making the decision harder, and the screen is already the constraint.
+
+Raw materials were the one real gap. The cost shock track moves input prices —
+a supplier fire at 1.35× for two rounds, tariffs at 1.20× for three, a glut at
+0.85× — and until now a player had no answer to it except to build less. Input
+costs are 33% of a company's costs, measured, and a season that meets a cost
+shock ends about $47,000 poorer than one that does not.
+
+### The mechanic
+
+Three numbers make a contract: units a round you commit to, how many rounds, and
+the rate the supplier locks. The player chooses the first two. The third comes
+off a curve, and the curve is the negotiation.
+
+**Volume improves the rate. Term worsens it.** Commit more and the supplier pays
+you for certainty of volume; commit for longer and they charge you for carrying
+your price risk further into the season. The two levers pull against each other,
+which is the only reason there is a decision here rather than a slider everyone
+pushes to the same end.
+
+**The lock is a multiplier on the market, not a dollar price.** Your own
+learning and your own process R&D still bring the cost of a unit down
+underneath it. Locking a dollar figure would mean the contract turns bad
+precisely because the player got better at manufacturing, which teaches the
+opposite of the intended lesson.
+
+**It settles in cash, after the engine, never inside it.** Two reasons. The
+engine is generated from a source file outside this repository and shared
+byte-identical with the single-player game, so multiplayer must not diverge from
+it. And unit cost is booked into inventory: rewrite it after the fact and stock
+on hand stops matching what was paid for it, which surfaces three rounds later
+as profit from nowhere. A cash settlement is also what a real hedge does. There
+is a test that plays two identical seasons and asserts the book value of
+inventory is identical to the cent.
+
+**Take-or-pay, at a deficiency rate.** You pay for committed volume whether you
+use it or not — otherwise the contract is a free option and the rate would have
+to price it as one. But a unit you did not take costs 40% of the locked rate,
+not 100%. That single number was the difference between a hedge and a trap; see
+below.
+
+### Three calibrations, two of them wrong
+
+**First attempt — the coupon.** The volume discount arrived fast: a contract
+sized to your own production locked at 0.95 against a market averaging 1.039.
+Over 400 matched seasons it beat never signing by $23,549, went bankrupt *less*
+often than not signing, and had a better worst tenth. Every one of those is a
+good number and together they are a failure: a lever everybody should pull
+without thinking is not a decision, it is a tax on players who have not read the
+manual.
+
+**Second attempt — the trap.** The curve was flattened until the lock sat above
+the long-run market average, which is what insurance should cost. Now every
+setting lost money on the median — expected, and fine — but the *worst tenth of
+seasons got worse too*, at every volume and every term. A hedge that deepens the
+bad tail is a bet wearing an insurance label.
+
+The cause was take-or-pay at full price. A commitment sized to a season's
+production goes unmet in 13% of rounds — a capacity shock, a slump, one round of
+over-stock — and at full price those rounds cost more than every cost spike the
+contract was protecting against. A real take-or-pay clause charges a deficiency
+fee for the supplier's lost margin, not the invoice for goods never made.
+Charging 40% is both the right economics and the fix.
+
+Two other things were wrong and worth recording. The supplier was quoting
+against last round's *sales* while the player buys against *production*, and the
+two differ by about 40% in a growing company — so "one times your throughput"
+silently meant seven tenths of what was actually being bought, a number nobody
+could reason about from the screen. And the term was a discount rather than a
+premium, which made the longest contract strictly correct at every volume.
+
+**Third attempt.** Base rate swept from 0.99 to 1.09 over 300 matched seasons a
+step. Below about 1.02 every modest contract simply pays. Above about 1.06
+nothing on the curve is worth signing. 1.04 is the band where it works.
+
+### What it does now — 800 matched seasons
+
+Every arm plays the identical seeded season with identical trading against
+identical opponents. The contract is the only thing that differs, so the paired
+difference is caused by the contract and nothing else.
+
+| commitment | median vs not signing | worst tenth | bankrupt |
+|---|---|---|---|
+| none | — | -$28,079 | 4% |
+| 0.6× for 3 rounds | -$1,487 | **-$21,550** | 3% |
+| 0.8× for 5 rounds | -$3,217 | **-$16,477** | 3% |
+| 1.0× for 5 rounds | -$2,411 | **-$16,782** | 3% |
+| 1.5× for 5 rounds | -$27,801 | -$99,555 | 8% |
+| 2.0× for 5 rounds | -$81,638 | -$213,311 | 20% |
+| 3.0× for 5 rounds | -$241,086 | -$255,933 | 59% |
+
+A contract sized at or below your own production costs a few thousand on the
+median and takes **$11,000 off the worst tenth of seasons**. That is what a
+hedge is: give up a little expectation, cut the tail. Above about 1.2× it
+inverts, and at 3× it is ruin in nineteen seasons out of twenty.
+
+Nothing dominates. The best setting for money (0.8× for 8 rounds, +$2,011) is
+not the safest (0.8× for 5, 3% bankrupt), and the setting with the best tail is
+neither.
+
+### The part that makes it a skill
+
+Volume and term are a shape to learn. Timing is the thing worth reading the
+screen for.
+
+| when the same contract is signed | median gain |
+|---|---|
+| round 0, blind | -$2,411 |
+| while a cost shock is running | **+$12,929** |
+| while costs are calm | -$2,867 |
+| every time one expires | +$2,520 |
+
+Cost shocks last two or three rounds and are announced in the headlines. Signing
+while one is running captures the remainder of it; signing blind in round 0 does
+not. The same 1.0×/5 contract is worth **+$18,748** in a season that meets a
+cost spike and **-$5,851** in one that does not — so the headline is not
+narration any more, it is information with a price on it.
+
+That was the fourth thing this had to prove, and the one it would have been
+easiest to fail: the right answer has to depend on something visible. It does.
+
+### What is not built yet
+
+The server side is complete and tested — 24 logic tests including a full
+seeded-season run, and the API accepts a contract in the same request as the
+orders. **The player-facing interface is not built.** A contract can be signed
+over the API today and not from the page, which means the mechanic exists and
+nobody can reach it.
+
+That is deliberate ordering rather than an omission: the calibration above
+changed the numbers three times, and building a screen against the first two
+would have been building it twice. It is the next piece of work.
+
+The measurement harness is `test/contractsim.mjs` and runs in about twenty
+seconds: `npm run measure:contracts`.
+
+## 39. Renting plant, in both directions
+
+The same question as §38, asked about capacity rather than materials: when you
+change the size of the factory, should there be a choice about *how*?
+
+There is a real gap here, and it is worth being precise about it, because the
+first answer given to the investor who asked about leasing was that it duplicated
+`targetCapacity`. For leasing space in the abstract, that was right. For
+buy-versus-rent it is wrong, and the difference is the word *temporary*.
+
+Capacity in this game has only ever been permanent. Buy at $18 a unit and it
+arrives a round later; sell and recover $7.20 — a 60% haircut the moment you
+change your mind. Work out what temporary plant costs and the gap is obvious:
+
+| how long you keep a unit | total cost | per round |
+|---|---|---|
+| 2 rounds, then sold | $20.80 | **$10.40** |
+| 5 rounds, then sold | $35.80 | $7.16 |
+| 10 rounds, then sold | $60.80 | $6.08 |
+
+Owning is cheap if you keep it and brutal if you do not. The game already
+punishes temporary capacity; it simply offered no alternative to being punished.
+
+### What was added
+
+Two leases, both running exactly two rounds and then ending on their own — the
+term the request specified, and the right one: a supply crunch is two rounds and
+a logistics strike is two.
+
+**Renting in** costs $4.50 a unit a round on top of the $5 running cost you pay
+on any plant you operate. All in that is $9.50 against $10.40 for buying and
+dumping over the same two rounds. It is available *in the round you ask for it*,
+which is the whole point — bought capacity takes a round to arrive and a spike
+does not wait.
+
+**Renting out** pays $4.00 a unit a round and you stop paying to run it. You keep
+the asset. You cannot have it back for two rounds.
+
+Leased units are never held inside `p.capacity`. They are folded in for the
+length of one `resolve()` call and folded straight back out, which keeps the
+engine untouched and keeps `targetCapacity` meaning what it always meant: the
+plant you own. Build and sell orders are computed before the fold, so a player
+cannot accidentally sell a factory they are renting. There is a test that does
+exactly that and checks the owned plant to the unit.
+
+### The boundary with buying, which is the whole design
+
+The danger with this feature is not that it is weak, it is that it is strong.
+Renting is available this round and buying is not, so if the rent is priced even
+slightly low, renting becomes the answer to everything and the capital lever the
+game already has stops mattering.
+
+400 matched seasons, identical market, identical trading, identical opponents:
+
+| the need | answered by | median | worst tenth |
+|---|---|---|---|
+| a short squeeze | **renting** | **$311,413** | **-$11,464** |
+| | buying | $298,425 | -$34,890 |
+| a permanently bigger company | renting, renewed | $243,895 | -$200,419 |
+| | **buying, once** | **$286,784** | -$166,126 |
+
+Renting wins the short need and loses the permanent one by $43,000. The boundary
+falls exactly where the lease term ends, which is what the price was set to do.
+
+### Renting in is the strong half
+
+| when the player rents in | worth, in seasons it fires | worst tenth | bankrupt |
+|---|---|---|---|
+| never | — | -$50,207 | 4% |
+| blindly, every chance | **-$63,505** | -$200,419 | **16%** |
+| when short of plant | +$21,019 | -$11,464 | 2% |
+| **while a supply crunch is running** | **+$37,722** | **+$470** | 3% |
+
+The best rule is keyed to an announced shock — a port strike, hauliers walking
+out — and it is worth $37,722 with a *better* bad tail than not renting at all
+and a lower bankruptcy rate. Doing the same thing without reading the headlines
+costs $63,505 and bankrupts one company in six. That spread is the lever.
+
+### Renting out is the weak half, and this says so
+
+| when the player rents out | worth, in seasons it fires | units sold | bankrupt |
+|---|---|---|---|
+| never | — | 17,365 | 4% |
+| blindly, every chance | **-$429,787** | **12,403** | **53%** |
+| when the plant sits idle | -$28,709 | 16,611 | 6% |
+| idle *and* a slump announced | +$5,484 | 17,251 | 3% |
+
+The best rule anybody could find is worth $5,484, which is close enough to
+nothing to say so plainly. Renting the factory out blindly is one of the fastest
+ways to die in this game: sales collapse 29%, and more than half the companies
+that try it go under.
+
+Units sold is the column that matters, and finding that out took two wrong
+metrics. Stockouts read zero in every arm — in a shared market the spill caps
+each company's allocation by what it can supply before the engine sees it, so
+`lostSales` is structurally near zero in multiplayer. Market share then read flat
+in every arm for a different reason: share is the slice of demand your price and
+quality win, and renting the factory out changes neither. What changes is how
+much of that demand you can supply, and the spill hands the rest to whoever has
+stock. The demand does not wait and it does not come back.
+
+### Two things this got wrong on the way
+
+**A money pump.** The sweep suggested $5.00 for renting out against $4.50 for
+renting in. Rented-in plant pays the running cost and rented-out plant does not,
+so the upkeep cancels exactly and the gap between the rates is pure profit per
+unit cycled. A company with two lines could rent capacity out of one and into the
+other, hold exactly the same total plant, and be paid fifty cents a unit a round
+for it. Renting out is now $4.00, and there is a test asserting the spread.
+
+**Renting out beats selling, and that is not being corrected.** Both stop the
+running cost, so selling is $7.20 once against $4.00 every round the plant is
+out. Answering an idle line by selling it down is worth -$278,290; renting it out
+is worth -$28,709. That was not the intention. It is right: a 60% haircut is a
+fire-sale price and a fire-sale ought to lose to renting. What it means is that
+selling plant now answers a narrower question — when the cash is needed now, or
+the line is being abandoned — rather than being the only way to shrink.
+
+### What is not built yet
+
+As with §38, the server side is complete and tested and **the player-facing
+interface is not**. Leases can be signed over the API and not from the page.
+
+There is one extra wrinkle here worth recording before that screen is built:
+rented plant is available in the round it is signed for, so the production field
+has to allow a number above the line's current effective capacity in the same
+breath as the lease. A screen that clamps production to owned capacity would let
+a player pay rent for plant they cannot use, which is the worst of both.
+
+Measurement harness: `npm run measure:leases`, about twenty seconds.
+
+## 40. Is there a second game here?
+
+An investor's follow-up to §38 and §39, and a better question than the one that
+prompted them: an instructor with a fifteen-week semester could run this twice —
+once early, once later with more to think about. Do supply contracts and leases
+make the second sitting a real step up?
+
+There is an easy wrong answer available: count the levers, observe there are
+more of them, declare it advanced. More decisions is not a different lesson. If
+the students who do well in the first game are exactly the students who do well
+in the second, an instructor works that out by week ten and never buys the
+second licence.
+
+### The test, and the first version of it that was wrong
+
+The right question is whether the new decisions are *orthogonal* to the old ones.
+Eight distinct ways of playing, 300 seeded seasons each, ranked with the extras
+off and again with them on.
+
+The first version ranked every player with the same competence at the new levers
+and reported a rank correlation of **1.00** — nobody overtook anybody, apparently
+conclusive evidence that this is the same game with more typing. That number was
+an artefact of the design. If everyone handles the new decisions equally well,
+the new decisions cannot change who wins. It is not a classroom.
+
+Crossing the two — every base style against every level of competence at the
+extras — gives the answer that means something:
+
+| | |
+|---|---|
+| Pairs where one base style beats another outright | 28 |
+| Weaker style overtakes by handling the extras well, while the stronger pulls them blind | **32%** |
+| ...while the stronger simply never touches them | 14% |
+
+A player who prices badly and reads the news beats a player who prices well and
+does not. That is a second lesson.
+
+The same trap appeared in the second reading. Correlation between how good a
+player already was and what the extras are worth to them came out at **0.85**,
+which reads as "a multiplier on the first lesson". Across only the six styles
+that are not usually bankrupt it is **0.05**. The 0.85 was survivorship: a style
+that goes under in nine seasons out of ten cannot benefit from anything, and
+including it measures survival rather than skill.
+
+As a share of what each player was already making, the extras are worth 19% to
+the premium player, 33% to the one who undercuts a little, and 69% to the one who
+undercuts hard. Not monotonic in skill at all.
+
+### How big is it
+
+| | |
+|---|---|
+| Base decisions, best style to worst | $588,478 |
+| ...counting only styles that usually survive | $218,246 |
+| Handling contracts and leases well against badly | **$97,755** |
+
+45% of what the base game teaches, among players who are actually playing it.
+That is material. It is not transformational.
+
+### The finding that matters more
+
+A second sitting is a step up in two directions, and only one of them is the one
+that was asked about. The other is what the *first* sitting could leave out.
+
+The base game already asks for seven numbers per product line plus whether to
+open another. Hide two of them — process research and launching — from a first
+sitting and the spread between best and worst falls from $588,478 to $297,743.
+
+**Those two levers are worth $290,735 of separation on their own, three times
+what the supply contract and the leases add together.**
+
+And the reason is worth stating, because it is an argument about teaching rather
+than arithmetic: the single most self-destructive thing available to a beginner
+in this game is over-investing in process research. The style that does it goes
+bankrupt in 91% of seasons. A first game in which a student can destroy their
+company nine times out of ten by over-using an abstract lever they have not been
+taught yet is a bad first game, and hiding it is a better decision than any
+amount of adding.
+
+### What this says the two levels should be
+
+Not "the game, and the game plus negotiations". That undersells the first sitting
+by making it the same thing with pieces missing, and oversells the second by
+resting it on $97,755 of new decision-value.
+
+**First sitting — five decisions a line.** Price, how much to build, advertising,
+quality research, plant size. One product, no launching, no process research, no
+contracts, no leases. This is a game about matching supply to demand at a price,
+and it can be taught in ten minutes and played in fifty.
+
+**Second sitting — everything.** Process research and launching, which is where
+most of the separation lives and where a beginner can hurt themselves. Contracts
+and leases, which add an axis the first game does not test at all: the headlines
+stop being narration and start carrying a price.
+
+That is a genuine step up, and the honest split of it is roughly three parts
+existing complexity revealed to one part new mechanics.
+
+### What has not been measured
+
+Round time. A second-level round asks for more, and rounds run on a clock as
+short as forty-five seconds. Whether the extra decisions fit is a question about
+an interface that does not exist yet, and no simulation here can answer it.
+
+The gating itself does not exist either. Hiding levers per level is not built —
+today every game shows everything. That is a host-facing setting and a
+view-shaping change, and on this evidence it is worth more than either of the
+last two features.
+
+Harness: `npm run measure:levels`.
+
+## 41. Building the levels
+
+§40 measured which levers to hide. This is what was built.
+
+Two levels, and level 2 is the default, so every game and every class that
+existed before this keeps behaving exactly as it did. An unrecognised level falls
+back to it rather than inventing one.
+
+| | Level 1 — First game | Level 2 — The full game |
+|---|---|---|
+| Price, units, advertising, product R&D, plant size | yes | yes |
+| Process R&D | **no** | yes |
+| Opening another product line | **no** | yes |
+| Discontinuing a line | **no** | yes |
+| Supply contracts (§38) | **no** | yes |
+| Leasing plant (§39) | **no** | yes |
+
+Five controls a line instead of six, and three whole cards gone from the orders
+screen.
+
+### One place that answers "is this lever on?"
+
+`rulesOf(game)` returns the level's rules, and every check goes through it.
+Repeating the condition in six places is how two of them end up disagreeing after
+someone edits one.
+
+### Refused, or quietly zeroed — and why they differ
+
+The two are not the same and the distinction is deliberate.
+
+**Launching, signing a contract, taking a lease are refused**, with a message
+saying what they are. These are things a person does on purpose; failing silently
+would leave somebody staring at a screen wondering why nothing happened.
+
+**Process research and discontinuing are zeroed.** They are numbers on a form
+rather than deliberate acts, and a standing order filed before a host changed the
+level should keep working, not start failing every round for the rest of the
+season. A number that is not on the screen is simply not spent.
+
+### The three ways it could have failed
+
+**The page is not a permission.** Every hidden lever is sent to the server anyway
+in `test/levelgate.mjs`, every round of a full season. A control disappearing
+from the interface proves nothing about what the API accepts.
+
+**The archetypes play by the same rules.** This is the one that would have been
+worst. A bot quietly spending on process research in a game where the control is
+not on the screen would beat players with a lever they cannot reach, and nothing
+would look broken — one company would just be inexplicably cheaper all game, with
+no explanation available to the instructor. `botDecideFor`'s plan is zeroed and
+`botShouldLaunch` is not consulted at all. The test asserts that no line in a
+level-1 game finishes above 100 efficiency, players and bots alike.
+
+**Standing orders are re-read, not replayed.** `ordersFor` puts the repeat back
+through `normaliseDecisions` against the current rules. Without that, a host who
+dropped the level mid-season would leave every unattended player still buying
+something the game no longer offers, invisibly, until the end.
+
+### Where the level is not a choice
+
+Ranked tables and the bot league are pinned to level 2. The leaderboard is one
+pool and one record; a table with half the levers switched off, scored against
+tables that had all of them, would produce a number that means nothing. The bot
+league is pinned for a different reason — a documented API against a smaller rule
+set is a second protocol to keep in step.
+
+Private games and classes both pick. The class form defaults to **level 1**,
+because a class is where a first sitting actually happens; the private game form
+defaults to the full game, because that is what it has always been.
+
+### Two tests that passed for the wrong reason
+
+Worth recording, because both looked green.
+
+The first counted process-research spend out of the engine's per-product log to
+prove none was charged. The log carries `rd` and not `rdProcess`, so it read zero
+whether the gate worked or not. Rewritten to measure efficiency, which is the
+only thing process research moves.
+
+The second checked that a standing order stopped buying process research after a
+level change — but it spent $60,000 a round, and the company was bankrupt by
+round five. Nothing repeats after that, so the test was asserting against a dead
+company. Rewritten with a survivable spend, a forgiving credit line, and an
+explicit check that the company is still alive before the level is changed.
+
+### What is still not built
+
+The supply contracts and the leases still have no interface, so level 2's two new
+mechanics remain reachable only over the API. The gating knows about them and
+hides them correctly at level 1; there is simply nothing to show at level 2 yet.
+
+That is now the single largest gap in the product, and it is the only thing
+between here and a second sitting an instructor could actually run.
+
+## 42. The interface for contracts and leases
+
+§38 and §39 built two mechanics and left them reachable only over the API. This
+closes that, and the interesting part is not the controls.
+
+### The rate curve as a grid you click
+
+The supply contract has three numbers and two of them pull against each other:
+volume improves the rate, term worsens it. Three named deals would have hidden
+that — somebody would have had to reverse-engineer the shape from a menu.
+
+So the whole curve is on screen as a table: terms down the side, volumes across
+the top, the locked rate in each cell, and you click the cell you want. The
+trade-off is legible at a glance because it *is* the layout — better rightwards,
+worse downwards.
+
+Every rate in that grid came from the server. The page does not know the curve
+and cannot recompute it, so there is no second copy of the pricing to drift.
+
+### Leasing sits inside the line, not in a card of its own
+
+Capacity belongs to a product line, and the decision leasing competes with —
+building or selling plant — is the control immediately above it. Buying is
+permanent and arrives next round; renting is temporary and arrives now. Putting
+them next to each other is the whole point of having both.
+
+One direction per line at a time. When a lease is pending the two inputs are
+replaced by what was chosen and a way to take it back, so the form cannot build a
+request the server would refuse. Validating after the fact would have been the
+easier thing and the worse one.
+
+### The wrinkle §39 flagged, closed
+
+Rented plant is available in the round it is signed for. A production field
+clamped to owned capacity would therefore let somebody pay rent for plant the
+form will not let them use — the worst of both. The slider's ceiling now runs
+through the same helper the projection uses, so renting in raises it and renting
+out lowers it, and there is a browser test that renting out shrinks it.
+
+### The part that needed a test rather than a decision
+
+The projection panel runs the real engine in the page against the orders being
+typed. That it is the same arithmetic rather than a reimplementation is the
+strongest claim this product makes about itself, and it is true because the
+economy file is inlined into all three places byte-identical.
+
+Contracts and leases break that once. Their settlement lives in
+`lib/contracts.mjs` and `lib/capacity.mjs`, which the page cannot import, so the
+page now holds a second copy of those sums. There was no way around it worth
+having: the alternative was to leave the panel silent about a settlement worth
+tens of thousands, which would make the number a player is shown not the number
+they get.
+
+So `test/supplyui.mjs` is the guard. It signs a contract at the best rate on the
+board, takes a lease, reads what the page predicts, lets the round resolve, and
+compares. Both branches of the settlement are covered — the ordinary one, and the
+shortfall, which has two terms and a constant the page only knows because the
+server sends it. Current drift: **$0 on both**.
+
+That constant is worth noting. `SHORTFALL` is sent to the page as
+`supply.shortfallRate` rather than written into the template, because a number
+copied into an interface is a number that will still be 0.4 after somebody
+changes it to 0.3 in the module. The first run of the test caught exactly this
+class of problem in a different guise — a dev server still holding the module
+from before the field was added, projecting the shortfall as free.
+
+### What the page now does with a level
+
+Level 1 draws none of it: no grid, no lease inputs, and the server sends
+`supply: null` and `leasing: null` so there is nothing to leak. `test/levelui.mjs`
+asserts both the absence and the presence.
+
+### Still open
+
+Nothing on these two mechanics. The gap that remains is the one §40 named:
+whether a level-2 round fits in forty-five seconds now that it asks for more. That
+is a question about people rather than arithmetic, and it wants a real cohort
+rather than another simulation.
+
+## 43. Would a tournament find the best player?
+
+An investor's question: could somebody buy a licence — around $299 — to run a
+tournament? Groups of six, winners advance, a leaderboard inside the event.
+
+Most of that already exists. A class is groups of six playing the same seeded
+market with a board over the top. The bracket is the new part, and the bracket is
+the part that could quietly be a lottery. §34 already found that a single result
+is a weak measure of a player — correlation with ability 0.45 at ten games, 0.21
+at forty, 0.14 at eighty — and a knockout is made of nothing but single results.
+
+### Two errors, both of which flattered the product
+
+**The first draw took 36 seats from 12 policies with replacement.** The strongest
+policy therefore appeared about three times, and the question being answered was
+"does the best strategy win" rather than "does the best player win". It reported
+82%.
+
+**The second used deterministic players.** A fixed rule facing a seeded market
+varies only as much as the market does; a person misreads a round, gets
+interrupted, changes their mind. With no within-player noise the bracket looked
+**91% accurate**, which is not a finding about tournaments — it is a finding
+about how easy it is to tell two fixed rules apart.
+
+Both are in `test/tourneysim.mjs` with the reasoning, because a number that
+flatters you is the one worth being suspicious of.
+
+### What it actually says
+
+Entrants are 36 distinct points on a price × production grid, drawn from the top
+half by measured strength — an entry list is people who have played before, and
+the closer the field the harder the bracket's job. Each carries a per-round
+jitter, and results are reported across a range of it because **how steady a real
+player is has never been measured here**. The 20% column below is a guess and is
+labelled as one.
+
+Chance, with 36 entrants, is 3%.
+
+| format | best entrant wins | best reaches the final three | tables |
+|---|---|---|---|
+| Knockout, 1 game a stage | 22% | 53% | 7 |
+| Knockout, 3 games a stage | 20% | 56% | 21 |
+| Knockout, 2 games, top 2 through | 25% | 64% | 18 |
+| **No elimination, 3 tables each** | **28%** | **73%** | 18 |
+| **No elimination, 5 tables each** | 27% | **88%** | 30 |
+
+Four things fall out of that.
+
+**A tournament is not a raffle.** Every format beats chance by seven to nine
+times. The event means something.
+
+**A knockout crowns the best entrant about one time in four.** Three times in
+four the trophy goes to somebody else. That is not a scandal — most sporting
+knockouts are worse — but it is not what a $299 licence should be sold as.
+
+**Playing more games inside a knockout does not help.** 22% at seven tables, 20%
+at twenty-one. Elimination throws the information away: once you are out, no
+amount of further play can correct the mistake. This was the surprise, and it is
+the argument against the format rather than for a bigger version of it.
+
+**Ranking on aggregate beats a knockout at the same cost.** 28% against 20% for
+the same eighteen tables, and 73% against 56% on the fairer question of whether
+the best entrant reached the last three. It also scales: five tables each takes
+the top-three figure to 88%, while the knockout stays flat.
+
+### The steady column, and why the draw matters as much as the player
+
+With no jitter at all, knockouts get *worse* — 10% — while aggregate goes *up* to
+30–37%. That looks wrong and is not.
+
+With deterministic players the matchup composition dominates. An undercutter
+thrives in a room of premium sellers and drowns in a room of undercutters, so the
+strongest-on-average entrant can be systematically beaten by a particular group
+draw — and a knockout locks that draw in for ever. Aggregate scoring re-draws the
+groups every stage and averages over the luck of who you sat with.
+
+**Who you are drawn against matters about as much as how well you play**, and
+only one of the two formats does anything about it.
+
+### Swiss pairing makes it worse, which was not expected
+
+The standard answer to ranking a field accurately in few rounds is a Swiss draw:
+after the first stage, seat people against others on a similar score. It was
+measured and it is **worse** — 71% against 73% on the top-three question at three
+tables each, and 77% against 88% at five.
+
+The reason is specific to this game and worth stating, because it is the kind of
+thing borrowed wisdom gets wrong. In chess a win is a win whoever you beat, so
+concentrating strong players together sharpens the ranking. Here the score is
+*money made*, and money made depends on who else is at the table competing for
+the same demand. Seat the six strongest people together and they suppress each
+other's numbers while a weak group posts large ones. Swiss pairing inverts the
+ranking rather than sharpening it.
+
+**A random re-draw every stage is the right answer**, and now for a measured
+reason rather than because it was the first thing tried.
+
+### The commercial argument, which points the same way
+
+Thirty-six people pay to attend. A single-elimination bracket sends thirty of
+them home after the first hour. Whatever that does for fairness, it is a strange
+thing to sell.
+
+### What to build instead
+
+Not a bracket: **a league with a final.**
+
+Everyone plays N tables in re-drawn groups of six. Every group in a stage faces
+an identical seeded market, which is the property the whole product rests on and
+the only thing that makes tables comparable. The event board ranks on money made
+across all of them. The top six play a final.
+
+That is more accurate than a knockout at the same cost, keeps every attendee
+playing all afternoon, still produces a champion and a trophy moment, and the
+in-event leaderboard the question asked for is no longer a decoration bolted on
+the side — it *is* the competition.
+
+It also matches what the rest of the site already decided twice: the bot league
+ranks on average money made rather than total, and a player's record is built
+from their average rather than their best game, both for the reasons §34
+measured.
+
+### What is built
+
+All of it: the pure part, the storage, the API and both screens.
+
+`lib/tournament.mjs` holds the part where being wrong decides who wins — stage
+markets, the draw, standings and finalists — and that half is storage-free and
+clock-free, like `talent.mjs` and `contracts.mjs`, so it can be argued with in a
+test.
+
+Two things in it came out of writing the tests rather than the design. Slicing
+groups off in sixes and keeping the remainder produced a **table of two** for
+thirteen entrants — the engine will not seat fewer than three, and two people is
+not a market. Sizes are now spread evenly, so thirteen is 5 + 4 + 4 and no two
+tables in a stage differ by more than one seat. And an entrant who signs up and
+never plays a table is excluded from the final rather than taking a seat from
+somebody who did.
+
+### Storage: a cohort with stages
+
+Almost nothing new was needed, which is the point of building it on cohorts.
+Stage 10 of the schema is three things:
+
+- **`games.stage`**, defaulting to 0. Every class that already exists is stage 0
+  and nothing about it changes.
+- **The uniqueness widened** from `(cohort_id, group_no)` to
+  `(cohort_id, stage, group_no)`. Without that, stage two cannot create a group 1
+  because stage one already did.
+- **An `entrants` table.** This is the only genuinely new idea. A class needs no
+  such thing: a student joins one group and stays in it, so their seat in the
+  game is the whole of their identity. A tournament re-draws every stage, so an
+  entrant needs a name and a token that outlive any particular table.
+
+**The seat token changes every stage and the entrant never learns.** They hold
+one token all afternoon; the console re-seats them under it. The end-to-end test
+asserts exactly that — three tables, three different seat tokens, one entrant
+token — because it is the thing that would be most annoying to get wrong and
+least visible when it was.
+
+### Two rules the storage enforces rather than asks nicely
+
+**The field closes when the first stage is drawn.** Somebody arriving in the
+middle would play fewer tables than everybody else, and their total would mean
+something different from everybody else's. It is the one thing a standings table
+built on totals cannot survive.
+
+**A stage cannot be drawn twice**, and the next one cannot be drawn while any
+table in the current one is still playing. A board that reorders itself while
+half the room is still playing is a board nobody in the room trusts.
+
+### The console, and what it deliberately does not have
+
+One button most of the time: draw the next stage. It is absent rather than
+disabled when it cannot be pressed, and the card says what it is waiting for —
+entrants, or tables still playing.
+
+There is no seeding control, no way to move somebody between tables, and no way
+to re-draw a stage that has been played. Every one of those would be a way to
+decide who wins after seeing how they were doing.
+
+### Sold with the licence, not beside it
+
+A facilitator licence runs classes and tournaments both. Somebody who runs
+classes and somebody who runs a competition are the same customer, a second
+product is a second thing to explain, and — the practical half — it means this
+ships with no new Stripe product, no new price variable, and a migration that is
+one column and one table.
+
+### What has not been measured
+
+The jitter. Everything above hangs on how consistent a real player is between
+games, and that number does not exist. It is measurable — the same person's
+results across several ranked games, once enough people have played several —
+and until it does exist, the honest form of this answer is the table and its
+range, not a headline figure.
+
+Harness: `npm run measure:tournament`, about two minutes.
+
+## 44. The projection panel on a phone
+
+A player reported that the panel showing expected profit and where the money goes
+"goes off the page" — fine on a laptop, gone on a phone.
+
+It was exactly that, and the CSS said so in one line:
+
+```css
+@media(max-width:900px){ .layout{grid-template-columns:1fr} .proj{position:static} }
+```
+
+Above 900px the projection is a sticky column beside the form and follows the
+page down. Below it, the grid collapses to one column, the panel loses its
+stickiness, and it lands underneath six order cards. So on a phone you scrolled
+past every slider to reach the number — and once you were there, you could not
+see the sliders.
+
+That is not a cosmetic problem. The projection runs the real engine against the
+orders being typed, and it is only worth anything *while* they are being typed. A
+panel you can only see after you have finished deciding is a receipt, not a tool.
+
+### What it does now
+
+Under 900px the panel becomes a bar pinned to the bottom of the screen carrying
+the one number, which opens into the whole breakdown. Above 900px nothing has
+changed.
+
+**One renderer, two hosts.** `renderProjection` builds the markup once and writes
+it into both the sticky column and the bar's sheet; CSS decides which is on
+screen. A second copy of that panel would drift, and drift in the panel that
+claims to be running the real engine is worse than not having it.
+
+**The warning count travels with the number.** "Nothing on advertising" is,
+measured, the commonest way a good plan loses, and it should not be waiting
+behind a tap. It shows as "2 to check" beside the profit, and it is empty rather
+than reassuring when there is nothing — a badge reading "looks sound" next to a
+$70,000 expected loss reads as the page contradicting itself.
+
+**The bar is only there when there is something to project**, and the page only
+reserves space at the bottom while it is. A phone should not carry 78px of dead
+space on the home screen for a panel that is not being shown.
+
+### Two things a screenshot caught that the CSS did not
+
+The bar was **transparent** — `background: var(--bg)`, and there is no `--bg` in
+this stylesheet. The numbers underneath read straight through it. It is
+`--surface-1` now, the same colour every card uses.
+
+And at 390px the label, the flag, the number and the chevron did not fit on one
+line. The label now gives way first, because the number is the only one of the
+four that must never be truncated.
+
+Neither was visible from reading the stylesheet. Both were obvious in a
+screenshot at 390 × 780, which is now `test/mobileui.mjs` — it checks the phone
+layout and the laptop one in the same run, because the risk in a change like this
+is fixing the phone and quietly breaking the laptop.
+
+### The market table, and what was actually wrong
+
+The same screenshot showed the market table clipped on the right: six columns of
+numbers about your rivals, and the share column running off the edge.
+
+Reflowing it was the obvious half. Each row is now a labelled block — the header
+is hidden and every cell carries the heading it would have had — **paired into
+two columns**, because one label per line is five rows a company and, at a full
+table, twenty-five rows of scrolling before a player reaches their own orders.
+Paired, it is three.
+
+Scrolling it sideways instead would have been easier and wrong. This is the only
+view a player has of what everybody else is doing, and a table you have to drag
+is a table nobody reads.
+
+**But the table was not what was widening the page.** With it fixed, the page
+still scrolled sideways — 476px of content in a 390px screen. The culprit was the
+orders column: a grid item will not shrink below its own content unless it is
+told to, and that column holds a slider with a minimum width and a number box
+beside it. One line — `.layout > * { min-width: 0 }` — plus a narrower number box
+on small screens, and the page fits.
+
+That is the more useful finding. The reported symptom was the table; the cause
+was the form, and only measuring the whole page rather than the element that
+looked wrong would have found it.
+
+**One exception, deliberately.** The supply contract rate grid *does* scroll
+sideways, inside its own box. It is genuinely two-dimensional — volume across,
+term down — and reflowing it into a list would destroy the only thing it is for,
+which is seeing both trade-offs at once. What it must not do is set the width of
+the page, and the test checks that rather than checking it fits.

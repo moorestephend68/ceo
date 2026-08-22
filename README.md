@@ -42,6 +42,8 @@ explicitly or the pages ship and every game request returns 404.
 | `lib/league.mjs` | The bot league — keys, seating, and the average-based board |
 | `lib/talent.mjs` | Being findable by an employer — consent, the floor, and what may be published |
 | `lib/progress.mjs` | Whether anybody gets better — matched cohorts and a permutation null |
+| `lib/recruit.mjs` | The hiring side — the pool, the identity wall, and one approach each |
+| `lib/pulse.mjs` | Did anybody play — counts games rather than pageviews |
 | `lib/traits.mjs` | How a game was played — including what happens after a bad round |
 | `bots/reference-bot.mjs` | A complete runnable bot, no dependencies. See `BOTS.md` |
 | `netlify/functions/api.mjs` | create · join · start · submit · state · demo · cohorts |

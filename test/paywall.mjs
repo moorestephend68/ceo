@@ -36,7 +36,7 @@ async function page(devToken) {
 const out = await page(null);
 const outText = await out.evaluate(() => document.body.innerText);
 console.log('signed out — sign-in offered:', /sign-in link/i.test(outText));
-console.log('signed out — hosting gated:', /Hosting needs a company charter/i.test(outText));
+console.log('signed out — hosting gated:', /separate purchase/i.test(outText));
 const createDisabled = await out.$eval('#create', (el) => el.disabled).catch(() => null);
 console.log('signed out — create button disabled:', createDisabled);
 if (createDisabled !== true) throw new Error('the create button was not disabled when signed out');

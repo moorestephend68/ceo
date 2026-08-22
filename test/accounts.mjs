@@ -99,7 +99,7 @@ assert.equal(reclaimed.owner, 'user-c');
 
 /* ------------------------------------------------------------- hosting */
 console.log('\nHosting is checked on the server:');
-await assert.rejects(() => A.requireHost(db, 'user-c'), /company charter/);
+await assert.rejects(() => A.requireHost(db, 'user-c'), /separate purchase/);
 console.log('  an account with no charter: refused');
 const hostOk = await A.requireHost(db, 'user-a');
 console.log('  the account that paid:', hostOk.canHost ? 'allowed' : 'REFUSED');

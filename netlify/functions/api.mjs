@@ -18,6 +18,8 @@ import * as L from '../../lib/league.mjs';
 import * as T from '../../lib/talent.mjs';
 import * as PR from '../../lib/progress.mjs';
 import { pulse } from '../../lib/pulse.mjs';
+import * as RC from '../../lib/recruit.mjs';
+import * as TR from '../../lib/tournament.mjs';
 import { requireUser, userFrom } from '../../lib/auth.mjs';
 import { getDb, getVerifier, publicAuthConfig, serverReady } from '../../lib/runtime.mjs';
 import { BUILD } from '../../lib/version.mjs';
@@ -119,6 +121,7 @@ export default async (req) => {
     if (route === 'config') {
       return json({
         presets: G.PRESETS, limits: G.LIMITS, cadences: G.CADENCES,
+        levels: G.LEVELS, defaultLevel: G.DEFAULT_LEVEL,
         auth: publicAuthConfig(), ready: serverReady(), build: BUILD,
         products: Object.fromEntries(Object.entries(B.PRODUCTS).map(([k, p]) => [k, {
           label: p.label, blurb: p.blurb, forSale: !!process.env[p.envPrice],
@@ -361,7 +364,9 @@ export default async (req) => {
          somebody's own history with the game and is nobody else's business, so
          it lives outside `profile` and cannot travel with it by accident. */
       const progress = PR.curveFor(rows, { start: P.START_CASH });
+      const invitations = await RC.inbox(db, mine.id);
       return json({ status, company: { id: mine.id, name: mine.name }, profile: p, progress,
+                    invitations,
                     minGames: T.MIN_GAMES, traitGames: T.TRAIT_GAMES,
                     /* Shown alongside, so nobody has to guess what an invitation
                        would look like before agreeing to receive one. */
@@ -398,6 +403,16 @@ export default async (req) => {
       return json({ pulse: pulse(rowsIn, resultsIn, { hours, now }) });
     }
 
+    if (route === 'talent/invitation/dismiss' && req.method === 'POST') {
+      const user = await requireUser(req, db, verify);
+      const acct = await A.accountState(db, user.id);
+      const mine = acct.companies[0];
+      if (!mine) return fail('You have no company.', 400);
+      /* Scoped to their own company, so an id from somewhere else does nothing. */
+      const done = await db.dismissInvitation(String(body.id || ''), mine.id, now);
+      return json({ dismissed: done, invitations: await RC.inbox(db, mine.id) });
+    }
+
     if (route === 'talent/optin' && req.method === 'POST') {
       const user = await requireUser(req, db, verify);
       await T.optIn(db, user.id, { adult: !!body.adult, openTo: body.openTo,
@@ -411,9 +426,99 @@ export default async (req) => {
       return json({ status: await T.statusOf(db, user.id) });
     }
 
+    /* ------------------------------------------------- hiring */
+    /* A company that has paid for access can see the record of players who
+       asked to be found, and send one invitation each. It never learns who
+       anybody is. Every rule is enforced in lib/recruit.mjs rather than here,
+       so no route can forget one. */
+
+    if (route === 'recruiter/pool') {
+      const user = await requireUser(req, db, verify);
+      await RC.requireRecruiter(db, user.id);
+      const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+      const found = await RC.pool(db, { offset, start: P.START_CASH });
+      /* What has already been approached, so the interface can say so rather
+         than letting somebody spend an invitation finding out. */
+      const already = await db.invitationsSentBy(user.id);
+      return json({
+        total: found.total,
+        entries: found.entries.map((e) => ({ ...e, invited: already.includes(e.companyId) })),
+        dailyLimit: RC.DAILY_LIMIT,
+        sentToday: await db.invitationsSentSince(user.id,
+          new Date(Date.parse(now) - 24 * 3600000).toISOString()),
+      });
+    }
+
+    if (route === 'recruiter/invite' && req.method === 'POST') {
+      const user = await requireUser(req, db, verify);
+      await RC.requireRecruiter(db, user.id);
+      const out = await RC.invite(db, user.id, {
+        companyId: body.companyId, from: body.from, role: body.role,
+        url: body.url, blurb: body.blurb, now,
+      });
+      return json(out);
+    }
+
     /* ------------------------------------------------------------ cohorts */
     /* Running a class is the facilitator licence; joining one is free, the same
        way joining a private game is. */
+    /* ------------------------------------------------------------ tournaments
+
+       An event is a cohort with stages, so it is created and controlled by the
+       same licence and most of the same code. What is new is the draw, the
+       standings and an entrant identity that survives being re-seated every
+       stage — see §43 for why it is a league with a final rather than the
+       knockout that was asked for. */
+    if (route === 'tournaments' && req.method === 'POST') {
+      const user = await requireUser(req, db, verify);
+      const acct = await A.accountState(db, user.id);
+      if (!acct.canFacilitate) {
+        throw new Error('Running a tournament needs a facilitator licence — the same '
+          + 'one that runs classes.');
+      }
+      const made = await TR.createTournament(db, user.id, body);
+      return json({ tournament: await TR.stateOf(db, made) });
+    }
+
+    /* Entering is public and needs no account, the same as joining a class. */
+    if (route === 'tournament/enter' && req.method === 'POST') {
+      const cohort = await db.cohortByJoinCode(String(body.code || '').trim());
+      if (!cohort || !TR.isTournament(cohort)) return fail('No event with that code.', 404);
+      const { entrant, token } = await TR.enter(db, cohort, body.name, now);
+      return json({ token, name: entrant.name,
+                    view: await TR.entrantView(db, cohort, token) });
+    }
+
+    /* What one entrant sees. Their own token, and nothing that would let them
+       read somebody else's. */
+    if (route === 'tournament/me') {
+      const token = url.searchParams.get('token') || '';
+      const me = await db.entrantByToken(token);
+      if (!me) return fail('We do not recognise you in this event.', 404);
+      const cohort = await db.cohort(me.cohort_id);
+      if (!cohort) return fail('That event no longer exists.', 404);
+      return json({ view: await TR.entrantView(db, cohort, token) });
+    }
+
+    if (route.startsWith('tournament/')) {
+      const [, eventId, action] = route.split('/');
+      const cohort = await db.cohort(eventId);
+      if (!cohort || !TR.isTournament(cohort)) return fail('No event with that id.', 404);
+      const user = await requireUser(req, db, verify);
+      if (cohort.facilitator !== user.id) return fail('That is not your event.', 403);
+
+      if (!action) return json({ tournament: await TR.stateOf(db, cohort) });
+
+      /* Draw and start the next stage — or the final, once the stages are done.
+         Which of the two it is comes from the state rather than from what the
+         page sends, so a stale console cannot start the wrong thing. */
+      if (action === 'stage' && req.method === 'POST') {
+        const started = await TR.startStage(db, cohort, now);
+        return json({ started, tournament: await TR.stateOf(db, await db.cohort(eventId)) });
+      }
+      return fail('No such action.', 404);
+    }
+
     if (route === 'cohorts' && req.method === 'POST') {
       const user = await requireUser(req, db, verify);
       const acct = await A.accountState(db, user.id);
@@ -688,7 +793,8 @@ export default async (req) => {
     }
 
     const status = /sign in|please sign/i.test(msg) ? 401
-      : /charter|licence/i.test(msg) ? 402
+      : /charter|licence|hiring access|separate purchase/i.test(msg) ? 402
+      : /already invited|is the limit|no longer listed|taken themselves off/i.test(msg) ? 409
       : 400;
     return fail(msg, status);
   }

@@ -75,6 +75,44 @@
   .pill.dead{color:var(--critical);border-color:var(--critical)}
   .big{font-size:34px;font-weight:700;letter-spacing:-0.03em}
   .pos{color:var(--good-text)} .neg{color:var(--series-neg)}
+  /* The market table on a narrow screen.
+
+     Six columns of numbers do not fit in 390px, and at that width the content
+     forced the table wider than the screen rather than squashing — the share
+     column simply ran off the right edge with nothing to say it was there.
+
+     Scrolling it sideways was the easy fix and the wrong one: this is the only
+     view a player has of what their rivals are doing, and a table you have to
+     drag is a table nobody reads. So each row becomes a labelled list, using the
+     header text each cell would have had. */
+  @media(max-width:620px){
+    /* The slider gives up its floor and the number box narrows, so a line's
+       controls fit a phone rather than setting the width of the page. */
+    .ctrl .row input[type=range]{min-width:0}
+    .ctrl .row input[type=number]{width:88px}
+    table.market, table.market tbody, table.market td{display:block}
+    table.market thead{display:none}
+    /* Two columns of label-and-value rather than one. A stack of five rows per
+       company is readable and, with five companies at a table, twenty-five rows
+       of scrolling before you reach your own orders. Pairing them up halves it
+       without dropping anything. */
+    table.market tr{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;
+      border-bottom:1px solid var(--grid);padding:9px 0}
+    table.market tr:last-child{border-bottom:none}
+    table.market td{border:none;padding:2px 0;display:flex;
+      justify-content:space-between;align-items:baseline;gap:10px}
+    /* "This round" carries a pill rather than a number and reads better with the
+       full width to itself. */
+    table.market td:last-child{grid-column:1 / -1}
+    table.market td::before{content:attr(data-l);color:var(--muted);
+      font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;
+      font-weight:600;flex:0 0 auto}
+    /* The name gets the whole width and no label — it is the heading of its own
+       little block, and the share bar sits under it. */
+    table.market td.who{display:block;font-weight:650;padding-bottom:5px;
+      grid-column:1 / -1}
+    table.market td.who::before{content:none}
+  }
   .bar{height:5px;background:var(--grid);border-radius:99px;overflow:hidden;margin-top:4px}
   .bar i{display:block;height:100%;background:var(--series-1)}
   .err{border-color:var(--critical);color:var(--critical)}
@@ -85,6 +123,31 @@
   .share input{font-family:ui-monospace,monospace;font-size:12.5px}
   .hidden{display:none}
   .lede{font-size:15px;color:var(--text-secondary);max-width:60ch}
+  .leasebox{margin-top:10px;padding:9px 11px;border:1px solid var(--grid);
+    border-radius:8px;font-size:12.5px;line-height:1.5}
+  .leasebox.on{border-color:var(--text-primary)}
+  .leaserow{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:7px}
+  .leaserow label{display:flex;gap:6px;align-items:center;font-size:12.5px;
+    font-weight:600;margin:0}
+  .leaserow input{width:92px;padding:4px 6px;font-size:12.5px}
+  button.small{padding:4px 9px;font-size:12px}
+  /* The rate grid is the one thing on the page that genuinely is two
+     dimensional — volume across, term down — so on a phone it scrolls inside its
+     own box rather than being reflowed into a list. Reflowing it would destroy
+     the only thing it is for, which is seeing both trade-offs at once. What it
+     must not do is set the width of the page. */
+  .gridscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px -2px 4px}
+  .rategrid{width:100%;min-width:320px;border-collapse:collapse;font-size:12px}
+  .rategrid th{font-weight:600;color:var(--muted);padding:4px 6px;text-align:right;
+    font-size:11.5px;white-space:nowrap}
+  .rategrid th.rh{text-align:left}
+  .rategrid td{padding:0}
+  .rategrid button{width:100%;padding:5px 6px;font-size:12px;background:none;
+    border:1px solid transparent;border-radius:5px;color:var(--text-primary);
+    cursor:pointer;font-variant-numeric:tabular-nums}
+  .rategrid button:hover{border-color:var(--grid)}
+  .rategrid button[aria-pressed="true"]{border-color:var(--text-primary);font-weight:700}
+  .rategrid button.good{color:var(--good-text)}
   .ctrl{padding:10px 0;border-bottom:1px solid var(--grid)}
   .ctrl:last-child{border-bottom:none}
   .ctrl .lab{display:flex;justify-content:space-between;align-items:baseline;
@@ -111,9 +174,64 @@
   .warnbox.warn{background:rgba(250,178,25,0.13);color:var(--text-primary)}
   .warnbox.ok{background:rgba(12,163,12,0.10);color:var(--good-text)}
   .layout{display:grid;grid-template-columns:1fr 330px;gap:14px;align-items:start}
-  @media(max-width:900px){.layout{grid-template-columns:1fr}.proj{position:static}}
+  /* A grid item will not shrink below its own content unless told to, and the
+     orders column contains a slider with a minimum width and a number box beside
+     it. Without this the whole column pushed 477px wide inside a 390px screen
+     and the page scrolled sideways — which looked like a table problem and was
+     not one. */
+  .layout > *{min-width:0}
+  /* Narrow screens: the projection is the one panel that has to stay visible
+     while the sliders are being moved, and stacking it under six order cards is
+     the same as not having it. So on a phone it becomes a bar pinned to the
+     bottom of the screen showing the number, which opens the whole panel. */
+  .projbar{display:none}
+  @media(max-width:900px){
+    .layout{grid-template-columns:1fr}
+    /* The in-flow copy is hidden rather than removed: it is what the bar's
+       sheet is filled from, and keeping one renderer for both is what stops the
+       two disagreeing. */
+    #projection{display:none}
+    body.hasprojbar{padding-bottom:78px}
+    .projbar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:40;
+      /* An opaque surface, not the page colour and not a transparent default —
+         this sits over live content and the first version let the numbers
+         underneath read straight through it. */
+      background:var(--surface-1);border-top:1px solid var(--grid);
+      box-shadow:0 -8px 24px rgba(0,0,0,0.16)}
+    :root[data-theme="dark"] .projbar{box-shadow:0 -8px 24px rgba(0,0,0,0.55)}
+    .projbar .head{display:flex;align-items:baseline;gap:9px;
+      padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+      cursor:pointer;user-select:none}
+    /* The label gives way first. At 390px the label, a flag, the number and a
+       chevron do not fit on one line, and the number is the only one of the four
+       that must never be truncated. */
+    .projbar .k{font-size:12px;color:var(--text-secondary);flex:1 1 auto;
+      min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .projbar .v{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;
+      flex:0 0 auto;margin-left:auto}
+    .projbar .flag{font-size:11px;padding:2px 7px;border-radius:99px;flex:0 0 auto;
+      border:1px solid var(--series-neg);color:var(--series-neg);white-space:nowrap}
+    .projbar .flag:empty{display:none}
+    .projbar .chev{font-size:11px;color:var(--muted);flex:0 0 auto}
+    .projsheet{display:none;max-height:62vh;overflow-y:auto;
+      border-top:1px solid var(--grid);padding:0 15px 14px}
+    .projbar.open .projsheet{display:block}
+    .projsheet .card{border:none;padding:0;margin:0;background:none}
+    .projsheet .proj{position:static}
+    /* The bar already says "If the round ran now" two lines above. */
+    .projsheet .card > h2{display:none}
+  }
 </style>
 </head><body>
+<div class="projbar" id="projbar" hidden>
+  <div class="head" id="projbarhead">
+    <span class="k">If the round ran now</span>
+    <span id="projbarflag" class="flag"></span>
+    <span class="v" id="projbarval">—</span>
+    <span class="chev" id="projbarchev">▲</span>
+  </div>
+  <div class="projsheet" id="projsheet"></div>
+</div>
 <div class="wrap">
   <header>
     <div>
@@ -164,12 +282,21 @@ const S = { code: null, token: null, view: null, cfg: null, busy: false, error: 
              league: null, showLeague: false, botKey: null,
              talent: null, showTalent: false,
              cohorts: null, cohort: null, showClass: false, joinClass: null,
+             /* Tournaments. `tourney` is the facilitator's console, `entrant` is
+                what somebody who entered sees; only one of the two is ever set,
+                and the token that drives the second lives in localStorage so a
+                closed tab is not a lost afternoon. */
+             tourney: null, showTourney: false, entrant: null, joinEvent: null,
              demo: null, mine: null, analysis: null, showAnalysis: false };
 
 /* The demo class belongs to nobody, so the token that came back with it is the
    only way to get at it again. Kept in the browser so a reload does not silently
    abandon a class somebody is halfway through showing to a colleague. */
 const DEMOKEY = 'ceo.demo.v1';
+/* An entrant's token. Different from a game token: it outlives every table they
+   sit at, and losing it to a closed tab would mean losing their place in an event
+   somebody may well have paid for them to attend. */
+const EVENTKEY = 'ceo.event.v1';
 const demoArg = (b = {}) => (S.demo ? { ...b, demo: S.demo.token } : b);
 
 /* Signing in is only needed to host or to own a name. Joining a game a friend
@@ -258,14 +385,14 @@ const canHost = () => !!(S.account && S.account.canHost);
 const myCompany = () => (S.account && S.account.companies && S.account.companies[0]) || null;
 
 function accountCard() {
-  const p = S.cfg && S.cfg.products && S.cfg.products.host;
+  const p = S.cfg && S.cfg.products && S.cfg.products.name;
   if (!signedIn()) {
     return `
     <div class="card">
       <h2>Your company</h2>
       <p class="lede">Joining a game someone invited you to needs nothing at all.
-        Sign in only if you want to <b>host games for your friends</b> and keep a
-        company name that stays yours.</p>
+        Sign in only if you want a <b>company name that stays yours</b> — it goes on
+        your record, and nobody else can take it.</p>
       <div class="row" style="margin-top:12px;max-width:420px">
         <div><label for="email">Email</label>
           <input id="email" type="email" placeholder="you@example.com" autocomplete="email"></div>
@@ -275,15 +402,15 @@ function accountCard() {
     </div>`;
   }
   const mine = myCompany();
-  if (canHost() && mine) {
+  if (mine) {
     return `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
         <h2 style="margin:0">${esc(mine.name)}</h2>
         <span class="muted">${esc(S.account.email || '')} · <a href="#" id="signout">sign out</a></span>
       </div>
-      <p class="muted" style="margin-top:6px">Your company name, kept for good. You can host
-        private games below.</p>
+      <p class="muted" style="margin-top:6px">Your company name, kept for good. Ranked
+        games count towards your record.</p>
     </div>`;
   }
   /* signed in, nothing bought yet */
@@ -293,7 +420,7 @@ function accountCard() {
       <h2 style="margin:0">Claim your company</h2>
       <span class="muted">${esc(S.account.email || '')} · <a href="#" id="signout">sign out</a></span>
     </div>
-    <p class="lede">${p ? esc(p.blurb) : 'Your company name, kept for good, and the ability to host private games.'}</p>
+    <p class="lede">${p ? esc(p.blurb) : 'Your company name, kept for good.'}</p>
     <div class="row" style="margin-top:12px;max-width:420px">
       <div><label for="claimname">Company name</label>
         <input id="claimname" type="text" maxlength="28" placeholder="Ravensworth &amp; Co">
@@ -392,6 +519,16 @@ function screenHome() {
   const presets = S.cfg ? Object.entries(S.cfg.presets).map(([k, p]) =>
     `<button class="choice" data-preset="${k}" aria-pressed="${k === 'standard'}">
       <div class="n">${esc(p.label)}</div><div class="d">${esc(p.note)}</div></button>`).join('') : '';
+  /* How much of the game is switched on. Rendered from what the server says the
+     levels are rather than from a copy kept here, so the two cannot drift. */
+  const LV = (S.cfg && S.cfg.levels) || {};
+  const defLevel = String((S.cfg && S.cfg.defaultLevel) || 2);
+  const levelBtns = Object.entries(LV).map(([id, l]) =>
+    `<button class="choice kind" data-level="${id}" aria-pressed="${id === defLevel}">
+      <div class="n">${esc(l.label)} <span class="muted">${esc(l.short)}</span></div>
+      <div class="d">${esc(l.note)}</div>
+      <div class="d" style="margin-top:3px;opacity:0.8">${esc(l.forWhom)}</div>
+    </button>`).join('');
 
   if (S.joinClass) {
     return `
@@ -427,15 +564,14 @@ function screenHome() {
     <button class="primary" id="playnow" style="margin-top:6px">Find me a game</button>
     <button class="ghost" id="showboard" style="margin-top:6px">Leaderboard</button>
   </div>`;
-  return publicCard + accountCard() + demoCard() + classCard() + leagueCard()
+  return publicCard + accountCard() + demoCard() + classCard() + tourneyCard() + leagueCard()
        + talentCard() + `
   <div class="card" ${gated ? 'style="opacity:0.55"' : ''}>
     <h2>Start a game</h2>
     <p class="lede">You invite your friends with a link. Empty seats are filled by
       AI companies, and nobody — including you — is told which is which until the
       last round is scored.</p>
-    ${gated ? `<p class="muted"><b>Hosting needs a company charter.</b>
-      ${signedIn() ? 'Claim your name above.' : 'Sign in above to claim one.'}</p>` : ''}
+    ${gated ? hostingOffer() : ''}
     ${myCompany() ? `<p class="muted">You will play as <b>${esc(myCompany().name)}</b>.</p>` : ''}
     <h3 style="margin-top:14px">How many companies</h3>
     <div class="choices" id="seatchoice">${seatBtns.join('')}</div>
@@ -451,6 +587,12 @@ function screenHome() {
       that is what makes the last few rounds a real decision.</p>
     <h3>Difficulty</h3>
     <div class="choices" id="presetchoice">${presets}</div>
+    <h3 style="margin-top:14px">How much of the game</h3>
+    <div class="choices" id="levelchoice">${levelBtns}</div>
+    <p class="muted" style="margin:2px 0 10px">A first game is a complete game — it
+      leaves out the levers that are hardest to use well, which are also the ones
+      most likely to sink somebody who has never played. Run it once, then run the
+      full game with the same people.</p>
     <button class="primary" id="create" style="margin-top:12px" ${gated ? 'disabled' : ''}>Create the game</button>
   </div>
 
@@ -563,6 +705,28 @@ node bots/reference-bot.mjs --site ${esc(location.origin)} --games 3</pre>`
   </div>`;
 }
 
+
+/* Hosting is now bought separately from the name. Somebody with a name and no
+   hosting is the only person who can be sold it, and they are shown the price
+   rather than a locked door with no handle. */
+function hostingOffer() {
+  const p = S.cfg && S.cfg.products && S.cfg.products.host;
+  if (!signedIn()) {
+    return `<p class="muted"><b>Hosting your own games is a separate purchase.</b>
+      Sign in above to get started.</p>`;
+  }
+  if (!myCompany()) {
+    return `<p class="muted"><b>Your company name comes first</b> — a private game is
+      created under it. Claim one above, then come back.</p>`;
+  }
+  return `
+    <p class="muted">${p ? esc(p.blurb) : 'Host games for your friends.'}</p>
+    ${p && p.forSale
+      ? `<button class="primary" id="buyhost" style="margin-top:4px;width:auto">
+           ${esc(p.label)} — continue to payment</button>`
+      : `<p class="muted">Not on sale yet.</p>`}`;
+}
+
 /* -------------------------------------------------- being findable */
 
 /* The record you build here is worth something outside the game, and the only
@@ -612,6 +776,37 @@ function progressBlock(pr) {
     because it proves anything.</p>`;
 }
 
+
+/* Invitations, which are the whole point of being listed.
+
+   Shown above everything else when there are any, because somebody who has been
+   approached wants to see that before they read their own price index. Each one
+   carries the reason it was sent — an unexplained approach is an advertisement,
+   and gets treated like one. */
+function invitationsCard(list) {
+  if (!list || !list.length) return '';
+  return `
+  <div class="card" style="border-color:var(--good)">
+    <h2>${list.length} invitation${list.length === 1 ? '' : 's'} to apply</h2>
+    <p class="muted" style="margin-top:6px">These companies paid to see records like yours.
+      They do not know who you are — not your name, not your email. Applying is what tells
+      them, and it happens on their own site, not here. You are under no obligation to
+      answer, and dismissing one is not rude.</p>
+    ${list.map((i) => `
+      <div style="border-left:3px solid var(--good);padding:.1rem 0 .6rem .9rem;margin:14px 0">
+        <div style="font-size:15px"><b>${esc(i.from)}</b> would like you to apply for
+          <b>${esc(i.role)}</b>.</div>
+        ${i.blurb ? `<div class="muted" style="margin-top:4px">${esc(i.blurb)}</div>` : ''}
+        <div class="muted" style="font-style:italic;margin-top:4px">${esc(i.reason)}</div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          ${i.url ? `<a class="ghost" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer"
+             style="text-decoration:none;display:inline-block">Look at the job \u2192</a>` : ''}
+          <button class="ghost" data-dismiss="${esc(i.id)}">Not interested</button>
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+
 function screenTalent() {
   const t = S.talent;
   if (!t) return `<div class="card"><h2>Your record</h2><p class="muted">Loading…</p></div>`;
@@ -656,6 +851,7 @@ function screenTalent() {
     </div>
     ${record}
   </div>
+  ${invitationsCard(t.invitations)}
 
   <div class="card">
     <h2>Being invited to apply for jobs</h2>
@@ -763,6 +959,178 @@ function demoCard() {
   </div>`;
 }
 
+/* ------------------------------------------------------------- tournaments */
+
+/* Two doors: enter one somebody else is running, or run one. The first needs
+   nothing at all, which is the same promise the classroom side makes. */
+function tourneyCard() {
+  const can = S.account && S.account.canFacilitate;
+  return `
+  <div class="card">
+    <h2>Tournaments</h2>
+    <p class="lede">An afternoon for a room full of people. Everybody plays three tables
+      in groups of six, re-drawn each time, on identical markets — then the top six
+      play a final.</p>
+    <div class="row" style="margin-top:8px">
+      <div style="flex:1 1 auto;min-width:0">
+        <label for="eventcode">Entering one? Its code</label>
+        <input id="eventcode" type="text" maxlength="8" placeholder="ABC123"
+          style="text-transform:uppercase">
+      </div>
+      <div style="flex:1 1 auto;min-width:0">
+        <label for="eventname">Your company name</label>
+        <input id="eventname" type="text" maxlength="28" placeholder="Ravenscarr &amp; Co">
+      </div>
+    </div>
+    <button class="primary" id="enterevent" style="margin-top:10px">Enter</button>
+    ${can
+      ? `<hr style="border:none;border-top:1px solid var(--grid);margin:14px 0">
+         <div class="row">
+           <div style="flex:1 1 auto;min-width:0">
+             <label for="evname">Running one? What is it called</label>
+             <input id="evname" type="text" maxlength="80" placeholder="Autumn Cup">
+           </div>
+         </div>
+         <h3 style="margin-top:12px">Tables each</h3>
+         <div class="choices" id="evstages">
+           ${[2, 3, 4, 5].map((n) => `<button class="choice" data-stages="${n}"
+             aria-pressed="${n === 3}"><div class="n">${n}</div></button>`).join('')}
+         </div>
+         <p class="muted" style="margin:4px 0 0">Three tables of ten rounds is about an
+           afternoon. More is fairer — the more each person plays, the less the draw
+           decides — and longer.</p>
+         <button class="primary" id="makeevent" style="margin-top:12px">Create the tournament</button>`
+      : `<p class="muted" style="margin-top:10px">Running one needs the facilitator
+           licence — the same one that runs classes. There is no separate purchase.</p>`}
+  </div>`;
+}
+
+const evMoney = (x) => (x < 0 ? '-' : '') + '$' + Math.round(Math.abs(x)).toLocaleString('en-US');
+
+/* The board, shared by the console and by everybody who entered. One renderer,
+   because an entrant seeing a different order from the person running the event
+   is the fastest way to lose a room. */
+function standingsTable(t, mineId) {
+  const cut = t.settings.finalists;
+  if (!t.standings.length) return '<p class="muted">Nobody has played a table yet.</p>';
+  return `<table class="market" style="margin-top:8px">
+    <thead><tr><th>#</th><th>Company</th><th class="v">Total</th>
+      <th class="v">Tables</th><th class="v">Best</th></tr></thead>
+    <tbody>${t.standings.map((r) => `
+      <tr class="${r.id === mineId ? 'me' : ''}"
+          style="${r.place === cut ? 'border-bottom:2px solid var(--text-primary)' : ''}">
+        <td class="who">${r.place}. ${esc(r.name)}${r.id === mineId ? ' <span class="muted">(you)</span>' : ''}</td>
+        <td class="v" data-l="Total">${evMoney(r.total)}</td>
+        <td class="v" data-l="Tables">${r.played}</td>
+        <td class="v" data-l="Best">${r.best === null ? '—' : evMoney(r.best)}</td>
+        <td class="v" data-l="Place">${r.place <= cut && r.played
+          ? '<span class="pill in">in the final</span>' : '<span class="pill">—</span>'}</td>
+      </tr>`).join('')}</tbody></table>
+    <p class="muted" style="margin-top:8px">The line is the cut: the top ${cut} after
+      ${t.settings.stages} stages play the final. Ranked on the money made across every
+      table, not on anybody's best one — a player's best single result is the worst
+      thing this site measures about them, and it gets worse the more they play.</p>`;
+}
+
+/* The facilitator's console. One button most of the time: draw the next stage. */
+function screenTourney() {
+  const t = S.tourney;
+  if (!t) return `<div class="card"><h2>Tournament</h2><p class="muted">Loading…</p></div>`;
+
+  const running = t.tables.filter((x) => x.status !== 'over');
+  const nextLabel = t.stagesDone >= t.settings.stages
+    ? 'Draw the final' : `Draw stage ${t.stagesDone + 1} of ${t.settings.stages}`;
+  const link = location.origin + '/g/?event=' + t.code;
+
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">${esc(t.name)}</h2>
+      <span class="muted">${esc(t.phase.label)} · ${t.entrants} entrant${t.entrants === 1 ? '' : 's'}</span>
+    </div>
+    <p class="lede">Everybody plays ${t.settings.stages} tables in groups of six, re-drawn
+      each time. Every table in a stage faces the identical market, so a difference between
+      two of them is a difference in what people decided. The top ${t.settings.finalists}
+      play the final.</p>
+    <div class="row" style="margin-top:10px">
+      <div style="flex:1 1 auto;min-width:0">
+        <label for="evlink">Send people this</label>
+        <input id="evlink" type="text" readonly value="${esc(link)}">
+      </div>
+      <button class="ghost" id="copyevent" style="flex:0 0 auto">Copy</button>
+    </div>
+    <p class="muted" style="margin-top:6px">Or the code <b>${esc(t.code)}</b>. No account needed
+      to enter — a name is the whole of it.</p>
+  </div>
+
+  <div class="card">
+    <h2>${esc(t.phase.label)}</h2>
+    ${running.length
+      ? `<p class="muted">${running.length} table${running.length === 1 ? '' : 's'} still playing.
+          The next stage cannot be drawn until they all finish — a board that reorders
+          itself while half the room is still playing is a board nobody trusts.</p>`
+      : t.phase.phase === 'over'
+        ? `<p class="muted">The event is finished.</p>`
+        : t.entrants < 12
+          ? `<p class="muted">Waiting for entrants. An event needs at least 12; fewer than
+              that is a class, and it is cheaper to run as one.</p>`
+          : `<p class="muted">Everybody who entered will be drawn into a table. Nobody sits out.</p>`}
+    ${t.canStartNext
+      ? `<button class="primary" id="nextstage" style="margin-top:8px">${nextLabel}</button>`
+      : ''}
+    ${t.tables.length ? `<table style="margin-top:12px">
+      <thead><tr><th>Stage</th><th>Table</th><th class="v">Players</th>
+        <th class="v">Round</th><th class="v">Code</th></tr></thead>
+      <tbody>${t.tables.map((x) => `<tr>
+        <td>${x.isFinal ? '<b>Final</b>' : x.stage + 1}</td>
+        <td>${x.groupNo}</td>
+        <td class="v">${x.players}</td>
+        <td class="v">${x.status === 'over' ? 'done' : `${x.round}/${x.totalRounds}`}</td>
+        <td class="v"><code>${esc(x.code)}</code></td>
+      </tr>`).join('')}</tbody></table>` : ''}
+  </div>
+
+  <div class="card">
+    <h2>Standings</h2>
+    ${standingsTable(t, null)}
+  </div>
+  <button class="ghost" id="backtourney">Back to your games</button>`;
+}
+
+/* What somebody who entered sees. Deliberately short: where they stand, and the
+   one button that matters when a table is running. */
+function screenEntrant() {
+  const v = S.entrant;
+  const t = v.table;
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">${esc(v.event.name)}</h2>
+      <span class="muted">${esc(v.event.phase.label)} · ${v.event.entrants} entrants</span>
+    </div>
+    ${v.you
+      ? `<p class="lede"><b>${esc(v.you.name)}</b> — ${v.you.place === 1 ? 'top of the event'
+          : `${v.you.place}${['th','st','nd','rd'][(v.you.place % 100 - 20) % 10] || ['th','st','nd','rd'][v.you.place % 100] || 'th'}`},
+          ${evMoney(v.you.total)} over ${v.you.played} table${v.you.played === 1 ? '' : 's'}.</p>
+         <p class="muted">${esc(v.you.note)}</p>`
+      : `<p class="lede">You are entered. The first stage has not been drawn yet.</p>`}
+    ${t && t.status !== 'over'
+      ? `<button class="primary" id="gotable" style="margin-top:10px">
+          ${t.isFinal ? 'Go to the final' : `Go to your table (stage ${t.stage + 1})`}</button>`
+      : t
+        ? `<p class="muted" style="margin-top:8px">Your ${t.isFinal ? 'final' : `stage ${t.stage + 1}`}
+            table has finished. ${v.event.phase.phase === 'over' ? ''
+            : 'Wait for whoever is running the event to draw the next one.'}</p>`
+        : ''}
+  </div>
+  <div class="card">
+    <h2>Standings</h2>
+    ${standingsTable({ settings: v.event.settings, standings: v.standings },
+                     v.you ? v.you.id : null)}
+  </div>
+  <button class="ghost" id="leaveevent">Leave this event</button>`;
+}
+
 function screenClass() {
   const c = S.cohort;
   const L = (S.cfg && S.cfg.cohortLimits) || { groupSize: { min: 3, max: 6, default: 5 } };
@@ -806,6 +1174,19 @@ function screenClass() {
       <p class="muted" style="margin:2px 0 0">Most classes want <b>When I say</b>: nothing
         expires, and you close each round when the room is ready. A round a week suits a
         course that meets weekly and files in between.</p>
+      <h3 style="margin-top:14px">How much of the game</h3>
+      <div class="choices kind" id="clevel">
+        ${Object.entries((S.cfg && S.cfg.levels) || {}).map(([id, l]) =>
+          `<button class="choice kind" data-level="${id}" aria-pressed="${id === '1'}">
+            <div class="n">${esc(l.label)} <span class="muted">${esc(l.short)}</span></div>
+            <div class="d">${esc(l.note)}</div>
+            <div class="d" style="margin-top:3px;opacity:0.8">${esc(l.forWhom)}</div>
+          </button>`).join('')}
+      </div>
+      <p class="muted" style="margin:2px 0 0">A course that runs this twice runs the
+        first game early and the full game later, with the same students. The first
+        one leaves out the levers that are hardest to use well — which are also the
+        ones most likely to sink somebody who has never played.</p>
       <button class="primary" id="makeclass" style="margin-top:12px">Create the class</button>
     </div>`;
   }
@@ -1203,19 +1584,26 @@ function pollDelay() {
   return Math.min(cap, left - ENDGAME + 2000);
 }
 
+/* Six columns of numbers about everybody else in the market.
+
+   On a narrow screen this is reflowed into a stack rather than scrolled
+   sideways — every cell carries the label it would have had in the header, and
+   the CSS turns the row into a labelled list. A table you have to drag left and
+   right is a table nobody reads, and this one is the only view a player gets of
+   what their rivals are doing. */
 function marketTable(v) {
-  return `<table>
+  return `<table class="market">
     <thead><tr><th>Company</th><th class="v">Last price</th><th class="v">Quality</th><th class="v">Lines</th>
       <th class="v">Share</th><th class="v">This round</th></tr></thead>
     <tbody>${v.market.map((m) => `
       <tr class="${m.you ? 'me' : ''}">
-        <td>${esc(m.name)}${m.you ? ' <span class="muted">(you)</span>' : ''}
+        <td class="who">${esc(m.name)}${m.you ? ' <span class="muted">(you)</span>' : ''}
           <div class="bar"><i style="width:${((m.lastShare || 0) * 100).toFixed(0)}%"></i></div></td>
-        <td class="v">${m.out ? '—' : money2(m.lastPrice || 0)}</td>
-        <td class="v">${m.out ? '—' : (m.quality || 0).toFixed(0)}</td>
-        <td class="v">${m.out ? '—' : (m.lineCount > 1 ? m.lineCount + ' lines' : '1')}</td>
-        <td class="v">${m.out ? '—' : pct(m.lastShare)}</td>
-        <td class="v">${m.out ? '<span class="pill dead">out of business</span>'
+        <td class="v" data-l="Last price">${m.out ? '—' : money2(m.lastPrice || 0)}</td>
+        <td class="v" data-l="Quality">${m.out ? '—' : (m.quality || 0).toFixed(0)}</td>
+        <td class="v" data-l="Lines">${m.out ? '—' : (m.lineCount > 1 ? m.lineCount + ' lines' : '1')}</td>
+        <td class="v" data-l="Share">${m.out ? '—' : pct(m.lastShare)}</td>
+        <td class="v" data-l="This round">${m.out ? '<span class="pill dead">out of business</span>'
           : m.filed === null ? '<span class="pill">—</span>'
           : m.filed ? '<span class="pill in">filed</span>' : '<span class="pill out">not yet</span>'}</td>
       </tr>`).join('')}</tbody></table>`;
@@ -1250,7 +1638,35 @@ function creditCard(y) {
    what the server sent. Held apart from the view so that typing does not trigger a
    re-render — the form keeps focus, and only the projection repaints. */
 const D = { orders: {}, firm: null, rivals: [], launch: false, launchKind: 'hardware',
-            round: -1, code: null };
+            round: -1, code: null,
+            /* Signed with the orders, not separately — both are commitments made
+               without seeing what anybody else did, which is the whole game.
+               Cleared once the round has taken them. */
+            contract: null, leases: [] };
+
+/* Net units of rented plant on a line this round: what is already running, plus
+   whatever is about to be signed. Everything that needs to know how big the
+   factory is this round goes through this — the production slider, the
+   projection's capacity cap and its upkeep line — so they cannot disagree. */
+function leaseDelta(v, name) {
+  const running = ((v.you.leasing || {}).running || [])
+    .filter((l) => l.product === name)
+    .reduce((a, l) => a + (l.kind === 'in' ? l.units : -l.units), 0);
+  const pending = D.leases.filter((l) => l.product === name)
+    .reduce((a, l) => a + (l.kind === 'in' ? l.units : -l.units), 0);
+  return running + pending;
+}
+
+/* Is a supply contract in force for the round about to be resolved? Either one
+   already running, or one being signed now — a contract starts in the round it
+   is signed in. */
+function contractNow(v) {
+  const s = v.you.supply;
+  if (!s) return null;
+  if (D.contract) return { committed: D.contract.committed, lock: D.contract.lock, fresh: true };
+  if (s.contract) return { committed: s.contract.committed, lock: s.contract.lock, fresh: false };
+  return null;
+}
 
 function hydrateFirm(v) {
   if (!v.you || !v.you.firmState) { D.firm = null; return; }
@@ -1259,7 +1675,12 @@ function hydrateFirm(v) {
      un-ticked the launch box a moment after it was ticked — the intent lives here
      until it is filed, and the server has nothing newer to say about it. */
   const fresh = v.round !== D.round || v.code !== D.code;
-  if (fresh) { D.orders = {}; D.round = v.round; D.code = v.code; }
+  if (fresh) {
+    D.orders = {}; D.round = v.round; D.code = v.code;
+    /* A commitment chosen for last round and never filed is not a commitment for
+       this one. Both start each round empty, the same way the launch box does. */
+    D.contract = null; D.leases = [];
+  }
   /* Products come back as plain JSON; the engine only ever reads fields off them,
      so they work as-is once the arrays are real arrays. */
   D.firm = {
@@ -1285,7 +1706,12 @@ function hydrateFirm(v) {
       /* Not zero. Zero is what the game used to open with, and it cost a player
          who changed nothing else three quarters of their win rate — see
          DEFAULT_ADVERTISING in lib/game.mjs. */
-      rd: 30000, rdProcess: 10000, advertising: 5000,
+      rd: 30000,
+      /* Nothing on a lever this level does not offer — the server zeroes it
+         anyway, and a projection that spends money the round will not spend is
+         a projection that disagrees with the result. */
+      rdProcess: (v.you.rules || {}).processRd === false ? 0 : 10000,
+      advertising: 5000,
       targetCapacity: Math.round(p.capacity), discontinue: false,
     };
   }
@@ -1327,7 +1753,12 @@ function project(v) {
     const sell = Math.min(Math.max(0, p.capacity - d.targetCapacity),
                           Math.max(0, p.capacity - C.CAPACITY_FLOOR));
     const build = Math.max(0, d.targetCapacity - p.capacity);
-    const capNow = (p.capacity - sell) * Math.pow(p.efficiency / 100, C.THROUGHPUT_EXP)
+    /* Rented plant counts this round, in both directions. The server folds it
+       into the line for the length of one resolve and folds it back out; this is
+       the same fold, so the number on the screen is the number the round uses. */
+    const rented = leaseDelta(v, p.name);
+    const capNow = (p.capacity - sell + rented)
+                   * Math.pow(p.efficiency / 100, C.THROUGHPUT_EXP)
                    * v.you.capacityMult;
     const produce = Math.max(0, Math.min(d.produce, capNow));
     const uc = unitCost(p, v.you.costMult);
@@ -1336,7 +1767,9 @@ function project(v) {
     const leftover = available - sales;
     const unitBook = available > 0 ? (p.invBook + produce * uc) / available : 0;
     const hold = leftover * unitBook * C.HOLDING * pk.inventory;
-    const upk = (p.capacity - sell) * C.CAPACITY_UPKEEP * pk.upkeep;
+    /* Plant you rent in still costs the same to run; plant you rent out is being
+       run by somebody else and costs you nothing while it is gone. */
+    const upk = Math.max(0, p.capacity - sell + rented) * C.CAPACITY_UPKEEP * pk.upkeep;
 
     revenue += sales * d.price;
     production += produce * uc;
@@ -1348,23 +1781,70 @@ function project(v) {
     capex += build * C.CAPEX_PER_UNIT;
     plantSale += sell * C.CAPEX_PER_UNIT * C.CAPACITY_RESALE;
 
-    rows.push({ p, demand, produce, sales, leftover, uc,
+    rows.push({ p, demand, produce, sales, leftover, uc, rented,
       lost: Math.max(0, demand - available),
       capped: d.produce > capNow + 1e-6, capNow, sell, build });
+  }
+
+  /* Rent, in and out, on everything running or about to be signed. */
+  const lz = v.you.leasing;
+  let rentPaid = 0, rentEarned = 0;
+  if (lz) {
+    for (const l of (lz.running || []).concat(D.leases)) {
+      if (l.kind === 'in') rentPaid += l.units * lz.inRate;
+      else rentEarned += l.units * lz.outRate;
+    }
+  }
+
+  /* And the supply contract, settled exactly as the server settles it: against
+     what was actually built and what it actually cost, with the market's shock
+     divided back out. Two copies of this arithmetic is a risk, so there is a
+     browser test that plays a round and checks this figure against the one the
+     round produced. */
+  let supply = null;
+  const cn = contractNow(v);
+  if (cn) {
+    const madeUnits = rows.reduce((a, r) => a + (r.produce || 0), 0);
+    const spend = rows.reduce((a, r) => a + (r.produce || 0) * (r.uc || 0), 0);
+    const blended = madeUnits > 0 ? spend / madeUnits : 0;
+    const base = blended / (v.you.costMult || 1);
+    const locked = base * cn.lock;
+    const covered = Math.min(madeUnits, cn.committed);
+    const short = Math.max(0, cn.committed - madeUnits);
+    supply = {
+      adjustment: covered * (locked - blended)
+        + short * locked * (v.you.supply.shortfallRate || 0),
+      short, covered, fresh: cn.fresh,
+    };
   }
 
   const corp = C.CORP_FIXED * Math.pow(Math.max(1, lines.length), C.CORP_SCALING);
   const interest = D.firm.debt * creditRate(D.firm, v.you.constants.CREDIT_LIMIT);
   const launchCost = D.launch ? launchCostOf(D.launchKind) : 0;
+  const rentNet = rentPaid - rentEarned;
+  const supplyAdj = supply ? supply.adjustment : 0;
   const profit = revenue + salvage + plantSale - production - holding - capUpkeep
-               - fixed - rd - ads - capex - restructure - corp - interest;
+               - fixed - rd - ads - capex - restructure - corp - interest
+               - rentNet - supplyAdj;
   return { rows, revenue, salvage, plantSale, production, holding, capUpkeep,
-           fixed, rd, ads, capex, restructure, corp, interest, launchCost, profit };
+           fixed, rd, ads, capex, restructure, corp, interest, launchCost,
+           rentPaid, rentEarned, rentNet, supply, supplyAdj, profit };
+}
+
+/* Show or hide the bottom bar, and only reserve room at the bottom of the page
+   while it is actually there — a phone should not carry 78px of dead space on
+   the home screen for a panel that is not being shown. */
+function showProjBar(on) {
+  const bar = $('projbar');
+  if (!bar) return;
+  bar.hidden = !on;
+  if (!on) bar.classList.remove('open');
+  document.body.classList.toggle('hasprojbar', !!on);
 }
 
 function renderProjection(v) {
   const host = $('projection');
-  if (!host || !D.firm) return;
+  if (!host || !D.firm) { showProjBar(false); return; }
   const pr = project(v);
   const L = (k, val, cls) => `<div class="line"><span class="k">${k}</span>
     <span class="v ${cls || ''}">${money(val)}</span></div>`;
@@ -1380,6 +1860,14 @@ function renderProjection(v) {
   if (pr.ads > 0.5) parts.push(L('Advertising', -pr.ads, 'neg'));
   if (pr.capex > 0.5) parts.push(L('Building plant', -pr.capex, 'neg'));
   if (pr.restructure > 0.5) parts.push(L('Closing a line', -pr.restructure, 'neg'));
+  if (pr.rentPaid > 0.5) parts.push(L('Renting plant in', -pr.rentPaid, 'neg'));
+  if (pr.rentEarned > 0.5) parts.push(L('Renting plant out', pr.rentEarned, 'pos'));
+  if (pr.supply) {
+    parts.push(pr.supplyAdj <= 0
+      ? L('Supply contract', -pr.supplyAdj, 'pos')
+      : L(pr.supply.short > 0.5 ? 'Supply contract — short of the commitment'
+                                : 'Supply contract', -pr.supplyAdj, 'neg'));
+  }
   if (pr.interest > 0.5) {
     parts.push(L(`Interest at ${(v.you.credit.rate * 100).toFixed(1)}%`, -pr.interest, 'neg'));
   }
@@ -1440,10 +1928,39 @@ function renderProjection(v) {
       will not.</span></div>`);
   }
 
-  host.innerHTML = `<div class="card proj"><h2>If the round ran now</h2>
+  const html = `<div class="card proj"><h2>If the round ran now</h2>
     ${parts.join('')}${w.join('')}
     <p class="muted" style="margin:10px 0 0">Everyone commits blind, so this assumes
       rivals charge what they charged last round.</p></div>`;
+  host.innerHTML = html;
+
+  /* The same panel, rendered once and shown twice. On a wide screen the column
+     above is sticky and this bar is hidden; on a phone the column is hidden and
+     the bar is pinned to the bottom of the screen. One renderer, so the two can
+     never disagree about the number. */
+  const bar = $('projbar');
+  if (bar) {
+    const sheet = $('projsheet');
+    if (sheet) sheet.innerHTML = html;
+    showProjBar(true);
+    const val = $('projbarval');
+    if (val) {
+      val.textContent = money(pr.profit);
+      val.className = 'v ' + (pr.profit >= 0 ? 'pos' : 'neg');
+    }
+    /* The warnings are the part of this panel worth interrupting somebody for —
+       "nothing on advertising" is the commonest way a good plan loses — so the
+       count travels with the number rather than waiting behind a tap. */
+    const bad = w.filter((x) => /warnbox (warn|bad)/.test(x)).length;
+    const flag = $('projbarflag');
+    /* Empty when there is nothing wrong, rather than "looks sound". A reassuring
+       badge next to a $70,000 expected loss reads as the page contradicting
+       itself; the number is doing the talking and the flag is only there to
+       interrupt. */
+    if (flag) flag.textContent = bad ? `${bad} to check` : '';
+    const chev = $('projbarchev');
+    if (chev) chev.textContent = bar.classList.contains('open') ? '▼' : '▲';
+  }
 }
 
 /* ------------------------------------------------------------- the controls */
@@ -1458,12 +1975,73 @@ function ctrl(name, hint, field, pname, val, min, max, step, extra) {
     </div>${extra || ''}</div>`;
 }
 
+/* Renting plant, on one line.
+
+   It lives inside the line rather than in a card of its own because capacity is
+   a property of a line, and the decision it competes with — building or selling
+   plant — is the control immediately above it. Buying is permanent and arrives
+   next round; renting is temporary and arrives now. Putting them next to each
+   other is the point. */
+function leasingBlock(p, v) {
+  const lz = v.you.leasing;
+  if (!lz) return '';
+  const mine = (lz.lines || []).find((l) => l.product === p.name) || { maxIn: 0, maxOut: 0 };
+  const running = (lz.running || []).filter((l) => l.product === p.name);
+  const pending = D.leases.filter((l) => l.product === p.name);
+  const owned = C.CAPEX_PER_UNIT * (1 - C.CAPACITY_RESALE) + C.CAPACITY_UPKEEP * lz.term;
+
+  if (running.length) {
+    return `<div class="leasebox">
+      ${running.map((l) => `<div><b>Renting ${l.kind === 'in' ? 'in' : 'out'}
+        ${Math.round(l.units).toLocaleString()} units</b> at ${money2(l.rate)} a unit a round —
+        ${l.roundsLeft === 1 ? 'ends after this round' : `${l.roundsLeft} rounds left`}.</div>`).join('')}
+      <div class="muted" style="margin-top:4px">A lease runs its ${lz.term} rounds and
+        stops on its own. You cannot end it early.</div>
+    </div>`;
+  }
+  if (pending.length) {
+    const l = pending[0];
+    return `<div class="leasebox on">
+      <div><b>Renting ${l.kind === 'in' ? 'in' : 'out'}
+        ${Math.round(l.units).toLocaleString()} units</b> for ${lz.term} rounds —
+        ${l.kind === 'in'
+          ? `${money(l.units * lz.inRate * lz.term)} of rent in total`
+          : `${money(l.units * lz.outRate * lz.term)} of rent received, and no upkeep on it`}.</div>
+      <div class="muted" style="margin-top:3px">Signed when you file your orders.</div>
+      <button class="ghost small" data-leaseclear="${esc(p.name)}"
+        style="margin-top:6px">Change my mind</button>
+    </div>`;
+  }
+  return `<div class="leasebox">
+    <div class="muted"><b>Rent plant instead of buying it.</b> A lease runs ${lz.term} rounds
+      and is available this round — bought plant takes a round to arrive.
+      Renting in costs ${money2(lz.inRate)} a unit a round on top of the usual running cost;
+      buying a unit and selling it ${lz.term} rounds later costs ${money2(owned)}.</div>
+    <div class="leaserow">
+      ${mine.maxIn > 0 ? `<label>Rent in
+        <input type="number" min="0" max="${mine.maxIn}" step="50" value="0"
+          data-leasein="${esc(p.name)}"></label>
+        <span class="muted">up to ${mine.maxIn.toLocaleString()}</span>` : ''}
+      ${mine.maxOut > 0 ? `<label>Rent out
+        <input type="number" min="0" max="${mine.maxOut}" step="50" value="0"
+          data-leaseout="${esc(p.name)}"></label>
+        <span class="muted">up to ${mine.maxOut.toLocaleString()} at ${money2(lz.outRate)}</span>` : ''}
+    </div>
+    <div class="muted" style="margin-top:4px">Renting out earns money on plant you are
+      not using — and it is gone for ${lz.term} rounds, so demand you cannot supply goes
+      to whoever can.</div>
+  </div>`;
+}
+
 function lineForm(p, view, i) {
   const eng = D.firm.products.find((x) => x.name === p.name);
   const d = D.orders[p.name];
   const K = view.you.constants;
   const val = value(eng);
-  const cap = effCapacity(eng);
+  const rented = leaseDelta(view, p.name);
+  /* The slider has to reach the plant you are renting, or a player pays rent for
+     capacity the form will not let them use — which is the worst of both. */
+  const cap = effCapacity({ ...eng, capacity: Math.max(0, eng.capacity + rented) });
   return `
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
@@ -1478,19 +2056,98 @@ function lineForm(p, view, i) {
            'produce', p.name, d.produce, 0, Math.round(cap), 10)}
     ${ctrl('Product R&amp;D — make it better', `lands in ${K.RD_DELAY} rounds`,
            'rd', p.name, d.rd, 0, 150000, 2500)}
-    ${ctrl('Process R&amp;D — make it cheaper', 'also raises how much you can make',
+    ${(view.you.rules || {}).processRd === false ? '' : ctrl(
+           'Process R&amp;D — make it cheaper', 'also raises how much you can make',
            'rdProcess', p.name, d.rdProcess, 0, 150000, 2500)}
     ${ctrl('Advertising', `works now, fades ${Math.round(K.AD_DECAY * 100)}% a round`,
            'advertising', p.name, d.advertising, 0, 60000, 1000)}
     ${ctrl(p.physical ? 'Factory size' : 'Capacity to serve',
-           `${money2(K.CAPEX_PER_UNIT)} a unit to build · ${Math.round(K.CAPACITY_RESALE * 100)}% back to sell`,
+           `${money2(K.CAPEX_PER_UNIT)} a unit to build · ${Math.round(K.CAPACITY_RESALE * 100)}% back to sell`
+           + (rented ? ` · ${rented > 0 ? 'renting in' : 'renting out'} ${Math.abs(Math.round(rented))}` : ''),
            'targetCapacity', p.name, d.targetCapacity,
            Math.round(K.CAPACITY_FLOOR), Math.round(Math.max(p.capacity * 2, 5000)), 50)}
+    ${leasingBlock(p, view)}
+    ${(view.you.rules || {}).discontinue === false ? '' : `
     <label style="margin-top:10px;display:flex;gap:7px;align-items:center;font-size:13px">
       <input type="checkbox" data-p="${esc(p.name)}" data-field="discontinue"
         ${d.discontinue ? 'checked' : ''} style="width:auto">
       Discontinue this line — sell the stock and the plant, stop the fixed costs
-    </label>
+    </label>`}
+  </div>`;
+}
+
+/* Locking the price of materials.
+
+   The whole rate curve, sampled, as a grid you click a cell of — rather than
+   three deals somebody has to reverse-engineer. Volume improves the rate along a
+   row and term worsens it down a column, and being able to see both at once is
+   the decision. Nothing here recomputes the curve: every rate in the grid came
+   from the server, so there is no second copy of the pricing to drift. */
+function supplyCard(v) {
+  const s = v.you.supply;
+  if (!s) return '';
+
+  if (s.contract) {
+    const c = s.contract;
+    return `<div class="card">
+      <h2>Supply contract</h2>
+      <p class="lede">Your input costs are locked at <b>${c.lock.toFixed(3)}×</b> the market
+        on <b>${Math.round(c.committed).toLocaleString()} units a round</b>, to the end of
+        round ${c.to} — ${c.roundsLeft === 1 ? 'this is the last round'
+          : `${c.roundsLeft} rounds left`}.</p>
+      <p class="muted">Build less than that and you still pay for the shortfall, at a
+        reduced rate. Build more and the extra is bought at the market like anyone else.</p>
+      <div class="line"><span class="k">Saved so far</span>
+        <span class="v pos">${money(c.saved || 0)}</span></div>
+      <div class="line"><span class="k">Paid so far</span>
+        <span class="v ${(c.paid || 0) > 0 ? 'neg' : ''}">${money(c.paid || 0)}</span></div>
+    </div>`;
+  }
+
+  if (!s.canSign) {
+    return `<div class="card">
+      <h2>Supply contract</h2>
+      <p class="muted">${esc(s.why || 'Not available right now.')}</p>
+    </div>`;
+  }
+
+  const o = s.offers;
+  const chosen = D.contract;
+  const head = o.volumes.map((u) =>
+    `<th>${Math.round(u).toLocaleString()}</th>`).join('');
+  const rows = o.grid.map((g) => `<tr>
+    <th class="rh">${g.term} rounds</th>
+    ${g.rates.map((r) => `<td><button class="ratecell ${r.lock < 1 ? 'good' : ''}"
+      data-committed="${r.committed}" data-term="${g.term}" data-lock="${r.lock}"
+      aria-pressed="${chosen && chosen.committed === r.committed && chosen.term === g.term}"
+      >${r.lock.toFixed(3)}</button></td>`).join('')}
+  </tr>`).join('');
+
+  return `<div class="card">
+    <h2>Supply contract</h2>
+    <p class="lede">Commit to buying a volume of materials every round and the supplier
+      fixes your rate against the market. Input costs move — a supplier fire, tariffs,
+      a glut — and this is the only answer to it other than building less.</p>
+    <p class="muted">The number in each cell is what you would pay as a multiple of the
+      market rate. Commit more and it falls; commit for longer and it rises, because the
+      supplier is carrying your price risk for more of the season. Your own factory
+      improvements still bring the cost down underneath it.</p>
+    <div class="gridscroll">
+      <table class="rategrid" id="ratecells">
+        <tr><th class="rh">units a round →</th>${head}</tr>
+        ${rows}
+      </table>
+    </div>
+    <p class="muted">Quoted against the ${Math.round(o.reference).toLocaleString()} units
+      you built last round.</p>
+    ${chosen ? `<div class="leasebox on">
+      <div><b>${Math.round(chosen.committed).toLocaleString()} units a round for
+        ${chosen.term} rounds at ${chosen.lock.toFixed(3)}× the market.</b></div>
+      <div class="muted" style="margin-top:3px">Signed when you file your orders. Build
+        less than ${Math.round(chosen.committed).toLocaleString()} in a round and you pay
+        for the shortfall anyway — that is what the supplier is discounting for.</div>
+      <button class="ghost small" id="clearcontract" style="margin-top:6px">Change my mind</button>
+    </div>` : '<p class="muted">Nothing selected — click a rate above to choose one.</p>'}
   </div>`;
 }
 
@@ -1522,6 +2179,8 @@ function ordersForm(v) {
           They compete with each other as well as with everyone else.</p>` : ''}
       </div>
       ${lines}
+      ${supplyCard(v)}
+      ${(y.rules || {}).launch === false ? '' : `
       <div class="card">
         <h2>A new product line</h2>
         <p class="muted">Starts trading next round. It carries over what your company
@@ -1538,7 +2197,7 @@ function ordersForm(v) {
                  one is mature enough to carry it.</p>`
             : `<p class="muted">Not available: a launch has to leave you enough credit to
                  survive the new line's first rounds, and right now none of them would.</p>`}
-      </div>
+      </div>`}
       <div class="card">
         <button class="primary" id="file">${y.filed ? 'Update my orders' : 'File my orders'}</button>
       </div>
@@ -1693,6 +2352,8 @@ function render() {
   }
   if (S.notice) html += `<div class="card" style="border-color:var(--good)"><b>${esc(S.notice)}</b></div>`;
   if (S.showAnalysis) html += screenAnalysis();
+  else if (S.entrant) html += screenEntrant();
+  else if (S.showTourney) html += screenTourney();
   else if (S.showClass) html += screenClass();
   else if (S.showBoard) html += screenBoard();
   else if (S.showLeague) html += screenLeague();
@@ -1760,10 +2421,32 @@ document.addEventListener('change', (e) => {
   if (e.target.id === 'f_launch') {
     D.launch = e.target.checked;
     if (S.view) renderProjection(S.view);
+    return;
   }
+
+  /* Renting plant. One direction per line at a time — both at once nets out to
+     paying the spread for nothing, and the server refuses it anyway, so the form
+     should never let somebody build a request that will be rejected. */
+  const ds = e.target.dataset || {};
+  const name = ds.leasein || ds.leaseout;
+  if (!name) return;
+  const kind = ds.leasein ? 'in' : 'out';
+  const units = Math.max(0, Math.round(+e.target.value || 0));
+  D.leases = D.leases.filter((l) => l.product !== name);
+  if (units > 0) D.leases.push({ product: name, units, kind });
+  render();
 });
 
 document.addEventListener('click', (e) => {
+  const head = e.target.closest('#projbarhead');
+  if (head) {
+    const bar = $('projbar');
+    bar.classList.toggle('open');
+    const chev = $('projbarchev');
+    if (chev) chev.textContent = bar.classList.contains('open') ? '▼' : '▲';
+    return;
+  }
+
   const c = e.target.closest('.choice');
   if (c && c.parentElement.classList.contains('choices')) {
     c.parentElement.querySelectorAll('.choice').forEach((x) => x.setAttribute('aria-pressed', 'false'));
@@ -1777,6 +2460,21 @@ document.addEventListener('click', (e) => {
       D.launchKind = c.dataset.kind;
       if (S.view) renderProjection(S.view);
     }
+    return;
+  }
+
+  const cell = e.target.closest('.ratecell');
+  if (cell) {
+    D.contract = { committed: +cell.dataset.committed, term: +cell.dataset.term,
+                   lock: +cell.dataset.lock };
+    render();
+    return;
+  }
+  if (e.target.id === 'clearcontract') { D.contract = null; render(); return; }
+  const lc = e.target.dataset && e.target.dataset.leaseclear;
+  if (lc) {
+    D.leases = D.leases.filter((l) => l.product !== lc);
+    render();
     return;
   }
   const t = e.target;
@@ -1846,12 +2544,73 @@ document.addEventListener('click', (e) => {
     try { localStorage.removeItem(DEMOKEY); } catch {}
     history.pushState({}, '', '/g/'); render(); return;
   }
+  /* ---------------------------------------------------------- tournaments */
+  if (t.id === 'makeevent') {
+    /* Read the form before guard() runs — it re-renders, and the inputs it
+       replaces take their values with them. */
+    const opts = {
+      name: ($('evname') || {}).value || '',
+      stages: +(pressed('evstages').stages || 3),
+      rounds: 10, cadence: 'manual', level: 2,
+    };
+    guard(async () => {
+      S.tourney = (await api('tournaments', opts)).tournament;
+      S.showTourney = true; S.showClass = false;
+    });
+    return;
+  }
+  if (t.id === 'enterevent') {
+    const code = (($('eventcode') || {}).value || '').trim().toUpperCase();
+    const name = (($('eventname') || {}).value || '').trim();
+    if (!code || !name) { S.error = 'A code and a company name.'; render(); return; }
+    guard(async () => {
+      const r = await api('tournament/enter', { code, name });
+      /* The token is how they get back in tomorrow. Losing it to a closed tab
+         would mean losing their place in an event they may have paid to be at. */
+      try { localStorage.setItem(EVENTKEY, r.token); } catch {}
+      S.entrant = r.view; S.entrantName = r.name;
+      history.pushState({}, '', '/g/?entered=1');
+    });
+    return;
+  }
+  if (t.id === 'nextstage') {
+    guard(async () => {
+      S.tourney = (await api('tournament/' + S.tourney.id + '/stage', {})).tournament;
+    });
+    return;
+  }
+  if (t.id === 'gotable') {
+    const table = S.entrant.table;
+    S.entrant = null; S.code = table.code; S.token = table.token;
+    remember(table.code, table.token, S.entrantName || 'Your table');
+    history.pushState({}, '', '/g/?code=' + table.code);
+    guard(async () => { S.view = (await api('state?code=' + table.code
+      + '&token=' + encodeURIComponent(table.token))).view; });
+    return;
+  }
+  if (t.id === 'leaveevent') {
+    try { localStorage.removeItem(EVENTKEY); } catch {}
+    S.entrant = null; history.pushState({}, '', '/g/'); render();
+    return;
+  }
+  if (t.id === 'backtourney') {
+    S.showTourney = false; S.tourney = null; render(); return;
+  }
+  if (t.id === 'copyevent') {
+    const el = $('evlink');
+    if (el) { el.select(); try { document.execCommand('copy'); } catch {} }
+    S.notice = 'Link copied.'; render();
+    setTimeout(() => { S.notice = null; render(); }, 1800);
+    return;
+  }
+
   if (t.id === 'makeclass') {
     const opts = {
       name: ($('cname') || {}).value || '',
       groupSize: +(pressed('groupsize').size || 5),
       rounds: +(pressed('crounds').rounds || 10),
       cadence: pressed('ccadence').cadence || '15m',
+      level: Number(pressed('clevel').level) || 1,
     };
     guard(async () => { S.cohort = (await api('cohorts', opts)).cohort; });
     return;
@@ -1924,6 +2683,14 @@ document.addEventListener('click', (e) => {
     return;
   }
   if (t.id === 'closetalent') { S.showTalent = false; render(); return; }
+  if (t.dataset.dismiss) {
+    const id = t.dataset.dismiss;
+    guard(async () => {
+      await api('talent/invitation/dismiss', { id });
+      S.talent = await api('talent/me');
+    });
+    return;
+  }
   if (t.id === 'talenton') {
     /* The checkbox is not a formality. Refusing here rather than sending it and
        letting the server refuse puts the reason next to the box. */
@@ -1974,6 +2741,13 @@ document.addEventListener('click', (e) => {
     guard(async () => { await signOut(); });
     return;
   }
+  if (t.id === 'buyhost') {
+    guard(async () => {
+      const r = await api('checkout', { kind: 'host' });
+      location.href = r.url;
+    });
+    return;
+  }
   if (t.id === 'buyfacilitator') {
     guard(async () => {
       const r = await api('checkout', { kind: 'facilitator' });
@@ -1984,7 +2758,7 @@ document.addEventListener('click', (e) => {
   if (t.id === 'buy') {
     const name = ($('claimname') || {}).value || '';
     guard(async () => {
-      const r = await api('checkout', { kind: 'host', companyName: name });
+      const r = await api('checkout', { kind: 'name', companyName: name });
       /* Stripe hosts the payment page; we never see a card. */
       location.href = r.url;
     });
@@ -2021,6 +2795,7 @@ document.addEventListener('click', (e) => {
       seats: +(pressed('seatchoice').seats || 4),
       rounds: +(pressed('roundchoice').rounds || 10),
       preset: pressed('presetchoice').preset || 'standard',
+      level: Number(pressed('levelchoice').level) || undefined,
       cadence: pressed('cadencechoice').cadence || '15m',
       closeHour: +(($('closehour') || {}).value || 18),
     };
@@ -2054,8 +2829,20 @@ document.addEventListener('click', (e) => {
     const products = {};
     for (const [name, d] of Object.entries(D.orders)) products[name] = { ...d };
     const decisions = { products, launch: D.launch, launchKind: D.launchKind };
+    /* Signed with the orders, because both are commitments made without seeing
+       what anybody else did. Sent only when there is something to sign — an
+       empty array would still be a request the server has to have an opinion
+       about at a level that does not offer leases. */
+    if (D.contract) {
+      decisions.contract = { committed: D.contract.committed, term: D.contract.term };
+    }
+    if (D.leases.length) decisions.leases = D.leases.map((l) => ({ ...l }));
     guard(async () => {
       S.view = (await api('submit', { code: S.code, token: S.token, decisions })).view;
+      /* Taken. They come back as running commitments in the view now, so the
+         pending copies would otherwise be counted twice. */
+      D.contract = null;
+      D.leases = [];
     });
   }
 });
@@ -2195,7 +2982,31 @@ async function boot() {
       if (saved && saved.student && saved.student.code === m[1].toUpperCase()) S.demo = saved;
     } catch {}
   }
-  if (q.get('demo') && !m) {
+  const eventCode = q.get('event');
+  /* Somebody who has already entered comes straight back to their standings —
+     they hold a token, not a game code, and which table they are at is the
+     server's business rather than the address bar's. */
+  let eventToken = null;
+  try { eventToken = localStorage.getItem(EVENTKEY); } catch {}
+
+  if (eventToken && !m && !classCode && !q.get('home')) {
+    try {
+      S.entrant = (await api('tournament/me?token=' + encodeURIComponent(eventToken))).view;
+    } catch {
+      /* The event was deleted, or the token is from a previous life. */
+      try { localStorage.removeItem(EVENTKEY); } catch {}
+    }
+  }
+
+  if (S.entrant) {
+    render();
+  } else if (eventCode && !m) {
+    /* Arriving on an event link: prefill the code and let them name themselves. */
+    S.joinEvent = eventCode.toUpperCase();
+    render();
+    const box = $('eventcode');
+    if (box) { box.value = S.joinEvent; const n = $('eventname'); if (n) n.focus(); }
+  } else if (q.get('demo') && !m) {
     /* A link straight to the demo, which is the one worth putting in an email. */
     await guard(openDemo);
     render();
