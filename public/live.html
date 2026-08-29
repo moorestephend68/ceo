@@ -1054,7 +1054,7 @@ function botShouldLaunch(firm, roundNo, totalRounds, rnd, creditLimit) {
 
 /* Stamped into this file by mklive.py at build time, so the page cannot claim to
    be a version it is not. */
-const PAGE_BUILD = '2026-08-22 · tournaments';
+const PAGE_BUILD = '2026-08-29 · hiring screen, and checkout sells what you asked for';
 
 const $ = (id) => document.getElementById(id);
 const money = (x) => (x < 0 ? '-$' : '$') + Math.abs(Math.round(x)).toLocaleString('en-US');
@@ -1079,6 +1079,11 @@ const S = { code: null, token: null, view: null, cfg: null, busy: false, error: 
              board: null, record: null, showBoard: false,
              league: null, showLeague: false, botKey: null,
              talent: null, showTalent: false,
+             /* The hiring side. `recruiterFrom` is the employer and the job,
+                held here rather than read off the inputs at send time because
+                every render replaces those inputs — the same trap that once
+                posted two blank strings from the opt-in form. */
+             recruiter: null, showRecruiter: false, recruiterFrom: null,
              cohorts: null, cohort: null, showClass: false, joinClass: null,
              /* Tournaments. `tourney` is the facilitator's console, `entrant` is
                 what somebody who entered sees; only one of the two is ever set,
@@ -1363,7 +1368,7 @@ function screenHome() {
     <button class="ghost" id="showboard" style="margin-top:6px">Leaderboard</button>
   </div>`;
   return publicCard + accountCard() + demoCard() + classCard() + tourneyCard() + leagueCard()
-       + talentCard() + `
+       + talentCard() + recruiterCard() + `
   <div class="card" ${gated ? 'style="opacity:0.55"' : ''}>
     <h2>Start a game</h2>
     <p class="lede">You invite your friends with a link. Empty seats are filled by
@@ -1690,6 +1695,166 @@ function screenTalent() {
       </label>
       <button class="primary" id="talenton">List me</button>`}
   </div>`;
+}
+
+/* --------------------------------------------------------------- recruiter
+
+   The other side of the hiring product. Everything a company may do is decided
+   in lib/recruit.mjs; this screen's job is to make the shape of it obvious
+   rather than to enforce it a second time badly.
+
+   Three things here are deliberately missing, and each one is a feature a
+   customer will ask for:
+
+   **No sort control, and no search.** The pool arrives newest first and is
+   rendered in the order it arrives. Handing an employer a list ordered by how
+   good people are is a selection procedure and a different body of law; an
+   invitation to apply is sourcing. See the note at the top of lib/talent.mjs.
+
+   **No message box.** The employer states who they are, which job, a link and
+   their own standard blurb for that role. There is no field in which one person
+   writes a sentence to another person — which is what makes this an approach
+   rather than a channel, and why there is nothing here to moderate.
+
+   **No way to see who anybody is.** Not hidden behind a click: not sent. The
+   profile rendered here is built by the same function that builds the player
+   their own copy, so there is no second path down which a field could leak. */
+
+function recruiterCard() {
+  if (!(S.account && S.account.canRecruit)) return recruiterOffer();
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Hiring</h2>
+      <button class="ghost" id="showrecruiter">Open the pool</button>
+    </div>
+    <p class="muted" style="margin-top:6px">Players who asked to be found, and what they have
+      actually done across ranked games. You invite them to apply; they decide whether to
+      tell you who they are.</p>
+  </div>`;
+}
+
+/* For sale, to somebody who has not bought it. Placed next to the player's own
+   "your record" card on purpose: the two halves of this product are easier to
+   trust when you can see both from the same page. */
+function recruiterOffer() {
+  const p = S.cfg && S.cfg.products && S.cfg.products.recruiter;
+  if (!p) return '';
+  return `
+  <div class="card">
+    <h2>Hiring from the game</h2>
+    <p class="lede">${esc(p.blurb)}</p>
+    <p class="muted">People opt in themselves, and only after enough ranked games for the
+      record to mean anything. You see a company name and a measured record — never a
+      person's name, an email, or an account. You may send each player one invitation to
+      apply for a named job, and ${'20'} invitations a day. Replying happens on your own
+      site: that is the moment somebody chooses to tell you who they are, and nothing
+      before it does.</p>
+    ${!signedIn()
+      ? `<p class="muted"><b>Sign in above first</b> — access is attached to your account.</p>`
+      : p.forSale
+        ? `<button class="primary" id="buyrecruiter">${esc(p.label)} — continue to payment</button>`
+        : `<p class="muted">Not on sale yet.</p>`}
+  </div>`;
+}
+
+/* One player, as a company sees them. Same numbers, same wording and the same
+   withheld list as the player's own screen — deliberately, so that "what
+   companies see" is answerable by looking rather than by trusting. */
+function poolEntry(e) {
+  const p = e.profile || {};
+  const sent = S.recruiter && S.recruiter.sentToday >= S.recruiter.dailyLimit;
+  return `
+  <div class="card" style="margin-top:14px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h3 style="margin:0">${esc(p.name || 'A company')}</h3>
+      ${e.invited ? `<span class="pill in">invited</span>` : ''}
+    </div>
+    <div style="display:flex;gap:2.2rem;flex-wrap:wrap;margin:10px 0 6px">
+      <div><div class="big">${money(p.average)}</div><div class="muted">average a game</div></div>
+      <div><div class="big">${Math.round((p.winRate || 0) * 100)}%</div><div class="muted">won</div></div>
+      <div><div class="big">${p.games}</div><div class="muted">ranked games</div></div>
+      ${p.percentile ? `<div><div class="big">top ${100 - p.percentile}%</div>
+        <div class="muted">of listed players</div></div>` : ''}
+    </div>
+    <p class="muted">Confidence: <b>${esc(p.confidence ? p.confidence.label : '')}</b>${
+      p.confidence ? ` — ${esc(p.confidence.note)}` : ''}.</p>
+    <table style="margin-top:8px"><tbody>${(p.how || []).map((h) => `<tr>
+      <td style="width:7rem;vertical-align:top"><b>${esc(h.label)}</b></td>
+      <td>${esc(h.text)}${h.note
+        ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(h.note)}</div>` : ''}</td>
+    </tr>`).join('')}</tbody></table>
+    ${(e.openTo || e.region) ? `<p class="muted" style="margin-top:8px">
+      ${e.openTo ? `Open to: <b>${esc(e.openTo)}</b>.` : ''}
+      ${e.region ? ` ${esc(e.region)}.` : ''}</p>` : ''}
+    <div style="margin-top:12px">
+      ${e.invited
+        ? `<span class="muted">You have invited this company. One approach each is the rule,
+             and it does not reset.</span>`
+        : sent
+          ? `<span class="muted">You have used today's invitations.</span>`
+          : `<button class="primary" data-invite="${esc(e.companyId)}">Invite them to apply</button>`}
+    </div>
+  </div>`;
+}
+
+function screenRecruiter() {
+  const r = S.recruiter;
+  const head = `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Players open to being approached</h2>
+      <button class="ghost" id="closerecruiter">Back</button>
+    </div>`;
+  if (!r) return head + `<p class="muted">Loading…</p></div>`;
+
+  const f = S.recruiterFrom || {};
+  const left = Math.max(0, r.dailyLimit - r.sentToday);
+  return head + `
+    <p class="muted" style="margin-top:6px">${r.total} ${r.total === 1 ? 'player has' : 'players have'}
+      asked to be found. <b>${left}</b> of your ${r.dailyLimit} invitations left today.</p>
+    <p class="muted">They are listed newest first. There is no ranking and no search: the order
+      a list is handed to an employer in is itself a recommendation, and recommending people is
+      the line between finding somebody and screening them.</p>
+    <p class="muted">You will not be shown anybody's name, email or account — not here and not
+      after you invite them. Applying is what tells you who somebody is, and it happens on your
+      own site.</p>
+  </div>
+
+  <div class="card">
+    <h2>Who the invitation is from</h2>
+    <p class="muted" style="margin-top:6px">Filled in once and used for every invitation you
+      send. All four are facts about you and the job — there is no message box, because an
+      approach that carries a personal message is a channel, and this is an introduction.</p>
+    <div class="row" style="max-width:620px;margin-top:10px">
+      <div><label for="recfrom">Employer <span class="muted">(required)</span></label>
+        <input id="recfrom" type="text" maxlength="80" placeholder="Halloway &amp; Finch"
+          value="${esc(f.from || '')}"></div>
+      <div><label for="recrole">The job <span class="muted">(required)</span></label>
+        <input id="recrole" type="text" maxlength="80" placeholder="Commercial Analyst"
+          value="${esc(f.role || '')}"></div>
+    </div>
+    <div style="max-width:620px;margin-top:10px">
+      <label for="recurl">Where the job is advertised (optional)</label>
+      <input id="recurl" type="url" maxlength="300" placeholder="https://…"
+        value="${esc(f.url || '')}">
+    </div>
+    <div style="max-width:620px;margin-top:10px">
+      <label for="recblurb">Your standard description of this role (optional)</label>
+      <input id="recblurb" type="text" maxlength="300"
+        placeholder="Two years commercial experience, London or remote."
+        value="${esc(f.blurb || '')}">
+    </div>
+  </div>
+
+  ${r.entries.length
+    ? r.entries.map(poolEntry).join('')
+    : `<div class="card"><p class="muted">Nobody is listed yet. People appear here once they
+         have played enough ranked games for a record to mean anything and have chosen to be
+         found — both of which are theirs to decide.</p></div>`}
+
+  ${r.entries.length < r.total
+    ? `<button class="ghost" id="recruitermore" style="margin-top:14px">Show more</button>` : ''}`;
 }
 
 /* ------------------------------------------------------------ facilitator */
@@ -3155,6 +3320,7 @@ function render() {
   else if (S.showClass) html += screenClass();
   else if (S.showBoard) html += screenBoard();
   else if (S.showLeague) html += screenLeague();
+  else if (S.showRecruiter) html += screenRecruiter();
   else if (S.showTalent) html += screenTalent();
   else if (!v) html += screenHome();
   else if (v.status === 'lobby') html += screenLobby(v);
@@ -3195,6 +3361,16 @@ document.addEventListener('input', (e) => {
       .forEach((el) => { if (el !== t) el.value = t.value; });
   }
   if (S.view) renderProjection(S.view);
+});
+
+/* The employer and the job, kept as they are typed. A poll or a sent invitation
+   re-renders the page, and an employer who had filled in four fields and lost
+   them would reasonably conclude the product was broken. */
+document.addEventListener('input', (e) => {
+  const map = { recfrom: 'from', recrole: 'role', recurl: 'url', recblurb: 'blurb' };
+  const field = map[e.target.id];
+  if (!field) return;
+  S.recruiterFrom = { ...(S.recruiterFrom || {}), [field]: e.target.value };
 });
 
 /* Tell people a name is gone before they try to pay for it. */
@@ -3511,6 +3687,55 @@ document.addEventListener('click', (e) => {
     guard(async () => {
       await api('talent/optout', {});
       S.talent = await api('talent/me');
+    });
+    return;
+  }
+  if (t.id === 'showrecruiter') {
+    guard(async () => { S.recruiter = await api('recruiter/pool'); S.showRecruiter = true; });
+    return;
+  }
+  if (t.id === 'closerecruiter') { S.showRecruiter = false; render(); return; }
+  if (t.id === 'recruitermore') {
+    const have = (S.recruiter && S.recruiter.entries.length) || 0;
+    guard(async () => {
+      const more = await api('recruiter/pool?offset=' + have);
+      /* Appended rather than replaced, and de-duplicated by company: somebody
+         opting out between the two requests shifts the window, and the same
+         profile arriving twice would offer a second invitation for a player who
+         can only ever be approached once. */
+      const seen = new Set(S.recruiter.entries.map((e) => e.companyId));
+      S.recruiter = { ...more,
+        entries: S.recruiter.entries.concat(more.entries.filter((e) => !seen.has(e.companyId))) };
+    });
+    return;
+  }
+  if (t.dataset.invite) {
+    const companyId = t.dataset.invite;
+    /* Read before guard(), which re-renders and would replace these inputs with
+       empty ones. Kept on S so they survive the render that follows. */
+    const from = ($('recfrom') || {}).value || '';
+    const role = ($('recrole') || {}).value || '';
+    const url = ($('recurl') || {}).value || '';
+    const blurb = ($('recblurb') || {}).value || '';
+    S.recruiterFrom = { from, role, url, blurb };
+    if (!from.trim() || !role.trim()) {
+      S.error = 'Say which employer this is from and which job, before inviting anybody.';
+      render(); return;
+    }
+    guard(async () => {
+      const r = await api('recruiter/invite', { companyId, from, role, url, blurb });
+      S.notice = `Invitation sent to ${r.to}. They can apply, ignore it, or dismiss it — `
+        + 'and you will not be told which unless they apply.';
+      /* Refetched rather than patched, because the daily count and the invited
+         flags are the server's to know. */
+      S.recruiter = await api('recruiter/pool');
+    });
+    return;
+  }
+  if (t.id === 'buyrecruiter') {
+    guard(async () => {
+      const r = await api('checkout', { kind: 'recruiter' });
+      location.href = r.url;
     });
     return;
   }
