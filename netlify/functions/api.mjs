@@ -166,9 +166,22 @@ export default async (req) => {
 
     if (route === 'checkout' && req.method === 'POST') {
       const user = await requireUser(req, db, verify);
+      /* Whitelisted against the catalogue itself rather than against a list
+         written out here. The list written out here said `facilitator` or else
+         `host`, which quietly turned every other purchase into hosting: asking
+         for a company name and asking for hiring access both arrived at
+         startCheckout as `host`. A name then failed on hosting's own
+         precondition — "get your company name first" — which is the loop a
+         buyer cannot get out of, and hiring access would have taken the money
+         and granted the wrong thing.
+
+         Own-property, because `constructor` is not a product. */
+      const kind = String(body.kind || 'host');
+      if (!Object.prototype.hasOwnProperty.call(B.PRODUCTS, kind)) {
+        throw new Error('There is nothing by that name for sale.');
+      }
       const out = await B.startCheckout({
-        stripe: B.stripeClient(), db, user,
-        kind: body.kind === 'facilitator' ? 'facilitator' : 'host',
+        stripe: B.stripeClient(), db, user, kind,
         companyName: body.companyName, origin: url.origin, now,
       });
       return json({ url: out.url });
