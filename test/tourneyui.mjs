@@ -145,7 +145,10 @@ if (told.showsSeatToken) fail('the seat token is printed on the page');
 console.log(`  the board shows all ${told.standings} entrants`);
 
 await first.click('#gotable');
-await first.waitForSelector('.ctrl input[type=range]', { timeout: 15000 });
+/* Entrants are on a 420px viewport, where the slider row is hidden behind the
+   tap rows that open the adjust sheet. Wait for it to exist, not to be seen. */
+await first.waitForSelector('.ctrl input[type=range]',
+                            { timeout: 15000, state: 'attached' });
 const playing = await first.evaluate(() => ({
   code: S.code, round: S.view.round, seats: S.view.market.length,
 }));

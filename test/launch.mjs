@@ -25,8 +25,11 @@ await page.waitForSelector('.code');
 await page.click('#start');
 await page.waitForSelector('.ctrl input[type=range]');
 
-const lines = async () => (await page.$$eval('.card h2', ns =>
-  ns.map(n => n.textContent.trim()).filter(t => /^Line \d/.test(t))));
+/* Counted by the hook on the card, not by the heading text. The headings used
+   to read "Line 1" and now read "Cast-iron pans"; a test that matched on prose
+   reported a missing line when the only thing missing was the old wording. */
+const lines = async () => (await page.$$eval('.card[data-line]', ns =>
+  ns.map(n => (n.querySelector('h2') || {}).textContent || '').map(t => t.trim())));
 
 console.log('lines before:', (await lines()).join(', ') || 'none');
 await page.click('#kindchoice .choice[data-kind="commodity"]');
@@ -55,7 +58,7 @@ await page.waitForTimeout(300);
 const after = await lines();
 console.log('lines after the round:', after.join(', ') || 'none');
 const body = await page.evaluate(() => document.body.innerText);
-console.log('news mentions the launch:', /opened a new commodity line/i.test(body));
+console.log('news mentions the launch:', /opened a new line/i.test(body));
 const sliderCount = await page.$$eval('.ctrl input[type=range]', ns => ns.length);
 console.log('sliders now on the page:', sliderCount, '(6 per line)');
 

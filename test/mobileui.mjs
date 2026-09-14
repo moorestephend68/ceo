@@ -41,7 +41,10 @@ const intoGame = async (page) => {
   await page.click('#create');
   await page.waitForSelector('.code');
   await page.click('#start');
-  await page.waitForSelector('.ctrl input[type=range]');
+  /* Attached, not visible. Below 620px the slider row is hidden behind the tap
+     rows that open the adjust sheet, so waiting for a visible range input waits
+     for ever — on a phone, which is the only width this file runs at. */
+  await page.waitForSelector('.ctrl input[type=range]', { state: 'attached' });
   await page.waitForTimeout(400);
 };
 
