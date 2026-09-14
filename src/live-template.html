@@ -221,6 +221,107 @@
     /* The bar already says "If the round ran now" two lines above. */
     .projsheet .card > h2{display:none}
   }
+
+  /* ------------------------------------------------- filing on a phone
+
+     A slider gets about 230px next to its number box on a 390px screen. Price
+     runs from half the product's value to 1.6× it in 50c steps — roughly 220
+     stops across those 230px, so one pixel is one step and nobody can aim it.
+     Turned on its side in a sheet the same control gets 455px and a 56px thumb:
+     2.3× the resolution, and the forecast stays on screen underneath so the
+     price that makes the most money can be found by thumb rather than by
+     arithmetic.
+
+     The rows and the sheet are a second skin on the SAME <input type=range>.
+     Nothing here holds its own copy of a value — the sheet writes to the range
+     and dispatches `input`, which is the event the orders form and the
+     projection were already listening for. One source of truth, and the desktop
+     control keeps its native keyboard and screen-reader behaviour. */
+  .pick{display:none}
+  .adjust{display:none}
+  @media(max-width:620px){
+    .ctrl .row{display:none}
+    .pick{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+      font:inherit;color:inherit;background:var(--surface-1);
+      border:1px solid var(--grid);border-radius:10px;padding:11px 13px;
+      min-height:56px;cursor:pointer;margin-top:6px}
+    .pick:active{background:var(--lock)}
+    .pick .pv{margin-left:auto;font-size:17px;font-weight:700;white-space:nowrap;
+      font-variant-numeric:tabular-nums}
+    .pick .pc{color:var(--muted);font-size:18px;line-height:1;flex:0 0 auto}
+    .pick .pn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+      font-size:14.5px;font-weight:600}
+
+    .adjustscrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);
+      z-index:55;opacity:0;pointer-events:none;transition:opacity .18s ease}
+    .adjustscrim.on{opacity:1;pointer-events:auto}
+    .adjust{display:flex;flex-direction:column;position:fixed;left:0;right:0;bottom:0;
+      z-index:60;height:88vh;background:var(--page);border-top:1px solid var(--grid);
+      border-radius:14px 14px 0 0;transform:translateY(101%);
+      transition:transform .22s cubic-bezier(.2,.7,.3,1);
+      overscroll-behavior:contain;touch-action:none}
+    .adjust.on{transform:translateY(0)}
+    .adjust .ahead{display:flex;align-items:center;gap:10px;padding:12px 14px 9px;
+      border-bottom:1px solid var(--grid)}
+    .adjust .ahead .at{flex:1;min-width:0}
+    .adjust .ahead .at b{display:block;font-size:15.5px}
+    .adjust .ahead .at span{display:block;font-size:12px;color:var(--muted);
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .adjust .ahead button{font:inherit;font-size:14px;font-weight:600;min-height:38px;
+      padding:7px 14px;border-radius:8px;border:0;background:var(--series-1);
+      color:#fff;cursor:pointer}
+    .astage{flex:1;display:flex;align-items:stretch;gap:14px;padding:14px 16px 6px;
+      min-height:0}
+    .aread{flex:1;display:flex;flex-direction:column;justify-content:center;gap:4px;
+      min-width:0}
+    .aread .abig{font-size:34px;font-weight:700;letter-spacing:-0.02em;line-height:1;
+      font-variant-numeric:tabular-nums}
+    .aread .arange{font-size:12px;color:var(--muted);margin-top:8px;
+      font-variant-numeric:tabular-nums}
+
+    /* Built by hand rather than with a vertical <input type=range>: the old
+       -webkit-appearance:slider-vertical is deprecated, the writing-mode route
+       disagrees across browsers about which end is "more", and neither lets a
+       marker be drawn on the track. It carries the slider role and the arrow
+       keys so nothing is lost by not being native. */
+    .vs{width:92px;flex:0 0 auto;position:relative;touch-action:none;
+      -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+    .vs:focus{outline:none}
+    .vs:focus-visible .vtrack{box-shadow:0 0 0 3px var(--series-1)}
+    /* Inset by more than half the thumb, so the thumb at either end stays
+       clear of everything else in the column. */
+    .vtrack{position:absolute;left:50%;transform:translateX(-50%);top:32px;bottom:32px;
+      width:20px;border-radius:999px;background:var(--lock);border:1px solid var(--grid)}
+    .vfill{position:absolute;left:0;right:0;bottom:0;border-radius:999px;
+      background:var(--series-1);opacity:.85;min-height:4px}
+    .vtick{position:absolute;left:8px;right:8px;height:0;border-top:2px dashed var(--warning)}
+    .vticklab{position:absolute;right:0;bottom:5px;font-size:10.5px;font-weight:600;
+      color:var(--warning);white-space:nowrap;background:var(--page);
+      border:1px solid var(--warning);border-radius:99px;padding:1px 7px;line-height:1.5}
+    .vthumb{position:absolute;left:50%;width:56px;height:56px;border-radius:50%;
+      transform:translate(-50%,50%);background:var(--surface-1);
+      border:2px solid var(--series-1);box-shadow:0 2px 10px rgba(0,0,0,.18);
+      display:grid;place-content:center}
+    .vthumb::after{content:"";width:22px;height:2px;background:var(--series-1);
+      box-shadow:0 -5px 0 var(--series-1),0 5px 0 var(--series-1)}
+
+    .anudge{display:flex;gap:8px;padding:4px 16px 10px}
+    .anudge button{flex:1;font:inherit;font-size:17px;font-weight:600;min-height:52px;
+      border:1px solid var(--grid);background:var(--surface-1);color:var(--text-primary);
+      border-radius:10px;cursor:pointer}
+    .anudge button:active{background:var(--lock)}
+    .anav{display:flex;gap:8px;padding:0 16px 12px}
+    .anav button{flex:1;font:inherit;font-size:13.5px;min-height:44px;
+      border:1px solid var(--grid);background:var(--surface-1);color:var(--text-secondary);
+      border-radius:9px;cursor:pointer}
+    .anav button[disabled]{opacity:.4}
+    .afoot{border-top:1px solid var(--grid);background:var(--surface-1);
+      padding:11px 16px calc(12px + env(safe-area-inset-bottom));
+      display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .afoot .ak{font-size:12px;color:var(--muted)}
+    .afoot .av{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums}
+    .afoot .ad{font-size:13px;font-weight:600;text-align:right;min-width:84px}
+  }
 </style>
 </head><body>
 <div class="projbar" id="projbar" hidden>
@@ -231,6 +332,37 @@
     <span class="chev" id="projbarchev">▲</span>
   </div>
   <div class="projsheet" id="projsheet"></div>
+</div>
+<div class="adjustscrim" id="adjustscrim"></div>
+<div class="adjust" id="adjust" role="dialog" aria-modal="true" aria-labelledby="adjname">
+  <div class="ahead">
+    <div class="at"><b id="adjname">—</b><span id="adjhint"></span></div>
+    <button id="adjdone">Done</button>
+  </div>
+  <div class="astage">
+    <div class="aread">
+      <div class="abig" id="adjval">—</div>
+      <div class="arange" id="adjrange"></div>
+    </div>
+    <div class="vs" id="adjvs" tabindex="0" role="slider"
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="vtrack"><div class="vfill" id="adjfill"></div></div>
+      <div class="vtick" id="adjtick" hidden><span class="vticklab" id="adjticklab"></span></div>
+      <div class="vthumb" id="adjthumb"></div>
+    </div>
+  </div>
+  <div class="anudge">
+    <button id="adjdown" aria-label="Less">−</button>
+    <button id="adjup" aria-label="More">+</button>
+  </div>
+  <div class="anav">
+    <button id="adjprev">← Previous</button>
+    <button id="adjnext">Next →</button>
+  </div>
+  <div class="afoot">
+    <div><div class="ak">If the round ran now</div><div class="av" id="adjprofit">—</div></div>
+    <div class="ad" id="adjdelta"></div>
+  </div>
 </div>
 <div class="wrap">
   <header>
@@ -281,6 +413,11 @@ const S = { code: null, token: null, view: null, cfg: null, busy: false, error: 
              board: null, record: null, showBoard: false,
              league: null, showLeague: false, botKey: null,
              talent: null, showTalent: false,
+             /* The hiring side. `recruiterFrom` is the employer and the job,
+                held here rather than read off the inputs at send time because
+                every render replaces those inputs — the same trap that once
+                posted two blank strings from the opt-in form. */
+             recruiter: null, showRecruiter: false, recruiterFrom: null,
              cohorts: null, cohort: null, showClass: false, joinClass: null,
              /* Tournaments. `tourney` is the facilitator's console, `entrant` is
                 what somebody who entered sees; only one of the two is ever set,
@@ -565,7 +702,7 @@ function screenHome() {
     <button class="ghost" id="showboard" style="margin-top:6px">Leaderboard</button>
   </div>`;
   return publicCard + accountCard() + demoCard() + classCard() + tourneyCard() + leagueCard()
-       + talentCard() + `
+       + talentCard() + recruiterCard() + `
   <div class="card" ${gated ? 'style="opacity:0.55"' : ''}>
     <h2>Start a game</h2>
     <p class="lede">You invite your friends with a link. Empty seats are filled by
@@ -892,6 +1029,166 @@ function screenTalent() {
       </label>
       <button class="primary" id="talenton">List me</button>`}
   </div>`;
+}
+
+/* --------------------------------------------------------------- recruiter
+
+   The other side of the hiring product. Everything a company may do is decided
+   in lib/recruit.mjs; this screen's job is to make the shape of it obvious
+   rather than to enforce it a second time badly.
+
+   Three things here are deliberately missing, and each one is a feature a
+   customer will ask for:
+
+   **No sort control, and no search.** The pool arrives newest first and is
+   rendered in the order it arrives. Handing an employer a list ordered by how
+   good people are is a selection procedure and a different body of law; an
+   invitation to apply is sourcing. See the note at the top of lib/talent.mjs.
+
+   **No message box.** The employer states who they are, which job, a link and
+   their own standard blurb for that role. There is no field in which one person
+   writes a sentence to another person — which is what makes this an approach
+   rather than a channel, and why there is nothing here to moderate.
+
+   **No way to see who anybody is.** Not hidden behind a click: not sent. The
+   profile rendered here is built by the same function that builds the player
+   their own copy, so there is no second path down which a field could leak. */
+
+function recruiterCard() {
+  if (!(S.account && S.account.canRecruit)) return recruiterOffer();
+  return `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Hiring</h2>
+      <button class="ghost" id="showrecruiter">Open the pool</button>
+    </div>
+    <p class="muted" style="margin-top:6px">Players who asked to be found, and what they have
+      actually done across ranked games. You invite them to apply; they decide whether to
+      tell you who they are.</p>
+  </div>`;
+}
+
+/* For sale, to somebody who has not bought it. Placed next to the player's own
+   "your record" card on purpose: the two halves of this product are easier to
+   trust when you can see both from the same page. */
+function recruiterOffer() {
+  const p = S.cfg && S.cfg.products && S.cfg.products.recruiter;
+  if (!p) return '';
+  return `
+  <div class="card">
+    <h2>Hiring from the game</h2>
+    <p class="lede">${esc(p.blurb)}</p>
+    <p class="muted">People opt in themselves, and only after enough ranked games for the
+      record to mean anything. You see a company name and a measured record — never a
+      person's name, an email, or an account. You may send each player one invitation to
+      apply for a named job, and ${'20'} invitations a day. Replying happens on your own
+      site: that is the moment somebody chooses to tell you who they are, and nothing
+      before it does.</p>
+    ${!signedIn()
+      ? `<p class="muted"><b>Sign in above first</b> — access is attached to your account.</p>`
+      : p.forSale
+        ? `<button class="primary" id="buyrecruiter">${esc(p.label)} — continue to payment</button>`
+        : `<p class="muted">Not on sale yet.</p>`}
+  </div>`;
+}
+
+/* One player, as a company sees them. Same numbers, same wording and the same
+   withheld list as the player's own screen — deliberately, so that "what
+   companies see" is answerable by looking rather than by trusting. */
+function poolEntry(e) {
+  const p = e.profile || {};
+  const sent = S.recruiter && S.recruiter.sentToday >= S.recruiter.dailyLimit;
+  return `
+  <div class="card" style="margin-top:14px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h3 style="margin:0">${esc(p.name || 'A company')}</h3>
+      ${e.invited ? `<span class="pill in">invited</span>` : ''}
+    </div>
+    <div style="display:flex;gap:2.2rem;flex-wrap:wrap;margin:10px 0 6px">
+      <div><div class="big">${money(p.average)}</div><div class="muted">average a game</div></div>
+      <div><div class="big">${Math.round((p.winRate || 0) * 100)}%</div><div class="muted">won</div></div>
+      <div><div class="big">${p.games}</div><div class="muted">ranked games</div></div>
+      ${p.percentile ? `<div><div class="big">top ${100 - p.percentile}%</div>
+        <div class="muted">of listed players</div></div>` : ''}
+    </div>
+    <p class="muted">Confidence: <b>${esc(p.confidence ? p.confidence.label : '')}</b>${
+      p.confidence ? ` — ${esc(p.confidence.note)}` : ''}.</p>
+    <table style="margin-top:8px"><tbody>${(p.how || []).map((h) => `<tr>
+      <td style="width:7rem;vertical-align:top"><b>${esc(h.label)}</b></td>
+      <td>${esc(h.text)}${h.note
+        ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(h.note)}</div>` : ''}</td>
+    </tr>`).join('')}</tbody></table>
+    ${(e.openTo || e.region) ? `<p class="muted" style="margin-top:8px">
+      ${e.openTo ? `Open to: <b>${esc(e.openTo)}</b>.` : ''}
+      ${e.region ? ` ${esc(e.region)}.` : ''}</p>` : ''}
+    <div style="margin-top:12px">
+      ${e.invited
+        ? `<span class="muted">You have invited this company. One approach each is the rule,
+             and it does not reset.</span>`
+        : sent
+          ? `<span class="muted">You have used today's invitations.</span>`
+          : `<button class="primary" data-invite="${esc(e.companyId)}">Invite them to apply</button>`}
+    </div>
+  </div>`;
+}
+
+function screenRecruiter() {
+  const r = S.recruiter;
+  const head = `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Players open to being approached</h2>
+      <button class="ghost" id="closerecruiter">Back</button>
+    </div>`;
+  if (!r) return head + `<p class="muted">Loading…</p></div>`;
+
+  const f = S.recruiterFrom || {};
+  const left = Math.max(0, r.dailyLimit - r.sentToday);
+  return head + `
+    <p class="muted" style="margin-top:6px">${r.total} ${r.total === 1 ? 'player has' : 'players have'}
+      asked to be found. <b>${left}</b> of your ${r.dailyLimit} invitations left today.</p>
+    <p class="muted">They are listed newest first. There is no ranking and no search: the order
+      a list is handed to an employer in is itself a recommendation, and recommending people is
+      the line between finding somebody and screening them.</p>
+    <p class="muted">You will not be shown anybody's name, email or account — not here and not
+      after you invite them. Applying is what tells you who somebody is, and it happens on your
+      own site.</p>
+  </div>
+
+  <div class="card">
+    <h2>Who the invitation is from</h2>
+    <p class="muted" style="margin-top:6px">Filled in once and used for every invitation you
+      send. All four are facts about you and the job — there is no message box, because an
+      approach that carries a personal message is a channel, and this is an introduction.</p>
+    <div class="row" style="max-width:620px;margin-top:10px">
+      <div><label for="recfrom">Employer <span class="muted">(required)</span></label>
+        <input id="recfrom" type="text" maxlength="80" placeholder="Halloway &amp; Finch"
+          value="${esc(f.from || '')}"></div>
+      <div><label for="recrole">The job <span class="muted">(required)</span></label>
+        <input id="recrole" type="text" maxlength="80" placeholder="Commercial Analyst"
+          value="${esc(f.role || '')}"></div>
+    </div>
+    <div style="max-width:620px;margin-top:10px">
+      <label for="recurl">Where the job is advertised (optional)</label>
+      <input id="recurl" type="url" maxlength="300" placeholder="https://…"
+        value="${esc(f.url || '')}">
+    </div>
+    <div style="max-width:620px;margin-top:10px">
+      <label for="recblurb">Your standard description of this role (optional)</label>
+      <input id="recblurb" type="text" maxlength="300"
+        placeholder="Two years commercial experience, London or remote."
+        value="${esc(f.blurb || '')}">
+    </div>
+  </div>
+
+  ${r.entries.length
+    ? r.entries.map(poolEntry).join('')
+    : `<div class="card"><p class="muted">Nobody is listed yet. People appear here once they
+         have played enough ranked games for a record to mean anything and have chosen to be
+         found — both of which are theirs to decide.</p></div>`}
+
+  ${r.entries.length < r.total
+    ? `<button class="ghost" id="recruitermore" style="margin-top:14px">Show more</button>` : ''}`;
 }
 
 /* ------------------------------------------------------------ facilitator */
@@ -1964,15 +2261,43 @@ function renderProjection(v) {
 }
 
 /* ------------------------------------------------------------- the controls */
-function ctrl(name, hint, field, pname, val, min, max, step, extra) {
+/* One control, in two skins over one <input type=range>.
+
+   `.row` is the desktop pair — slider and number box — and is hidden below
+   620px. `.pick` is the phone row: a 56px tap target that opens the adjust
+   sheet. The sheet writes back to this same range input, so there is exactly
+   one value and the existing orders/projection wiring is untouched.
+
+   `mark` puts a line on the sheet's track — for price it is what the product is
+   worth to a buyer, which turns "am I above or below the market" from a sum
+   into a glance. */
+function ctrl(name, hint, field, pname, val, min, max, step, extra, mark, markLab) {
+  const v = Math.max(min, Math.min(max, val));
+  const m = (mark !== undefined && mark !== null && isFinite(mark))
+    ? ` data-mark="${Number(mark)}" data-marklab="${esc(markLab || '')}"` : '';
   return `<div class="ctrl">
     <div class="lab"><span class="name">${name}</span><span class="hint">${hint}</span></div>
     <div class="row">
       <input type="range" min="${min}" max="${max}" step="${step}"
-             value="${Math.max(min, Math.min(max, val))}" data-p="${esc(pname)}" data-field="${field}">
+             value="${v}" data-p="${esc(pname)}" data-field="${field}"${m}>
       <input type="number" min="0" step="${step}" value="${Math.round(val * 100) / 100}"
              data-p="${esc(pname)}" data-field="${field}">
-    </div>${extra || ''}</div>`;
+    </div>
+    <button type="button" class="pick" data-pick="${field}" data-pickp="${esc(pname)}">
+      <span class="pn">${name}</span>
+      <span class="pv" data-pv="${esc(pname)}|${field}">${fmtField(field, v)}</span>
+      <span class="pc">›</span>
+    </button>${extra || ''}</div>`;
+}
+
+/* How a field reads. Money fields carry a dollar sign; counts do not. The sheet
+   and the row share this so the same number never appears two ways. */
+function fmtField(field, v) {
+  if (field === 'price') return money2(v);
+  if (field === 'produce' || field === 'targetCapacity') {
+    return Math.round(v).toLocaleString('en-US');
+  }
+  return money(v);
 }
 
 /* Renting plant, on one line.
@@ -2043,7 +2368,7 @@ function lineForm(p, view, i) {
      capacity the form will not let them use — which is the worst of both. */
   const cap = effCapacity({ ...eng, capacity: Math.max(0, eng.capacity + rented) });
   return `
-  <div class="card">
+  <div class="card" data-line="${esc(p.name)}">
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
       <h2 style="margin:0">${esc(p.label)}</h2>
       <span class="muted">${esc(p.kindLabel)} · quality ${p.quality.toFixed(0)} ·
@@ -2051,7 +2376,8 @@ function lineForm(p, view, i) {
         ${p.age < 2 ? 'still ramping up' : p.age >= 8 ? 'past its best' : 'established'}</span>
     </div>
     ${ctrl('Price', `worth ${money2(val)} to a buyer`, 'price', p.name, d.price,
-           (val * 0.5).toFixed(0), (val * 1.6).toFixed(0), 0.5)}
+           (val * 0.5).toFixed(0), (val * 1.6).toFixed(0), 0.5, '',
+           val, `worth ${money2(val)}`)}
     ${ctrl('Units to make', `room for ${Math.round(cap)} · ${money2(p.unitCost)} each`,
            'produce', p.name, d.produce, 0, Math.round(cap), 10)}
     ${ctrl('Product R&amp;D — make it better', `lands in ${K.RD_DELAY} rounds`,
@@ -2065,7 +2391,8 @@ function lineForm(p, view, i) {
            `${money2(K.CAPEX_PER_UNIT)} a unit to build · ${Math.round(K.CAPACITY_RESALE * 100)}% back to sell`
            + (rented ? ` · ${rented > 0 ? 'renting in' : 'renting out'} ${Math.abs(Math.round(rented))}` : ''),
            'targetCapacity', p.name, d.targetCapacity,
-           Math.round(K.CAPACITY_FLOOR), Math.round(Math.max(p.capacity * 2, 5000)), 50)}
+           Math.round(K.CAPACITY_FLOOR), Math.round(Math.max(p.capacity * 2, 5000)), 50, '',
+           Math.round(p.capacity), 'today')}
     ${leasingBlock(p, view)}
     ${(view.you.rules || {}).discontinue === false ? '' : `
     <label style="margin-top:10px;display:flex;gap:7px;align-items:center;font-size:13px">
@@ -2154,23 +2481,44 @@ function supplyCard(v) {
 function ordersForm(v) {
   const y = v.you;
   const lines = y.products.map((p, i) => lineForm(p, v, i)).join('');
-  const kinds = (y.kinds || []).map((k) => `
+  /* Own kind first, and named as what it is: another version of the thing this
+     company already makes. Every line competes in one pool of buyers, so a
+     wholly different product here would promise a second market that does not
+     exist — and the player would meet the truth as their own two lines eating
+     each other. Leaving the kind stays available and stays priced. */
+  const home = (y.launchChoices || {}).sameKind || null;
+  const nextVariant = home && home.options && home.options[0];
+  const kinds = (y.kinds || [])
+    .slice()
+    .sort((a, b) => (b.carry || 0) - (a.carry || 0))
+    .map((k) => {
+      const own = k.carry === 1;
+      const what = own && nextVariant ? nextVariant
+        : own ? 'another version of what you make' : null;
+      return `
     <button class="choice kind ${k.affordable ? '' : 'off'}" data-kind="${k.id}"
       aria-pressed="${k.id === D.launchKind}" ${k.affordable ? '' : 'disabled'}>
-      <div class="n">${esc(k.label)} <span class="muted">${money(k.cost)}</span></div>
-      <div class="d">${esc(k.blurb)}</div>
-      <div class="d" style="margin-top:3px">${k.affordable
+      <div class="n">${own && what ? esc(what) : esc(k.label)}
+        <span class="muted">${money(k.cost)}</span></div>
+      <div class="d">${own
+        ? 'The same business you are already in. You keep everything this company has learned.'
+        : esc(k.blurb)}</div>
+      <div class="d" style="margin-top:3px">${own ? ''
+        : `A different business — you would keep <b>60%</b> of what you have learned. `}${k.affordable
         ? (k.borrowing > 0
             ? `You would borrow ${money(k.borrowing)} of it — that raises your rate.`
             : 'You can pay for this out of cash.')
         : 'Out of reach right now.'}</div>
-    </button>`).join('');
+    </button>`; }).join('');
 
   return `
   <div class="layout">
     <div>
       <div class="card">
         <h2>Your orders for round ${v.round + 1}</h2>
+        ${y.product ? `<p class="muted" style="margin:2px 0 0">Everyone at this table makes
+          <b>${esc(y.product.name)}</b>. Same buyers, same market — which is what makes the
+          price next to yours matter.</p>` : ''}
         ${y.filed ? `<p class="muted"><span class="pill in">filed</span>
           You can change these until the round closes.</p>` : ''}
         ${y.autoRounds ? `<p class="muted">Rounds filed automatically for you so far:
@@ -2215,7 +2563,8 @@ function lastRound(v) {
     <h2>Round ${h.round}</h2>
     ${h.news && h.news.length ? h.news.map((n) => `<div class="news">${esc(n.text)}</div>`).join('') : ''}
     ${h.launched && h.launched.length ? h.launched.map((l) =>
-      `<div class="news">${esc(l.name)} opened a new ${esc((l.kindLabel || '').toLowerCase())} line.</div>`).join('') : ''}
+      `<div class="news">${esc(l.name)} opened a new line${l.display
+          ? ` — ${esc(l.display)}` : ` (${esc((l.kindLabel || '').toLowerCase())})`}.</div>`).join('') : ''}
     ${h.inherited && h.inherited.length ? h.inherited.map((i) =>
       `<div class="news">${esc(i.name)} went out of business. About two thirds of its
         customers found a new supplier — they went to whoever was priced closest to it.</div>`).join('') : ''}
@@ -2357,6 +2706,7 @@ function render() {
   else if (S.showClass) html += screenClass();
   else if (S.showBoard) html += screenBoard();
   else if (S.showLeague) html += screenLeague();
+  else if (S.showRecruiter) html += screenRecruiter();
   else if (S.showTalent) html += screenTalent();
   else if (!v) html += screenHome();
   else if (v.status === 'lobby') html += screenLobby(v);
@@ -2371,6 +2721,13 @@ function render() {
       ? ` · server ${esc(S.cfg.build)}` : ' · server not reached'}</p>`;
   app.innerHTML = html;
   if (S.busy) app.style.opacity = '0.6'; else app.style.opacity = '1';
+  /* A poll can redraw the orders form while the adjust sheet is open. The sheet
+     resolves its input by (product, field) rather than holding a node, so it
+     survives — but it has to be repainted against the replacement, or it shows
+     the value the page had before the round moved on. */
+  if (typeof adjOpenNow === 'function' && adjOpenNow()) {
+    if (adjInput()) adjPaint(); else adjClose();
+  }
   if (v && v.status === 'playing' && v.you && D.firm) renderProjection(v);
 }
 
@@ -2398,6 +2755,197 @@ document.addEventListener('input', (e) => {
   }
   if (S.view) renderProjection(S.view);
 });
+
+/* The employer and the job, kept as they are typed. A poll or a sent invitation
+   re-renders the page, and an employer who had filled in four fields and lost
+   them would reasonably conclude the product was broken. */
+document.addEventListener('input', (e) => {
+  const map = { recfrom: 'from', recrole: 'role', recurl: 'url', recblurb: 'blurb' };
+  const field = map[e.target.id];
+  if (!field) return;
+  S.recruiterFrom = { ...(S.recruiterFrom || {}), [field]: e.target.value };
+});
+
+/* ------------------------------------------------ the adjust sheet (phone)
+
+   A second skin on one <input type=range>. Everything here resolves the input
+   by (product, field) rather than holding a DOM reference, because a poll can
+   re-render the orders form while the sheet is open and a captured node would
+   quietly become an orphan that swallows every drag. */
+const A = { p: null, field: null, base: null };
+
+const adjInput = () => (A.p && A.field)
+  ? document.querySelector(`.ctrl input[type=range][data-p="${CSS.escape(A.p)}"][data-field="${A.field}"]`)
+  : null;
+
+/* The six controls of the line the sheet was opened from, in the order they
+   appear on the page — which is the order somebody reading down the form
+   expects "next" to follow. */
+const adjSiblings = () => A.p
+  ? Array.prototype.slice.call(document.querySelectorAll(
+      `.ctrl input[type=range][data-p="${CSS.escape(A.p)}"]`))
+  : [];
+
+function adjProfit() {
+  try { return (S.view && D.firm) ? project(S.view).profit : null; } catch (e) { return null; }
+}
+
+function adjPaint() {
+  const el = adjInput();
+  if (!el) return;
+  const min = Number(el.min), max = Number(el.max);
+  const val = Number(el.value);
+  const t = max > min ? Math.max(0, Math.min(1, (val - min) / (max - min))) : 0;
+  const ctrl = el.closest('.ctrl');
+  const nm = ctrl && ctrl.querySelector('.lab .name');
+  const hn = ctrl && ctrl.querySelector('.lab .hint');
+  $('adjname').textContent = nm ? nm.textContent : '';
+  $('adjhint').textContent = hn ? hn.textContent : '';
+  $('adjval').textContent = fmtField(A.field, val);
+  $('adjrange').textContent = 'anywhere from ' + fmtField(A.field, min)
+                            + ' to ' + fmtField(A.field, max);
+
+  const vs = $('adjvs');
+  const box = vs.getBoundingClientRect();
+  const tb = vs.querySelector('.vtrack').getBoundingClientRect();
+  $('adjfill').style.height = (t * 100) + '%';
+  $('adjthumb').style.bottom = ((box.bottom - tb.bottom) + tb.height * t) + 'px';
+
+  const mark = el.dataset.mark ? Number(el.dataset.mark) : null;
+  const tick = $('adjtick');
+  if (mark !== null && isFinite(mark) && mark >= min && mark <= max && max > min) {
+    tick.hidden = false;
+    tick.style.bottom = ((box.bottom - tb.bottom) + tb.height * ((mark - min) / (max - min))) + 'px';
+    $('adjticklab').textContent = el.dataset.marklab || '';
+  } else tick.hidden = true;
+
+  vs.setAttribute('aria-valuemin', min);
+  vs.setAttribute('aria-valuemax', max);
+  vs.setAttribute('aria-valuenow', val);
+  vs.setAttribute('aria-valuetext', fmtField(A.field, val));
+  vs.setAttribute('aria-label', nm ? nm.textContent : 'Adjust');
+
+  const sibs = adjSiblings();
+  const i = sibs.indexOf(el);
+  $('adjprev').disabled = i <= 0;
+  $('adjnext').disabled = i < 0 || i >= sibs.length - 1;
+
+  const pr = adjProfit();
+  $('adjprofit').textContent = pr === null ? '—' : money(pr);
+  $('adjprofit').style.color = pr === null ? '' :
+    (pr >= 0 ? 'var(--good-text)' : 'var(--critical)');
+  const d = $('adjdelta');
+  if (pr === null || A.base === null) { d.textContent = ''; return; }
+  const diff = pr - A.base;
+  if (Math.abs(diff) < 1) { d.textContent = 'no change'; d.style.color = 'var(--muted)'; }
+  else {
+    d.textContent = (diff > 0 ? '+' : '−') + '$'
+      + Math.abs(Math.round(diff)).toLocaleString('en-US');
+    d.style.color = diff > 0 ? 'var(--good-text)' : 'var(--critical)';
+  }
+}
+
+/* Write through the range input and let the page's own listener do the rest:
+   it updates D.orders, mirrors the number box, and redraws the projection. */
+function adjSet(v) {
+  const el = adjInput();
+  if (!el) return;
+  const min = Number(el.min), max = Number(el.max), step = Number(el.step) || 1;
+  v = Math.round(v / step) * step;
+  v = Math.max(min, Math.min(max, v));
+  v = Math.round(v * 1000) / 1000;
+  if (String(v) === el.value) return;
+  el.value = v;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  const pv = document.querySelector(`[data-pv="${CSS.escape(A.p + '|' + A.field)}"]`);
+  if (pv) pv.textContent = fmtField(A.field, v);
+  adjPaint();
+}
+
+function adjOpen(pname, field) {
+  A.p = pname; A.field = field;
+  A.base = adjProfit();
+  $('adjustscrim').classList.add('on');
+  $('adjust').classList.add('on');
+  document.body.style.overflow = 'hidden';
+  requestAnimationFrame(() => requestAnimationFrame(adjPaint));
+  setTimeout(() => { const vs = $('adjvs'); if (vs) vs.focus({ preventScroll: true }); }, 60);
+}
+function adjClose() {
+  $('adjust').classList.remove('on');
+  $('adjustscrim').classList.remove('on');
+  document.body.style.overflow = '';
+  A.p = null; A.field = null; A.base = null;
+}
+const adjOpenNow = () => $('adjust').classList.contains('on');
+
+function adjStep(dir) {
+  const el = adjInput();
+  if (!el) return;
+  adjSet(Number(el.value) + dir * (Number(el.step) || 1));
+}
+function adjMove(by) {
+  const sibs = adjSiblings();
+  const el = adjInput();
+  const i = sibs.indexOf(el);
+  const next = sibs[i + by];
+  if (!next) return;
+  A.field = next.dataset.field;
+  A.base = adjProfit();
+  adjPaint();
+}
+
+/* A vertical drag is the browser's scroll gesture, so touch-action:none on .vs
+   is what makes this usable at all rather than a fight with the page. */
+(function () {
+  const vs = $('adjvs');
+  if (!vs) return;
+  let dragging = false;
+  const fromPoint = (clientY) => {
+    const el = adjInput();
+    if (!el) return 0;
+    const tb = vs.querySelector('.vtrack').getBoundingClientRect();
+    const t = Math.max(0, Math.min(1, 1 - (clientY - tb.top) / tb.height));
+    const min = Number(el.min), max = Number(el.max);
+    return min + t * (max - min);
+  };
+  vs.addEventListener('pointerdown', (e) => {
+    dragging = true; vs.setPointerCapture(e.pointerId);
+    adjSet(fromPoint(e.clientY)); e.preventDefault();
+  });
+  vs.addEventListener('pointermove', (e) => {
+    if (!dragging) return; adjSet(fromPoint(e.clientY)); e.preventDefault();
+  });
+  const end = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    try { vs.releasePointerCapture(e.pointerId); } catch (err) {}
+  };
+  vs.addEventListener('pointerup', end);
+  vs.addEventListener('pointercancel', end);
+  vs.addEventListener('keydown', (e) => {
+    const el = adjInput();
+    if (!el) return;
+    const step = Number(el.step) || 1;
+    const big = (Number(el.max) - Number(el.min)) / 20;
+    const by = { ArrowUp: step, ArrowRight: step, ArrowDown: -step, ArrowLeft: -step,
+                 PageUp: big, PageDown: -big };
+    if (e.key === 'Home') { adjSet(Number(el.min)); e.preventDefault(); return; }
+    if (e.key === 'End') { adjSet(Number(el.max)); e.preventDefault(); return; }
+    if (by[e.key] === undefined) return;
+    adjSet(Number(el.value) + by[e.key]); e.preventDefault();
+  });
+  $('adjdone').addEventListener('click', adjClose);
+  $('adjustscrim').addEventListener('click', adjClose);
+  $('adjup').addEventListener('click', () => adjStep(1));
+  $('adjdown').addEventListener('click', () => adjStep(-1));
+  $('adjprev').addEventListener('click', () => adjMove(-1));
+  $('adjnext').addEventListener('click', () => adjMove(1));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && adjOpenNow()) adjClose();
+  });
+  window.addEventListener('resize', () => { if (adjOpenNow()) adjPaint(); });
+})();
 
 /* Tell people a name is gone before they try to pay for it. */
 let nameTimer = null;
@@ -2713,6 +3261,60 @@ document.addEventListener('click', (e) => {
     guard(async () => {
       await api('talent/optout', {});
       S.talent = await api('talent/me');
+    });
+    return;
+  }
+  if (t.closest && t.closest('.pick')) {
+    const b = t.closest('.pick');
+    adjOpen(b.dataset.pickp, b.dataset.pick);
+    return;
+  }
+  if (t.id === 'showrecruiter') {
+    guard(async () => { S.recruiter = await api('recruiter/pool'); S.showRecruiter = true; });
+    return;
+  }
+  if (t.id === 'closerecruiter') { S.showRecruiter = false; render(); return; }
+  if (t.id === 'recruitermore') {
+    const have = (S.recruiter && S.recruiter.entries.length) || 0;
+    guard(async () => {
+      const more = await api('recruiter/pool?offset=' + have);
+      /* Appended rather than replaced, and de-duplicated by company: somebody
+         opting out between the two requests shifts the window, and the same
+         profile arriving twice would offer a second invitation for a player who
+         can only ever be approached once. */
+      const seen = new Set(S.recruiter.entries.map((e) => e.companyId));
+      S.recruiter = { ...more,
+        entries: S.recruiter.entries.concat(more.entries.filter((e) => !seen.has(e.companyId))) };
+    });
+    return;
+  }
+  if (t.dataset.invite) {
+    const companyId = t.dataset.invite;
+    /* Read before guard(), which re-renders and would replace these inputs with
+       empty ones. Kept on S so they survive the render that follows. */
+    const from = ($('recfrom') || {}).value || '';
+    const role = ($('recrole') || {}).value || '';
+    const url = ($('recurl') || {}).value || '';
+    const blurb = ($('recblurb') || {}).value || '';
+    S.recruiterFrom = { from, role, url, blurb };
+    if (!from.trim() || !role.trim()) {
+      S.error = 'Say which employer this is from and which job, before inviting anybody.';
+      render(); return;
+    }
+    guard(async () => {
+      const r = await api('recruiter/invite', { companyId, from, role, url, blurb });
+      S.notice = `Invitation sent to ${r.to}. They can apply, ignore it, or dismiss it — `
+        + 'and you will not be told which unless they apply.';
+      /* Refetched rather than patched, because the daily count and the invited
+         flags are the server's to know. */
+      S.recruiter = await api('recruiter/pool');
+    });
+    return;
+  }
+  if (t.id === 'buyrecruiter') {
+    guard(async () => {
+      const r = await api('checkout', { kind: 'recruiter' });
+      location.href = r.url;
     });
     return;
   }
