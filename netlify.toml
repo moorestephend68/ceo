@@ -24,3 +24,10 @@
   from = "/g/*"
   to = "/live.html"
   status = 200
+
+# A cargo table's code in the address bar, so a link a captain passes round
+# opens the table rather than the front page.
+[[redirects]]
+  from = "/c/*"
+  to = "/cargo.html"
+  status = 200
