@@ -64,6 +64,14 @@ All three inline the same engine source, so **the solo game, the multiplayer pag
 and the server run byte-identical economy code**. Editing a generated file by hand
 will be overwritten — edit the template and rebuild.
 
+> **`lib/engine.mjs` currently carries two hand-made edits** — the ones marked
+> `ENGINE-EDIT 1 of 2` and `2 of 2`. They count how many research projects have
+> LANDED on a product and say what each landing added, which is what the product
+> screen draws. They are additions to state and to a returned list; no arithmetic
+> moves, so a stale copy in `public/live.html` cannot make the projection
+> disagree with the round. **Mirror them into `engine.js` in the other
+> repository** — the next `mkserver.py` run drops them otherwise.
+
 > **`public/index.html` currently carries three hand-made edits** — the routes from
 > the solo game to the live one, marked `LIVE-LINK 1 of 3` and so on. They were
 > added directly to the generated file because `template.html` and `build.py` live
