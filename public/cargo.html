@@ -77,6 +77,7 @@
 </head>
 <body>
 <div class="wrap" id="app"></div>
+<p id="build" style="text-align:center;font-size:11px;color:#5a6d8c;margin:22px 0 0"></p>
 <div class="dock" id="dock"></div>
 
 <!-- The resolution, watched rather than read. Hidden until a round closes. -->
@@ -406,6 +407,27 @@ function projectRun(v, p, c, d) {
            alone: at(0), one: at(1), all: at(risk.length) };
 }
 
+/* THE BEST RUN ON THE BOARD, before a captain has touched anything.
+
+   The projection was written to help somebody choose and then only appeared
+   once they had chosen, which is the wrong way round and is exactly how a
+   feature ships invisible. So the screen opens with the best run it can find
+   for this ship from where it is standing — which is also the honest answer to
+   "what is this week worth", and the thing every captain works out by hand in
+   their first two rounds anyway. */
+function bestRun(v) {
+  const you = v.you, b = v.board;
+  if (!you || !v.prices || !v.econ) return null;
+  let best = null;
+  for (const p of b.reachP[you.at]) {
+    for (let c = 0; c < 5; c++) {
+      const r = projectRun(v, p, c);
+      if (r && (!best || r.alone > best.r.alone)) best = { p, c, r };
+    }
+  }
+  return best;
+}
+
 function projCard(v, p, c, d, note) {
   const r = projectRun(v, p, c, d);
   if (!r) return '';
@@ -425,10 +447,10 @@ function projCard(v, p, c, d, note) {
   return `<div class="card"><h2>What this run pays</h2>
     <div class="big ${cls(r.alone)}">${money(Math.round(r.alone))}</div>
     <p class="note" style="margin-top:2px">${
-      !known ? 'selling at the best station posted'
+      !known ? (note ? '' : 'selling at the best station posted')
       : r.risk === 0 ? 'and nobody else can land where you are landing'
       : 'if none of the ' + (r.risk === 1 ? 'other carrier lands' : r.risk + ' other carriers land')
-        + ' there'}${note ? ' · ' + note : ''}</p>
+        + ' there'}${note ? (known ? ' · ' + note : note + ', selling where it pays most') : ''}</p>
     <table style="margin-top:8px">${rows}</table>
     <p class="note" style="margin-top:8px">${
       r.sharing
@@ -489,6 +511,17 @@ function screenDeclare(app, dock, v) {
   }
 
   app.insertAdjacentHTML('beforeend', mapSVG(v));
+  /* The number goes ABOVE the choices it is meant to inform. Before anything
+     is picked it shows the best run on the board, so the screen never opens
+     with the question unanswered. */
+  {
+    const sel = S.sel.p !== undefined && S.sel.c !== undefined;
+    const bst = sel ? null : bestRun(v);
+    if (sel) app.insertAdjacentHTML('beforeend', projCard(v, S.sel.p, S.sel.c, undefined));
+    else if (bst) app.insertAdjacentHTML('beforeend',
+      projCard(v, bst.p, bst.c, undefined,
+        `the best on the board: ${GOODS[bst.c]} out of ${b.pick[bst.p].name}`));
+  }
 
   /* where to load */
   const s2 = $(`<div class="step" data-step="pickup"><div class="lab"><span class="n">2</span>
@@ -513,9 +546,12 @@ function screenDeclare(app, dock, v) {
       const best = b.reachD[S.sel.p].reduce((a, d) => v.prices.sell[d][c] > v.prices.sell[a][c] ? d : a,
                                             b.reachD[S.sel.p][0]);
       const marg = v.prices.sell[best][c] - bp;
+      const r = projectRun(v, S.sel.p, c);
       const btn = $(`<button class="opt" aria-pressed="${S.sel.c === c}">
-        <span class="nm">${GOODS[c]}<br><span class="meta">buy ${px(bp)}</span></span>
-        <span class="px ${cls(marg)}">${marg>=0?'+':'−'}${px(Math.abs(marg))}</span></button>`);
+        <span class="nm">${GOODS[c]}<br><span class="meta">buy ${px(bp)} · sell ${
+          px(v.prices.sell[best][c])}</span></span>
+        <span class="px ${r ? cls(r.alone) : cls(marg)}">${
+          r ? money(Math.round(r.alone)) : (marg>=0?'+':'−') + px(Math.abs(marg))}</span></button>`);
       btn.onclick = () => { S.sel = { p: S.sel.p, c }; render(); };
       s3.querySelector('.opts').appendChild(btn);
     }
@@ -523,8 +559,6 @@ function screenDeclare(app, dock, v) {
   }
 
   const ready = S.sel.p !== undefined && S.sel.c !== undefined;
-  if (ready) app.insertAdjacentHTML('beforeend',
-    projCard(v, S.sel.p, S.sel.c, undefined));
   const d = $(`<div class="inner">
     <div class="fc"><small id="fs">${ready ? 'Loading at ' + b.pick[S.sel.p].name : 'Pick a spot and a cargo'}</small>
       <span class="v ${ready?'':'muted'}" id="fv">${ready ? GOODS[S.sel.c] : '—'}</span></div>
@@ -1048,8 +1082,26 @@ function filmHUD(d, ph, me) {
   }
 }
 
+/* WHICH BUILD THIS IS.
+
+   CEO carries this at the foot of its page and Cargo Run did not, which cost
+   two rounds of "is my change live?" that nobody could answer by looking.
+   Both halves are shown because they are uploaded separately and it is
+   entirely possible to have one without the other. */
+const PAGE_BUILD = '2026-09-20 · the yard mid-round, and what the run pays';
+async function stamp() {
+  let server = 'not reached';
+  try {
+    const r = await fetch('/api/config');
+    if (r.ok) { const j = await r.json(); server = j.build || 'unknown'; }
+  } catch {}
+  const el = document.getElementById('build');
+  if (el) el.textContent = `page ${PAGE_BUILD} · server ${server}`;
+}
+
 /* ------------------------------------------------------------------ start */
 (async () => {
+  stamp();
   const saved = load();
   /* a code in the address bar wins over whatever was last played here, so a
      link a friend sends does what it looks like it does */

@@ -28,6 +28,21 @@ watch(host, 'host'); watch(mate, 'mate');
    blocks every subsequent event and is miserable on a phone besides */
 const named = async (p, name) => { await p.waitForSelector('#name'); await p.fill('#name', name); };
 
+/* Scoped to #app on purpose. document.body.textContent includes the contents
+   of <script> tags, so a matcher run against the body happily finds every
+   string the page can ever render — including the one it is waiting for — and
+   returns true before anything has happened. That mistake has been made twice
+   in this repo now. */
+const until = async (p, re, ms = 20000) => {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const t = ((await p.textContent('#app')) || '').replace(/\s+/g, ' ');
+    if (re.test(t)) return true;
+    await p.waitForTimeout(500);
+  }
+  return false;
+};
+
 await host.goto(BASE + '/cargo.html');
 await host.waitForSelector('.opt');
 await named(host, 'Halloran Freight');
@@ -53,6 +68,27 @@ ok(/failed/.test(hostBody), 'the round opens in the yard with a failed part');
 ok((await host.$$('[data-step=block] input')).length === 4, 'four lots, four sliders');
 ok((await host.$$('[data-step=pickup] .opt')).length > 0, 'and the loading spots are on the same screen');
 
+/* THE NUMBER HAS TO BE THERE BEFORE THE CHOICE IS MADE.
+
+   The first version of the projection only appeared once a spot and a cargo
+   had been picked — which is to say, the number written to help somebody
+   choose was invisible until after they had chosen. A captain who opened the
+   screen and looked saw nothing and reported the feature missing, correctly. */
+ok(/What this run pays/.test(hostBody), 'the run is priced before anything is tapped');
+ok(/the best on the board/.test(hostBody), 'as the best run available from where the ship stands');
+
+/* and the page says which build it is, because twice now nobody could tell */
+const stampText = await host.evaluate(async () => {
+  for (let i = 0; i < 20; i++) {
+    const el = document.getElementById('build');
+    if (el && el.textContent.trim()) return el.textContent;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return '';
+});
+ok(/page 2026/.test(stampText) && /server /.test(stampText),
+  'the page says which build it is, and the server\'s: ' + stampText.slice(0, 70));
+
 /* both captains file a manifest and bids */
 for (const [p, who] of [[host, 'host'], [mate, 'mate']]) {
   await p.waitForSelector('[data-step=pickup] .opt');
@@ -68,15 +104,7 @@ for (const [p, who] of [[host, 'host'], [mate, 'mate']]) {
    their own "filed" screen until the next poll comes back with the manifests,
    which is correct behaviour and something a test has to wait for rather than
    assume. */
-const until = async (p, re, ms = 20000) => {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    const t = (await p.textContent('#app')) || '';
-    if (re.test(t.replace(/\s+/g, ' '))) return true;
-    await p.waitForTimeout(500);
-  }
-  return false;
-};
+
 ok(await until(host, /Manifests filed/), 'the host sees the manifests once both have filed');
 const afterDeclare = (await host.textContent('#app')).replace(/\s+/g, ' ');
 
