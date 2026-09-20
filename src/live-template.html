@@ -322,6 +322,21 @@
     .afoot .av{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums}
     .afoot .ad{font-size:13px;font-weight:600;text-align:right;min-width:84px}
   }
+
+  /* The round, watched. Sits over the page while it runs and is gone in seven
+     seconds — the table underneath is never more than one tap away. */
+  #film{position:fixed;inset:0;z-index:60;background:var(--page)}
+  #film canvas{display:block;width:100%;height:100%}
+  #film #skip{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));
+    min-height:44px;padding:0 18px}
+
+  /* The product itself, and what research put in it. */
+  #prod{position:fixed;inset:0;z-index:61;background:var(--page)}
+  #prod canvas{display:block;width:100%;height:100%}
+  #prod .pbtn{position:fixed;bottom:calc(14px + env(safe-area-inset-bottom));
+    min-height:44px;padding:0 18px}
+  #prod #pclose{right:14px}
+  #prod #pnext{right:14px;bottom:calc(66px + env(safe-area-inset-bottom))}
 </style>
 </head><body>
 <div class="projbar" id="projbar" hidden>
@@ -377,6 +392,19 @@
     </div>
   </header>
   <div id="app"></div>
+</div>
+
+<!-- The resolution, watched rather than read. Hidden until a round closes. -->
+<div id="film" hidden>
+  <canvas id="reel"></canvas>
+  <button id="skip">Skip</button>
+</div>
+
+<!-- What the company makes, and what research has put in it. -->
+<div id="prod" hidden>
+  <canvas id="stage"></canvas>
+  <button class="pbtn" id="pnext" hidden>Next →</button>
+  <button class="pbtn primary" id="pclose">Close</button>
 </div>
 
 <script>
@@ -2560,7 +2588,10 @@ function lastRound(v) {
   const mine = h.results.find((r) => r.seatId === (v.you && v.you.seatId));
   return `
   <div class="card">
-    <h2>Round ${h.round}</h2>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+      <h2 style="margin:0 0 10px">Round ${h.round}</h2>
+      <button class="ghost" id="rewatch">Watch the market ↻</button>
+    </div>
     ${h.news && h.news.length ? h.news.map((n) => `<div class="news">${esc(n.text)}</div>`).join('') : ''}
     ${h.launched && h.launched.length ? h.launched.map((l) =>
       `<div class="news">${esc(l.name)} opened a new line${l.display
@@ -2610,6 +2641,8 @@ function screenPlaying(v) {
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
       <h2 style="margin:0">Round ${v.round + 1} of ${v.totalRounds}</h2>
+      ${y && y.products && y.products.length
+        ? '<button class="ghost" id="seeproduct">See your product</button>' : ''}
       <div class="muted" id="clock" data-rest="${esc(waiting
         ? ' · waiting on ' + v.waitingOn.join(', ')
         : ' · everyone has filed')}">${countdown(v.deadline)}${waiting
@@ -2729,6 +2762,13 @@ function render() {
     if (adjInput()) adjPaint(); else adjClose();
   }
   if (v && v.status === 'playing' && v.you && D.firm) renderProjection(v);
+  /* Every path that changes the game ends here, so this is the one place that
+     can notice a round has closed — whichever of polling, filing or starting
+     brought the news. The film is an overlay, so the page it would cover has
+     already been drawn underneath it. */
+  /* The round first, then the product: if a round closed AND research landed,
+     the market is the news and the workshop is the follow-up. */
+  if (!maybePlayFilm()) maybeShowProduct();
 }
 
 /* --------------------------------------------------------------- behaviour */
@@ -3372,6 +3412,10 @@ document.addEventListener('click', (e) => {
     t.textContent = dark ? 'Dark' : 'Light';
     return;
   }
+  if (t.id === 'rewatch') { playFilm(S.view); return; }
+  if (t.id === 'seeproduct') { prodOpen('look'); return; }
+  if (t.id === 'pclose') { prodClose(); return; }
+  if (t.id === 'pnext') { prodNext(); return; }
   if (t.id === 'copy') {
     const el = $('sharelink'); el.select();
     navigator.clipboard.writeText(el.value).then(() => { t.textContent = 'Copied'; });
@@ -3645,6 +3689,730 @@ if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').match
   document.documentElement.setAttribute('data-theme', 'dark');
   $('theme').textContent = 'Light';
 }
+/* ======================================================================
+   THE ROUND, WATCHED
+
+   Seven seconds, three beats, and one fact a results table cannot show:
+   DEMAND and SALES are different numbers. The gap is the people who chose
+   you and could not buy, and the engine hands them to whoever still had
+   stock. That is the whole picture. Everything else stays in the table
+   underneath, which is where it reads better anyway.
+
+   WHAT IT IS ALLOWED TO DRAW. A pile is a company's share of demand, which
+   is public — it is in the market table after every round — and it is also
+   already arithmetic: a seat knows its own demand and its own share, so it
+   knows the size of the whole market, so it knows what everybody else's
+   share is worth in buyers. The drawing adds nothing to what the page had
+   already handed over.
+
+   What is NOT public is how much a rival could actually supply. So a rival
+   who ran out gets the words and no number — the page already says they
+   ran out — while your own stockout carries its exact figure, because those
+   are your books. A better-looking picture is not a reason to widen what a
+   seat can see.
+
+   The clock is the only state. Every position and every number is a pure
+   function of FILM.t, which is what makes Skip one line and resize free.
+   ====================================================================== */
+const FILM = {
+  T: { ladder: 1.2, crowd: 3.2, stockout: 2.6 },
+  reel: null, ctx: null, t: 0, raf: 0, data: null, c: null,
+};
+FILM.LEN = Object.values(FILM.T).reduce((a, b) => a + b, 0);
+const fease = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
+const f01 = (u) => Math.max(0, Math.min(1, u));
+
+function filmPhase(t) {
+  let acc = 0;
+  for (const [name, len] of Object.entries(FILM.T)) {
+    if (t < acc + len) return { name, u: (t - acc) / len };
+    acc += len;
+  }
+  return { name: 'stockout', u: 1 };
+}
+
+/* The round, turned into people. Built once when the film starts rather than
+   per frame, so a pile is stable and a resize does not reshuffle the crowd. */
+function filmDataFor(v) {
+  if (!v || !v.history || !v.history.length) return null;
+  const h = v.history[v.history.length - 1];
+  const youId = v.you && v.you.seatId;
+  /* who ran out, from the same public flag the market table reads */
+  const ranOut = {};
+  for (const m of (v.market || [])) {
+    ranOut[m.seatId] = !!(m.pub || []).some((p) => p.stockoutLast);
+  }
+  const rows = h.results.filter((r) => r.share > 0.0005 && !r.bankrupt);
+  if (rows.length < 2) return null;
+  const firms = rows.map((r) => {
+    const you = r.seatId === youId;
+    /* your own gap is a number; a rival's is a fact without one */
+    const turned = you && r.demand > r.sales + 0.5 ? Math.round(r.demand - r.sales) : 0;
+    return {
+      seatId: r.seatId, name: r.name, price: r.price, share: r.share, you, turned,
+      turnedFrac: turned && r.demand ? turned / r.demand : 0,
+      out: !!ranOut[r.seatId],
+    };
+  });
+  firms.sort((a, b) => a.price - b.price);
+  return { round: h.round, firms, dots: [] };
+}
+
+/* How many people to draw, and where each of them stands.
+
+   The count is worked out from the screen rather than fixed: enough buyers
+   that the biggest pile nearly fills the height between the market and the
+   shelf, whatever the phone. A pile has to be tall enough that the one beside
+   it is visibly shorter — that comparison is the only thing a pile is for. */
+function filmBuildDots() {
+  const d = FILM.data;
+  if (!d || !FCOL.length) return;
+  const perRow = Math.max(3, Math.floor((FCOL[0].w - 10) / 6));
+  const rows = Math.max(6, Math.floor((FSHELF - 26 - (FSRC.y + 58)) / 7));
+  const total = d.firms.reduce((a, f) => a + f.share, 0) || 1;
+  const biggest = Math.max(...d.firms.map((f) => f.share)) / total;
+  const budget = Math.max(240, Math.min(2400, Math.round((rows * perRow) / biggest)));
+  /* where the turned-away go: whoever still had stock, in proportion to how
+     much of the market chose them */
+  const open = d.firms.filter((f) => !f.out);
+  const openTotal = open.reduce((a, f) => a + f.share, 0);
+  const dots = [];
+  d.firms.forEach((f, i) => {
+    f.n = Math.max(1, Math.round((f.share / total) * budget));
+    /* your pile sheds the same FRACTION of itself that your books did */
+    const leaving = f.you && f.turnedFrac > 0
+      ? Math.min(f.n - 1, Math.round(f.n * f.turnedFrac)) : 0;
+    for (let k = 0; k < f.n; k++) {
+      let to = null;
+      if (k >= f.n - leaving && openTotal > 0) {
+        let r = ((k * 9301 + i * 49297) % 233280) / 233280 * openTotal;
+        for (const g of open) { r -= g.share; if (r <= 0) { to = d.firms.indexOf(g); break; } }
+        if (to === null) to = d.firms.indexOf(open[0]);
+      }
+      dots.push({ i, to, k,
+        lane: ((k * 2654435761) % 1000) / 1000,
+        delay: ((k * 40503) % 1000) / 1000 });
+    }
+  });
+  d.dots = dots;
+}
+
+/* Only ever plays a round you were at, and only once. A reload or a second tab
+   should not replay a round you have already watched. */
+const FILM_FIRST = new Set();
+function maybePlayFilm() {
+  const v = S.view;
+  if (FILM.data || !v || !v.code) return false;      /* one film at a time */
+  /* Seen this game at all, before asking whether it has a new round: a table
+     joined in the lobby is a table you are at, and the check below must know
+     the difference between that and arriving to a season already running. */
+  const first = !FILM_FIRST.has(v.code);
+  FILM_FIRST.add(v.code);
+  if (!v.history || !v.history.length || document.hidden) return false;
+  const round = v.history[v.history.length - 1].round;
+  let seen = 0;
+  try { seen = Number(localStorage.getItem('ceo.seen.' + v.code) || 0); } catch {}
+  /* A round you were not at is not a reveal, it is a stale cutscene. The first
+     time this page lays eyes on a game that already has rounds behind it — a
+     late seat, a new device, a cleared browser — the backlog is marked watched
+     and nothing plays. The button in the round card is there for anyone who
+     wants it anyway. */
+  if (first && !seen) {
+    try { localStorage.setItem('ceo.seen.' + v.code, String(round)); } catch {}
+    return false;
+  }
+  if (round <= seen) return false;
+  try { localStorage.setItem('ceo.seen.' + v.code, String(round)); } catch {}
+  return playFilm(v);
+}
+
+function playFilm(v) {
+  const data = filmDataFor(v);
+  if (!data) return false;
+  FILM.data = data; FILM.t = 0;
+  const cs = getComputedStyle(document.documentElement);
+  const V = (n, f) => (cs.getPropertyValue(n) || '').trim() || f;
+  FILM.c = { bg: V('--page', '#f9f9f7'), panel: V('--surface-1', '#fff'),
+             ink: V('--text-primary', '#0b0b0b'), dim: V('--muted', '#898781'),
+             line: V('--grid', '#e1e0d9'), you: V('--series-1', '#2a78d6'),
+             bad: V('--series-neg', '#e34948'), good: V('--good-text', '#0ca30c') };
+  document.getElementById('film').hidden = false;
+  FILM.reel = document.getElementById('reel');
+  FILM.ctx = FILM.reel.getContext('2d');
+  filmLayout();
+  document.getElementById('skip').onclick = endFilm;
+  FILM.reel.onclick = endFilm;
+  let last = performance.now();
+  const step = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    FILM.t += dt;
+    if (FILM.t >= FILM.LEN) return endFilm();
+    drawFilm();
+    FILM.raf = requestAnimationFrame(step);
+  };
+  FILM.raf = requestAnimationFrame(step);
+  return true;
+}
+function endFilm() {
+  cancelAnimationFrame(FILM.raf);
+  document.getElementById('film').hidden = true;
+  FILM.data = null;
+  render();
+}
+
+let FW = 0, FH = 0, FCOL = [], FSRC = { x: 0, y: 0 }, FSHELF = 0;
+function filmLayout() {
+  if (!FILM.data) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  FW = FILM.reel.clientWidth; FH = FILM.reel.clientHeight;
+  FILM.reel.width = Math.round(FW * dpr); FILM.reel.height = Math.round(FH * dpr);
+  FILM.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const n = FILM.data.firms.length, pad = 10, gap = 6;
+  const w = (FW - pad * 2 - gap * (n - 1)) / n;
+  FCOL = Array.from({ length: n }, (_, k) => ({ x: pad + k * (w + gap), w }));
+  FSHELF = FH - 168;
+  FSRC = { x: FW / 2, y: 86 };
+  /* the crowd is sized to the screen it landed on, so a rotate rebuilds it */
+  filmBuildDots();
+}
+window.addEventListener('resize', () => { if (FILM.data) filmLayout(); });
+
+/* Where one buyer stands. Packed bottom-up from its own index, so the pile is
+   the same picture on every frame. */
+function filmSlot(d, ci, kk) {
+  const col = FCOL[ci];
+  const perRow = Math.max(3, Math.floor((col.w - 10) / 6));
+  const k = kk === undefined ? d.k : kk;
+  return { x: col.x + 8 + (k % perRow) * 6, y: FSHELF - 10 - Math.floor(k / perRow) * 7 };
+}
+function filmBez(a, b, u, lane, lift) {
+  const cx = (a.x + b.x) / 2 + (lane - 0.5) * 110;
+  const cy = (a.y + b.y) / 2 + (lift === undefined ? 40 : lift);
+  const v = 1 - u;
+  return { x: v * v * a.x + 2 * v * u * cx + u * u * b.x,
+           y: v * v * a.y + 2 * v * u * cy + u * u * b.y };
+}
+function filmDotAt(d, ph) {
+  const home = filmSlot(d, d.i);
+  if (ph.name === 'ladder') return null;
+  if (ph.name === 'crowd') {
+    const u = f01(ph.u * 1.5 - d.delay * 0.5);
+    if (u <= 0) return null;
+    return { ...filmBez(FSRC, home, fease(u), d.lane), turned: false };
+  }
+  if (d.to === null) return { ...home, turned: false };
+  const u = f01(ph.u * 1.7 - 0.2 - d.delay * 0.35);
+  const f = FILM.data.firms[d.to];
+  const away = filmSlot(d, d.to, f.n + (d.k % 40));
+  if (u <= 0) return { ...home, turned: true, moved: false };
+  return { ...filmBez(home, away, fease(u), 1 - d.lane, -70), turned: true, moved: u >= 1 };
+}
+
+/* the top of the tallest pile, so a caption can stay out of the crowd */
+function filmPileTop() {
+  const perRow = Math.max(3, Math.floor((FCOL[0].w - 10) / 6));
+  let rows = 1;
+  for (const f of FILM.data.firms) rows = Math.max(rows, Math.ceil(f.n / perRow));
+  return FSHELF - 10 - (rows - 1) * 7;
+}
+
+function drawFilm() {
+  const g = FILM.ctx, c = FILM.c, d = FILM.data, ph = filmPhase(FILM.t);
+  g.fillStyle = c.bg; g.fillRect(0, 0, FW, FH);
+
+  /* the market: a soft pool the crowd comes out of */
+  const a = ph.name === 'crowd' ? 1.3 - ph.u * 1.1 : ph.name === 'ladder' ? fease(ph.u) : 0.2;
+  g.save(); g.globalAlpha = Math.max(0, a) * 0.5;
+  const grad = g.createRadialGradient(FSRC.x, FSRC.y, 4, FSRC.x, FSRC.y, 110);
+  grad.addColorStop(0, c.you); grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad; g.fillRect(FSRC.x - 120, FSRC.y - 120, 240, 240);
+  g.restore();
+
+  /* the shopfronts, cheapest first */
+  const up = ph.name === 'ladder' ? fease(ph.u) : 1;
+  g.textAlign = 'center';
+  d.firms.forEach((f, k) => {
+    const col = FCOL[k], y = FSHELF - 4, h = 100 * up;
+    g.save(); g.globalAlpha = up;
+    g.fillStyle = c.panel;
+    g.beginPath(); g.roundRect(col.x, y, col.w, h, 8); g.fill();
+    g.strokeStyle = f.you ? c.you : c.line; g.lineWidth = f.you ? 1.6 : 1; g.stroke();
+    g.fillStyle = f.you ? c.you : c.ink;
+    g.font = `650 ${Math.min(17, col.w * 0.34)}px system-ui,sans-serif`;
+    g.fillText('$' + Math.round(f.price), col.x + col.w / 2, y + 26);
+    g.fillStyle = c.dim;
+    g.font = `${Math.min(10.5, col.w * 0.2)}px system-ui,sans-serif`;
+    g.fillText((f.you ? 'You' : f.name.split(' ')[0]).slice(0, 11), col.x + col.w / 2, y + 42);
+    if (ph.name === 'stockout' && f.out) {
+      g.globalAlpha = up * (0.55 + 0.45 * f01(Math.sin(ph.u * Math.PI * 3)));
+      g.fillStyle = c.bad;
+      g.font = `650 ${Math.min(10.5, col.w * 0.2)}px system-ui,sans-serif`;
+      g.fillText('SOLD OUT', col.x + col.w / 2, y + 62);
+      if (f.turned) {
+        /* The one number in the whole drawing. On its own line, with the words
+           under it: six seats make a narrow column, and one long line either
+           spills across the neighbouring fronts — where it reads as THEIR
+           number — or shrinks to something nobody can read. */
+        const label = f.turned.toLocaleString();
+        let s = Math.min(15, col.w * 0.3);
+        g.fillStyle = c.ink;
+        while (s > 9) { g.font = `650 ${s}px system-ui,sans-serif`;
+                        if (g.measureText(label).width <= col.w - 12) break; s -= 0.5; }
+        g.fillText(label, col.x + col.w / 2, y + 80);
+        g.fillStyle = c.dim;
+        g.font = `${Math.min(9.5, col.w * 0.18)}px system-ui,sans-serif`;
+        g.fillText('turned away', col.x + col.w / 2, y + 92);
+      }
+    }
+    g.restore();
+  });
+
+  /* the buyers */
+  for (const dot of d.dots) {
+    const p = filmDotAt(dot, ph);
+    if (!p) continue;
+    const mine = d.firms[dot.i].you;
+    g.globalAlpha = p.turned ? (p.moved ? 0.8 : 0.95) : (mine ? 0.95 : 0.68);
+    g.fillStyle = p.turned ? (p.moved ? c.good : c.bad) : (mine ? c.you : c.dim);
+    g.fillRect(p.x - 1.7, p.y - 1.7, 3.4, 3.4);
+  }
+  g.globalAlpha = 1;
+
+  /* What to look at, above the piles rather than printed across them — and on
+     its own plate, because during the crowd beat the buyers are everywhere and
+     a caption competing with two thousand moving squares loses. */
+  const capY = Math.max(FSRC.y + 40, Math.min(FH - 175, filmPileTop() - 24));
+  const any = d.firms.some((f) => f.out);
+  const cap = ph.name === 'ladder' ? ['ROUND ' + d.round + ' — WHAT EVERYONE CHARGED', c.dim]
+    : ph.name === 'crowd' ? ['THE MARKET CHOOSES', c.dim]
+    : any ? ['TURNED AWAY — THEY GO TO WHOEVER STILL HAS STOCK', c.bad]
+          : ['NOBODY WAS TURNED AWAY', c.dim];
+  g.textAlign = 'center';
+  /* shrink to fit rather than run off a narrow screen, and if it still does not
+     fit, say the shorter version of the same thing */
+  let size = Math.min(12.5, FW / 32);
+  const fits = () => { g.font = `650 ${size}px system-ui,sans-serif`;
+                       return g.measureText(cap[0]).width <= FW - 36; };
+  while (!fits() && size > 9) size -= 0.5;
+  if (!fits() && any && ph.name === 'stockout') cap[0] = 'TURNED AWAY — THEY GO ELSEWHERE';
+  while (!fits() && size > 7.5) size -= 0.5;
+  const tw = g.measureText(cap[0]).width;
+  g.globalAlpha = 0.88; g.fillStyle = c.bg;
+  g.beginPath(); g.roundRect(FW / 2 - tw / 2 - 10, capY - 13, tw + 20, 20, 5); g.fill();
+  g.globalAlpha = 1; g.fillStyle = cap[1];
+  g.fillText(cap[0], FW / 2, capY);
+}
+
+/* ======================================================================
+   THE PRODUCT, AND WHAT RESEARCH PUT IN IT
+
+   R&D in this game is one number moving, and the number is real: across ten
+   rounds, $0 of research takes a line from quality 81 to 56 and bankruptcy,
+   and $80,000 a round takes the same line to 133. What the engine also knows,
+   and never used to say, is WHEN a project lands — money spent in round three
+   arrives in round five — which is the single hardest thing about this game to
+   learn from a table of numbers.
+
+   So: the thing gets drawn, and it gains a part each time a project lands.
+
+   WHAT IS TRUE AND WHAT IS WRITTEN. The landing is the engine's. The quality
+   it added, what it cost and the round it was funded are the engine's, and
+   they are printed on the card. The NAME of the improvement is writing — the
+   catalogue's nth phrase for the nth landing — because the engine has no
+   features, only quality. That is flavour attached to a real event rather
+   than a number invented to look like one, and it is why the figures sit
+   beside the phrase instead of behind it.
+
+   The parts count landings, so they never go down. The FINISH tracks quality
+   as it stands, so a rival's breakthrough knocking your quality back dulls
+   the thing you built without unbuilding it — which is exactly what happened
+   to it.
+   ====================================================================== */
+const PROD = { line: null, items: [], t: 0, raf: 0, mode: 'look',
+               ctx: null, cv: null, c: null, base: 0, running: false };
+const PT = { assemble: 1.0, item: 1.9 };
+
+/* Which line to show, and what landed on it. */
+function prodOpen(mode) {
+  const v = S.view;
+  const y = v && v.you;
+  if (!y || !y.products || !y.products.length) return false;
+  const landed = (y.landed && y.landed.items) || [];
+  /* the line something happened to, or the first one */
+  const hit = landed.length
+    ? y.products.find((p) => p.name === landed[0].product) : null;
+  const line = hit || y.products[0];
+  const items = landed.filter((i) => i.product === line.name);
+  PROD.line = line;
+  PROD.mode = mode === 'reveal' && items.length ? 'reveal' : 'look';
+  PROD.items = PROD.mode === 'reveal' ? items.slice(0, 4) : [];
+  /* parts already on the thing before this round's research arrived */
+  const gains = PROD.items.filter((i) => i.gain > 0).length;
+  PROD.base = Math.max(0, (line.upgrades || 0) - gains);
+  PROD.t = 0;
+  document.getElementById('prod').hidden = false;
+  document.getElementById('pnext').hidden = PROD.mode !== 'reveal';
+  PROD.cv = document.getElementById('stage');
+  PROD.ctx = PROD.cv.getContext('2d');
+  /* Tap anywhere to put it away, the same as the round film. A full-screen
+     thing that can only be dismissed by finding the one small button in the
+     corner is a thing people feel trapped by. */
+  PROD.cv.onclick = prodClose;
+  const cs = getComputedStyle(document.documentElement);
+  const V = (n, f) => (cs.getPropertyValue(n) || '').trim() || f;
+  PROD.c = { bg: V('--page', '#f9f9f7'), panel: V('--surface-1', '#fff'),
+             ink: V('--text-primary', '#0b0b0b'), dim: V('--muted', '#898781'),
+             line: V('--grid', '#e1e0d9'), acc: V('--series-1', '#2a78d6'),
+             bad: V('--series-neg', '#e34948'), good: V('--good-text', '#0ca30c') };
+  prodLayout();
+  if (!PROD.running) {
+    PROD.running = true;
+    let last = performance.now();
+    const step = (now) => {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      if (!PROD.line) { PROD.running = false; return; }
+      const end = PT.assemble + PROD.items.length * PT.item;
+      if (PROD.t < (PROD.mode === 'reveal' ? end : PT.assemble)) PROD.t += dt;
+      prodDraw();
+      PROD.raf = requestAnimationFrame(step);
+    };
+    PROD.raf = requestAnimationFrame(step);
+  }
+  return true;
+}
+function prodClose() {
+  cancelAnimationFrame(PROD.raf);
+  PROD.running = false; PROD.line = null;
+  document.getElementById('prod').hidden = true;
+}
+/* skip to the next landing, or out */
+function prodNext() {
+  const i = Math.floor(Math.max(0, PROD.t - PT.assemble) / PT.item);
+  const next = PT.assemble + (i + 1) * PT.item;
+  if (i + 1 >= PROD.items.length) { PROD.t = PT.assemble + PROD.items.length * PT.item; return; }
+  PROD.t = next;
+}
+
+let PW = 0, PH = 0, PBOX = { x: 0, y: 0, s: 1 };
+function prodLayout() {
+  if (!PROD.cv) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  PW = PROD.cv.clientWidth; PH = PROD.cv.clientHeight;
+  PROD.cv.width = Math.round(PW * dpr); PROD.cv.height = Math.round(PH * dpr);
+  PROD.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  /* The thing is drawn in a 200 × 140 box, scaled to fit the room between the
+     heading and the readouts and then CENTRED in it — the first version pinned
+     it under the heading and left a third of a phone screen empty. */
+  const top = 92, bottom = PH - 108;
+  const s = Math.min((PW - 44) / 200, (bottom - top - 140) / 140, 2.8);
+  /* The object, its caption and its numbers are one block, centred together.
+     Centring the object alone left a gap above it and another below the words,
+     which read as two things on a screen rather than one. */
+  /* In "look" mode the space under the object carries the list of what
+     research has actually put in this product, so the block is taller. */
+  const listH = PROD.mode === 'look'
+    ? 22 + 19 * Math.max(1, Math.min(5, (PROD.line && PROD.line.upgrades) || 0)) : 0;
+  const blockH = 140 * s + 130 + listH;
+  const y = top + Math.max(0, (bottom - top - blockH) / 2);
+  PBOX = { x: PW / 2 - (200 * s) / 2, y, s, listH,
+           cap: y + 140 * s + 38, foot: y + 140 * s + 92 + listH };
+}
+window.addEventListener('resize', () => { if (PROD.line) { prodLayout(); prodDraw(); } });
+
+/* ---------------------------------------------------------- the four things
+   One drawing per KIND, not per product: sixty stylised objects would be sixty
+   chances to draw something a player who knows the industry would laugh at,
+   and the thing that has to be legible here is not what a grinder looks like —
+   it is that the object gained a part and got better made. Each archetype has
+   five slots, in the order research would plausibly reach them, and returns
+   where each one sits so a label can point at it. */
+function prodThing(g, kind, parts, finish, hi, appear) {
+  const { x, y, s } = PBOX, c = PROD.c;
+  const P = (ux, uy) => ({ x: x + ux * s, y: y + uy * s });
+  const R = (ux, uy, uw, uh, r) => { g.beginPath();
+    g.roundRect(x + ux * s, y + uy * s, uw * s, uh * s, (r || 0) * s); };
+  const lineTo = (a, b) => { g.beginPath(); g.moveTo(x + a[0] * s, y + a[1] * s);
+                             g.lineTo(x + b[0] * s, y + b[1] * s); g.stroke(); };
+  /* finish: how well made it looks right now. Quality, not landings. */
+  g.lineWidth = (1 + finish * 1.1) * Math.max(0.8, s * 0.5);
+  g.strokeStyle = c.ink; g.fillStyle = c.panel;
+  const shade = (a) => `rgba(${finish > 0.5 ? '120,140,170' : '140,140,140'},${a})`;
+  /* A part that has just arrived comes up in the accent colour and fades back
+     to the drawing over the same beat, so the eye finds it without a label
+     having to point at it. */
+  const part = (i, fn) => {
+    if (i >= parts) return;
+    g.save();
+    if (i === hi) {
+      g.globalAlpha = Math.min(1, appear * 1.6);
+      const glow = 1 - Math.min(1, appear * 1.3);
+      if (glow > 0.02) {
+        g.shadowColor = c.acc; g.shadowBlur = 14 * glow + 4;
+        g.strokeStyle = c.acc; g.fillStyle = c.acc;
+      }
+    }
+    fn();
+    g.restore();
+  };
+  const anchors = [];
+
+  if (kind === 'software') {
+    R(36, 18, 128, 104, 6); g.fill(); g.stroke();
+    g.fillStyle = shade(0.10); R(36, 18, 128, 15, 6); g.fill();
+    g.fillStyle = c.dim;
+    for (let i = 0; i < 3; i++) { g.beginPath();
+      g.arc(x + (44 + i * 7) * s, y + 25.5 * s, 2 * s, 0, 7); g.fill(); }
+    anchors.push(P(100, 42), P(50, 78), P(120, 88), P(120, 25.5), P(150, 110));
+    part(0, () => { g.fillStyle = shade(0.35);
+      for (let i = 0; i < 5; i++) { R(44 + i * 12, 38, 9, 8, 2); g.fill(); } });
+    part(1, () => { g.fillStyle = shade(0.16); R(41, 50, 22, 68, 3); g.fill(); });
+    part(2, () => { g.fillStyle = c.acc;
+      [16, 30, 22, 38, 27].forEach((h, i) => { R(72 + i * 16, 110 - h, 10, h, 2); g.fill(); }); });
+    part(3, () => { g.fillStyle = c.panel; g.strokeStyle = c.ink;
+      R(104, 20, 26, 12, 3); g.fill(); g.stroke(); R(133, 20, 26, 12, 3); g.fill(); g.stroke(); });
+    part(4, () => { g.fillStyle = c.good; g.beginPath();
+      g.arc(x + 150 * s, y + 110 * s, 9 * s, 0, 7); g.fill();
+      g.strokeStyle = c.panel; g.lineWidth = 2.2 * s; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x + 146 * s, y + 110 * s);
+      g.lineTo(x + 149 * s, y + 114 * s); g.lineTo(x + 155 * s, y + 106 * s); g.stroke(); });
+    return anchors;
+  }
+
+  if (kind === 'commodity') {
+    R(36, 62, 60, 46, 3); g.fill(); g.stroke();
+    R(102, 62, 62, 46, 3); g.fill(); g.stroke();
+    R(60, 18, 84, 42, 3); g.fill(); g.stroke();
+    anchors.push(P(60, 18), P(66, 85), P(102, 20), P(66, 96), P(100, 118));
+    part(0, () => { g.strokeStyle = c.acc; g.lineWidth = 2.4 * Math.max(0.8, s * 0.5);
+      [[60, 18], [144, 18]].forEach((p, i) => {
+        lineTo([p[0], p[1]], [p[0] + (i ? -12 : 12), p[1]]);
+        lineTo([p[0], p[1]], [p[0], p[1] + 12]); }); });
+    part(1, () => { g.strokeStyle = shade(0.5);
+      for (let i = 0; i < 4; i++) lineTo([46 + i * 13, 68], [46 + i * 13, 102]); });
+    part(2, () => { g.fillStyle = c.dim; R(96, 15, 12, 7, 2); g.fill(); });
+    part(3, () => { g.fillStyle = c.panel; g.strokeStyle = c.line;
+      R(48, 88, 34, 16, 2); g.fill(); g.stroke(); g.fillStyle = c.dim;
+      for (let i = 0; i < 3; i++) { R(51, 91 + i * 4, 26 - i * 7, 2, 1); g.fill(); } });
+    part(4, () => { g.fillStyle = shade(0.35);
+      R(32, 110, 136, 6, 1); g.fill();
+      [40, 96, 152].forEach((ux) => { R(ux, 116, 14, 6, 1); g.fill(); }); });
+    return anchors;
+  }
+
+  if (kind === 'deeptech') {
+    R(34, 34, 132, 72, 4); g.fill(); g.stroke();
+    g.fillStyle = shade(0.12); R(34, 34, 132, 72, 4); g.fill();
+    g.fillStyle = c.dim;                                    /* edge pads */
+    for (let i = 0; i < 9; i++) { R(44 + i * 14, 104, 8, 6, 1); g.fill(); }
+    anchors.push(P(34, 70), P(80, 62), P(118, 54), P(62, 46), P(146, 44));
+    part(0, () => { g.fillStyle = shade(0.5); R(28, 58, 10, 26, 2); g.fill();
+      g.strokeStyle = c.ink; g.stroke(); });
+    part(1, () => { g.fillStyle = shade(0.75); g.strokeStyle = c.dim;
+      R(64, 54, 22, 18, 2); g.fill(); g.stroke();
+      R(94, 62, 14, 12, 2); g.fill(); g.stroke(); });
+    part(2, () => { g.strokeStyle = c.acc; g.lineWidth = 1.8 * Math.max(0.8, s * 0.5);
+      for (let i = 0; i < 6; i++) lineTo([110 + i * 4, 44], [110 + i * 4, 64]); });
+    part(3, () => { g.strokeStyle = c.dim; g.setLineDash([3 * s, 2 * s]);
+      R(54, 42, 44, 40, 2); g.stroke(); g.setLineDash([]); });
+    part(4, () => { g.strokeStyle = c.acc; g.lineWidth = 1.6 * Math.max(0.8, s * 0.5);
+      let ux = 130; const pts = [];
+      for (let i = 0; i < 6; i++) { pts.push([ux, i % 2 ? 50 : 40]); ux += 5; }
+      g.beginPath(); pts.forEach((p, i) => { const q = P(p[0], p[1]);
+        i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y); }); g.stroke(); });
+    return anchors;
+  }
+
+  /* hardware: a machine on a base */
+  R(48, 104, 104, 12, 2); g.fill(); g.stroke();
+  R(56, 26, 88, 80, 6); g.fill(); g.stroke();
+  g.beginPath();                                            /* the hopper */
+  [[74, 26], [126, 26], [116, 8], [84, 8]].forEach((p, i) => { const q = P(p[0], p[1]);
+    i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y); });
+  g.closePath(); g.fill(); g.stroke();
+  anchors.push(P(126, 52), P(82, 94), P(156, 60), P(63, 119), P(72, 40));
+  part(0, () => { g.fillStyle = c.panel; g.strokeStyle = c.ink; g.beginPath();
+    g.arc(x + 126 * s, y + 52 * s, 9 * s, 0, 7); g.fill(); g.stroke();
+    lineTo([126, 52], [126, 45]); });
+  part(1, () => { g.strokeStyle = shade(0.6);
+    for (let i = 0; i < 3; i++) lineTo([68, 88 + i * 6], [96, 88 + i * 6]); });
+  part(2, () => { g.strokeStyle = c.ink; g.beginPath();
+    g.arc(x + 144 * s, y + 60 * s, 16 * s, -Math.PI / 2, Math.PI / 2); g.stroke(); });
+  part(3, () => { g.fillStyle = shade(0.45);
+    R(56, 116, 14, 6, 1); g.fill(); R(130, 116, 14, 6, 1); g.fill(); });
+  part(4, () => { g.fillStyle = c.good; g.beginPath();
+    g.arc(x + 72 * s, y + 40 * s, 4.5 * s, 0, 7); g.fill(); });
+  return anchors;
+}
+
+function prodDraw() {
+  const g = PROD.ctx, c = PROD.c, L = PROD.line;
+  if (!g || !L) return;
+  g.fillStyle = c.bg; g.fillRect(0, 0, PW, PH);
+
+  /* which landing, if any, is on screen right now */
+  const idx = PROD.mode === 'reveal'
+    ? Math.min(PROD.items.length - 1, Math.floor(Math.max(0, PROD.t - PT.assemble) / PT.item))
+    : -1;
+  const within = PROD.mode === 'reveal'
+    ? Math.max(0, Math.min(1, (PROD.t - PT.assemble - idx * PT.item) / 0.8)) : 1;
+  const item = idx >= 0 && PROD.t >= PT.assemble ? PROD.items[idx] : null;
+  const gainsSoFar = PROD.items.slice(0, idx + 1).filter((i) => i.gain > 0).length;
+  const shownParts = Math.min(5, PROD.mode === 'reveal'
+    ? PROD.base + (PROD.t >= PT.assemble ? gainsSoFar : 0)
+    : (L.upgrades || 0));
+  const hi = item && item.gain > 0 ? Math.min(4, shownParts - 1) : -1;
+
+  /* the heading */
+  g.textAlign = 'center';
+  g.fillStyle = c.ink;
+  g.font = `650 ${Math.min(22, PW / 17)}px system-ui,sans-serif`;
+  g.fillText(L.label || L.display || 'Your product', PW / 2, 46);
+  g.fillStyle = c.dim;
+  g.font = '12px system-ui,sans-serif';
+  g.fillText(L.kindLabel + (L.upgrades ? ` · ${L.upgrades} improvement${L.upgrades === 1 ? '' : 's'}`
+                                       : ' · nothing added yet'), PW / 2, 66);
+
+  /* the thing. Quality 70 is a shabby version of it and 130 a well-made one —
+     the same object either way, because it is the same product. */
+  const finish = Math.max(0, Math.min(1, ((L.quality || 100) - 70) / 60));
+  const grow = Math.min(1, PROD.t / PT.assemble);
+  g.save();
+  g.globalAlpha = grow;
+  const anchors = prodThing(g, L.kind, shownParts, finish, hi, within);
+  g.restore();
+
+  /* What arrived, named, under the thing it arrived in.
+
+     An earlier version drew a leader line from the words to the part that had
+     just appeared. It looked good and it was quietly false: the archetype's
+     parts are generic — a control, a vent, a handle — and the names are the
+     product's own, so "a weighted base" ended up pointing at a side handle.
+     The drawing gains a part and the new one announces itself in colour; the
+     words say what was bought. Nothing claims that squiggle IS that feature. */
+  if (item && item.gain > 0) {
+    const lift = 1 - Math.pow(1 - within, 3);
+    const ty = PBOX.cap;
+    const names = L.improvements || [];
+    const name = names[(item.upgrade || shownParts) - 1] || null;
+    g.save(); g.globalAlpha = lift;
+    g.textAlign = 'center'; g.fillStyle = c.ink;
+    g.font = `650 ${Math.min(18, PW / 21)}px system-ui,sans-serif`;
+    g.fillText(name ? 'Added: ' + name : 'Another research project landed', PW / 2, ty);
+    g.restore();
+  }
+
+  /* what actually happened, in the engine's own numbers */
+  const footY = PBOX.foot;
+  g.textAlign = 'center';
+  if (item) {
+    g.fillStyle = c.dim; g.font = '12.5px system-ui,sans-serif';
+    if (item.gain > 0) {
+      const was = item.was, now = was + item.gain * Math.min(1, within * 1.4);
+      g.fillStyle = c.ink; g.font = `650 ${Math.min(26, PW / 15)}px system-ui,sans-serif`;
+      g.fillText(`quality ${Math.round(was)} → ${Math.round(now)}`, PW / 2, footY);
+      g.fillStyle = c.dim; g.font = '12.5px system-ui,sans-serif';
+      g.fillText(`$${Math.round(item.spend || 0).toLocaleString()} of research, `
+        + `funded in round ${(item.funded || 0) + 1}`, PW / 2, footY + 22);
+    } else if (item.efficiency > 0) {
+      const steps = L.processSteps || [];
+      g.fillStyle = c.dim; g.font = `600 ${Math.min(14, PW / 27)}px system-ui,sans-serif`;
+      g.fillText('IN THE FACTORY, NOT THE PRODUCT', PW / 2, footY - 58);
+      g.fillStyle = c.ink; g.font = `650 ${Math.min(17, PW / 22)}px system-ui,sans-serif`;
+      g.fillText(steps[(item.upgrade || 1) - 1] || 'the line got cheaper to run', PW / 2, footY - 34);
+      g.font = `650 ${Math.min(26, PW / 15)}px system-ui,sans-serif`;
+      g.fillText(`efficiency ${Math.round(item.was)} → ${Math.round(item.was + item.efficiency)}`,
+        PW / 2, footY);
+      g.fillStyle = c.dim; g.font = '12.5px system-ui,sans-serif';
+      g.fillText('cheaper to build, and more out of the same plant', PW / 2, footY + 22);
+    } else if (item.capacity > 0) {
+      g.fillStyle = c.ink; g.font = `650 ${Math.min(26, PW / 15)}px system-ui,sans-serif`;
+      g.fillText('+' + Math.round(item.capacity).toLocaleString() + ' units of plant', PW / 2, footY);
+      g.fillStyle = c.dim; g.font = '12.5px system-ui,sans-serif';
+      g.fillText('the expansion you paid for has finished', PW / 2, footY + 22);
+    }
+  } else {
+    /* Standing still: what research has put in this thing so far, then what it
+       is now. The list is the answer to "what did all that money buy", which
+       is a question the orders form has never been able to answer. */
+    const n = Math.min(5, L.upgrades || 0);
+    const names = L.improvements || [];
+    let ly = PBOX.y + 140 * PBOX.s + 34;
+    g.font = '13px system-ui,sans-serif';
+    if (!n) {
+      g.fillStyle = c.dim;
+      g.fillText('Nothing added yet — research is what changes that.', PW / 2, ly);
+    } else {
+      g.fillStyle = c.dim; g.font = '600 11px system-ui,sans-serif';
+      g.fillText('WHAT RESEARCH HAS PUT IN IT', PW / 2, ly);
+      ly += 20;
+      /* one left edge for the whole list: centring each line on its own made
+         the ticks zig-zag down the screen */
+      g.font = '13px system-ui,sans-serif';
+      const rows = Array.from({ length: n }, (_, i) => names[i] || 'a further refinement');
+      const widest = Math.max(...rows.map((r) => g.measureText(r).width));
+      const left = Math.max(20, PW / 2 - widest / 2);
+      g.textAlign = 'left';
+      rows.forEach((label, i) => {
+        g.fillStyle = c.acc; g.fillText('✓', left - 17, ly + i * 19);
+        g.fillStyle = c.ink; g.fillText(label, left, ly + i * 19);
+      });
+      g.textAlign = 'center';
+      if ((L.upgrades || 0) > 5) {
+        g.fillStyle = c.dim; g.font = '12px system-ui,sans-serif';
+        g.fillText(`and ${L.upgrades - 5} more`, PW / 2, ly + n * 19);
+      }
+    }
+    const cells = [['quality', Math.round(L.quality)],
+                   ['efficiency', Math.round(L.efficiency)],
+                   ['plant', Math.round(L.capacity).toLocaleString()]];
+    const w = PW / 3;
+    cells.forEach(([k, val], i) => {
+      g.fillStyle = c.ink; g.font = `650 ${Math.min(20, PW / 20)}px system-ui,sans-serif`;
+      g.fillText(String(val), w * i + w / 2, footY);
+      g.fillStyle = c.dim; g.font = '11.5px system-ui,sans-serif';
+      g.fillText(k, w * i + w / 2, footY + 17);
+    });
+    g.fillStyle = c.dim; g.font = '12.5px system-ui,sans-serif';
+    const waiting = (L.rdPipeline || 0) + (L.procPipeline || 0);
+    g.fillText(waiting
+      ? `${waiting} research project${waiting === 1 ? '' : 's'} still on the way`
+      : 'nothing in research right now', PW / 2, footY + 44);
+  }
+}
+
+/* The button is always there. The screen only takes over when something has
+   actually ARRIVED.
+
+   It used to open itself at the start of a game too — the first look at what
+   your company makes, which is a nice idea and was the wrong call. Eight of
+   the browser tests in this repo broke on it, every one of them for the same
+   reason: a player who has just started a game reaches for the orders form
+   and finds a picture in the way. Two full-screen interruptions a round, one
+   for the market and one for the workshop, is one too many. The button on the
+   round card covers the curious, and research landing is news. */
+const PROD_SEEN = 'ceo.prod.';
+const PROD_FIRST = new Set();
+function maybeShowProduct() {
+  const v = S.view;
+  if (PROD.line || FILM.data || !v || !v.code || v.status !== 'playing') return false;
+  if (!v.you || !v.you.products || !v.you.products.length || document.hidden) return false;
+  /* Seen this game at all, before asking whether anything landed — a lobby is
+     a game you are at, and the late-arrival rule below has to tell that apart
+     from opening a season already three rounds old. */
+  const first = !PROD_FIRST.has(v.code);
+  PROD_FIRST.add(v.code);
+  const landed = (v.you.landed && v.you.landed.items) || [];
+  if (!landed.length) return false;
+  const key = PROD_SEEN + v.code;
+  const mark = 'r' + v.you.landed.round;
+  let seen = '';
+  try { seen = localStorage.getItem(key) || ''; } catch {}
+  if (seen === mark) return false;
+  try { localStorage.setItem(key, mark); } catch {}
+  if (first && !seen) return false;
+  return prodOpen('reveal');
+}
+
 window.addEventListener('popstate', boot);
 boot();
 </script>
