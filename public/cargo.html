@@ -152,11 +152,24 @@ async function api(route, body) {
    has to ask. Slow while it is your move, brisk while you are waiting on
    somebody else, and stopped when the tab is hidden. */
 let timer = null;
+let pollFails = 0;
 function poll(ms) {
   clearTimeout(timer);
   if (document.hidden) return;
   timer = setTimeout(async () => {
-    try { const out = await api('cargo/view'); applyView(out.view); } catch {}
+    try {
+      const out = await api('cargo/view');
+      pollFails = 0;
+      if (S.error) { S.error = null; }
+      applyView(out.view);
+    } catch (e) {
+      /* A swallowed poll is a page that just stops. That is exactly what
+         happened when the server started refusing writes: the countdown
+         reached two seconds, froze, and said nothing — the one failure mode
+         where the captain cannot even tell you what went wrong. One blip is
+         noise, three in a row is news. */
+      if (++pollFails >= 3) { S.error = e.message; render(); }
+    }
     poll(ms);
   }, ms);
 }
