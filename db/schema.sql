@@ -527,3 +527,23 @@ alter table entrants enable row level security;
 -- No policy: the server reaches this with the service role and nothing else
 -- does. The tokens in this table are what let somebody play, so a table anybody
 -- can read is a table anybody can play from.
+
+
+-- ============================================================ stage 11
+-- Two games on one set of rails.
+--
+-- Cargo Run reuses this table, the join codes, the public matchmaking and the
+-- tick sweep; the only thing it needs is somewhere to say which game a row is,
+-- so a captain looking for a table is never seated at a company.
+--
+-- Nullable on purpose. Every game written before this column existed is CEO,
+-- and a migration that rewrites live rows to add a value they do not need is a
+-- migration that can go wrong at three in the morning for no benefit. Absent
+-- means CEO, in the database and in lib/kinds.mjs, and it stays that way.
+alter table games add column if not exists kind text;
+
+-- Matchmaking asks exactly one question of this table: the oldest open public
+-- lobby of one kind. Without the index that is a sequential scan over every
+-- game ever played, every time somebody presses Play now.
+create index if not exists games_public_lobby_idx
+  on games (kind, created_at) where is_public and status = 'lobby';
