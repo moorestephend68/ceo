@@ -1,5 +1,12 @@
 /* The backstop.
 
+   WHICH GAME IS THIS. Everything below goes through kindOf() rather than
+   calling CEO's functions directly. It did call them directly, because it was
+   written when there was one game, and the result was that a Cargo Run table
+   whose lobby wait ran out had its empty seats filled with COMPANIES — seats
+   with a balance sheet and no ship. The table then threw on every request
+   afterwards. One unguarded door is all it takes; this is that door.
+
    Rounds normally close when the next player opens the page — that keeps the
    game moving without depending on a schedule. This sweeps for games everyone
    has walked away from, and releases company-name holds abandoned in checkout.
@@ -7,8 +14,8 @@
    On Postgres the whole due-marker scheme from the blob backend is unnecessary:
    "which games are overdue" is one indexed query. */
 
-import * as G from '../../lib/game.mjs';
 import * as P from '../../lib/public.mjs';
+import { kindOf } from '../../lib/kinds.mjs';
 import { getDb } from '../../lib/runtime.mjs';
 import { mutateGame } from '../../lib/mutate.mjs';
 
@@ -23,8 +30,9 @@ export default async () => {
     /* Somebody may be joining this very table as the sweep runs, so the same
        read-apply-retry as everywhere else rather than a blind overwrite. */
     await mutateGame(db, stale.code, (game) => {
-      if (!P.shouldStart(game, now)) return false;
-      P.startPublic(game, now);
+      const kind = kindOf(game);
+      if (!kind.shouldStart(game, now)) return false;
+      kind.startPublic(game, now);
     }).catch(() => {});
   }
 
@@ -32,13 +40,13 @@ export default async () => {
   let closed = 0, rated = 0;
   for (const stale of due) {
     await mutateGame(db, stale.code, async (game) => {
-      let changed = false;
-      while (game.status === 'playing' && G.shouldResolve(game, now)) {
-        G.resolveRound(game, now);
-        closed += 1;
-        changed = true;
-      }
-      if (game.status === 'over' && (game.isPublic || game.league === 'bot') && !game.scored) {
+      const kind = kindOf(game);
+      let changed = kind.resolveWhileDue(game, now);
+      if (changed) closed += 1;
+      /* Rating is CEO's, and a row with no kind is CEO — the same guard the
+         API uses, rather than a second opinion about who gets rated. */
+      if (game.status === 'over' && !game.kind
+          && (game.isPublic || game.league === 'bot') && !game.scored) {
         const out = await P.scoreGame(db, game);
         if (out.scored) rated += 1;
         changed = true;
@@ -56,7 +64,7 @@ export default async () => {
   const demos = db.purgeExpiredDemos ? await db.purgeExpiredDemos(now) : 0;
 
   console.log(`tick: ${lobbies.length} lobbies started, ${due.length} overdue, ` +
-              `${closed} rounds closed, ${rated} games rated, ${freed} name holds released, ` +
+              `${closed} games advanced, ${rated} games rated, ${freed} name holds released, ` +
               `${demos} demo classes swept`);
 };
 
