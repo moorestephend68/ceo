@@ -89,6 +89,44 @@ const manifestCard = await host.evaluate(() => {
 });
 ok((await host.$$('[data-step=port] .opt')).length === 3, 'three stations to choose between');
 
+/* THE YARD, SETTLED BETWEEN THE WINDOWS.
+
+   The sealed bids are opened before a port is chosen, not after the run. Two
+   things have to be true on this screen and both matter to the decision being
+   made on it: every bid is shown with a name against it, and the holds are
+   the ones the ships will actually fly with. */
+ok(/envelopes opened/i.test(afterDeclare), 'the envelopes are opened before the route is picked');
+const yard = await host.evaluate(() => {
+  const c = [...document.querySelectorAll('.card')].find((x) => /envelopes opened/i.test(x.textContent));
+  if (!c) return null;
+  const rows = [...c.querySelectorAll('table')][1];
+  return { text: c.textContent.replace(/\s+/g, ' '),
+           captains: rows ? rows.querySelectorAll('tr').length - 1 : 0 };
+});
+ok(yard && yard.captains === 5, `every captain's bid is on the board (${yard && yard.captains} rows)`);
+ok(yard && /Fitted now, not next week/.test(yard.text),
+  'and it says the part is carrying cargo on this run');
+
+/* WHAT THE RUN WOULD PAY. Only once a station is picked, because until then
+   two of the three legs are guesses. */
+await host.click('[data-step=port] .opt');
+await host.waitForTimeout(300);
+const proj = await host.evaluate(() => {
+  const c = [...document.querySelectorAll('.card')].find((x) => /What this run pays/.test(x.textContent));
+  return c ? c.textContent.replace(/\s+/g, ' ') : null;
+});
+ok(!!proj, 'picking a station projects what the run pays');
+ok(proj && /Fuel and upkeep/.test(proj) && /(if one of them sells here too|nobody else can land)/.test(proj),
+  'with the exact costs, and the squeeze if somebody else lands there');
+ok(proj && /nobody can know is who else picks the same station/.test(proj),
+  'and it says plainly which half of it is a guess');
+/* The buy side is NOT a guess once the manifests are out: a rival loading at
+   the same spot squeezes the price whatever they do next, and their hold and
+   their cash are both public. The projection has to have counted it. */
+ok(proj && /(already counted|Fuel, upkeep and the load are exact)/.test(proj),
+  'and a captain loading alongside you is already in the number');
+if (process.env.SHOT) await host.screenshot({ path: process.env.SHOT, fullPage: true });
+
 const dismissFilm = async (p) => {
   if (await p.$('#film:not([hidden])')) { await p.click('#skip'); await p.waitForTimeout(300); }
 };

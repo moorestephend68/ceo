@@ -354,6 +354,92 @@ function lastRoundCard(v) {
 }
 
 /* ---- stage one: the yard and the manifest, filed together ---------------- */
+/* ======================================================================
+   WHAT THE RUN WOULD PAY
+
+   The one number a captain actually wants while they are choosing, and the
+   game has never shown it. It is the same arithmetic the server does when it
+   settles — the constants come down in the view rather than being written
+   here, so the page cannot quietly start quoting a different economy from the
+   one that will pay out.
+
+   THE HONEST PART. Fuel, upkeep and the load are exact: they depend on the
+   ship and the board and nothing else. The PRICE is not, because it depends
+   on how many other captains pick the same spot and the same station, and
+   nobody knows that when they file. So the headline is the lane to yourself,
+   and under it what the same run pays once one or two others pile in — which
+   on a crowded lane is most of the difference between a good week and a bad
+   one, and is exactly the thing a table of prices cannot tell you.
+   ====================================================================== */
+function projectRun(v, p, c, d) {
+  const E = v.econ; if (!E || !v.prices || !v.you) return null;
+  const you = v.you, b = v.board;
+  const buyMult = (q) => Math.pow((q + E.REF) / (E.LOAD + E.REF), E.ELAS);
+  const sellMult = (q) => Math.pow((q + E.REF) / (E.LOAD + E.REF), -E.ELAS);
+  const bp = v.prices.buy[p][c];
+  const load = Math.max(0, Math.min(you.hold, Math.floor(you.cash / bp)));
+  const dd = d === undefined
+    ? b.reachD[p].reduce((a, x) => v.prices.sell[x][c] > v.prices.sell[a][c] ? x : a, b.reachD[p][0])
+    : d;
+  const fuel = E.FUEL * (b.sdist[you.at][p] + b.pdist[p][dd]);
+  const seatOf = (name) => (v.seats || []).find((x) => x.name === name) || {};
+  /* WHAT IS KNOWN, ONCE THE MANIFESTS ARE OUT. A rival loading at the same
+     spot with the same cargo squeezes the BUY price whatever they do next,
+     and everything that decides how much they lift — their hold and their
+     cash — is on the board. So this half is not a guess at all, and the
+     projection should not pretend it is. */
+  const sharing = (v.manifests || []).filter((x) => !x.you && x.p === p && x.c === c);
+  const lift = (x) => { const st = seatOf(x.name);
+    return Math.max(0, Math.min(st.hold || E.LOAD, Math.floor((st.cash || 0) / bp))); };
+  const qb = load + sharing.reduce((a, x) => a + lift(x), 0);
+  /* WHAT IS NOT. Who else lands where you land. The candidates are public —
+     same cargo, and this station within their reach — but the choice is the
+     one thing the round keeps hidden until it settles. */
+  const risk = (v.manifests || []).filter((x) => !x.you && x.c === c
+    && (x.couldSell || []).includes(dd));
+  const at = (k) => {
+    const qs = load + risk.slice(0, k).reduce((a, x) => a + lift(x), 0);
+    return load * (v.prices.sell[dd][c] * sellMult(qs) - bp * buyMult(qb)) - fuel - E.UPKEEP;
+  };
+  return { load, fuel, d: dd, upkeep: E.UPKEEP,
+           sharing: sharing.length, risk: risk.length,
+           alone: at(0), one: at(1), all: at(risk.length) };
+}
+
+function projCard(v, p, c, d, note) {
+  const r = projectRun(v, p, c, d);
+  if (!r) return '';
+  const known = d !== undefined;
+  let rows = `<tr><td>Carrying</td><td class="v">${r.load} units</td></tr>
+    <tr><td>Fuel and upkeep</td><td class="v b">−${money(Math.round(r.fuel + r.upkeep))}</td></tr>`;
+  if (r.sharing) {
+    rows += `<tr><td class="muted">${r.sharing === 1 ? 'one other captain is' : r.sharing + ' others are'}
+      loading here too</td><td class="v muted">already counted</td></tr>`;
+  }
+  if (known && r.risk) {
+    rows += `<tr><td class="muted">if one of them sells here too</td>
+      <td class="v ${cls(r.one)}">${money(Math.round(r.one))}</td></tr>`;
+    if (r.risk > 1) rows += `<tr><td class="muted">if all ${r.risk} do</td>
+      <td class="v ${cls(r.all)}">${money(Math.round(r.all))}</td></tr>`;
+  }
+  return `<div class="card"><h2>What this run pays</h2>
+    <div class="big ${cls(r.alone)}">${money(Math.round(r.alone))}</div>
+    <p class="note" style="margin-top:2px">${
+      !known ? 'selling at the best station posted'
+      : r.risk === 0 ? 'and nobody else can land where you are landing'
+      : 'if none of the ' + (r.risk === 1 ? 'other carrier lands' : r.risk + ' other carriers land')
+        + ' there'}${note ? ' · ' + note : ''}</p>
+    <table style="margin-top:8px">${rows}</table>
+    <p class="note" style="margin-top:8px">${
+      r.sharing
+        ? 'The buy price already has the ' + (r.sharing === 1 ? 'captain' : r.sharing + ' captains')
+          + ' loading alongside you in it — their hold and their cash are on the board, so that '
+          + 'part is arithmetic. '
+        : 'Fuel, upkeep and the load are exact. '}What nobody can know is who else picks the
+      same station: that is the one thing this round keeps hidden until it settles.</p></div>`;
+}
+
+
 function screenDeclare(app, dock, v) {
   const you = v.you, b = v.board;
   app.insertAdjacentHTML('beforeend', head(v));
@@ -437,6 +523,8 @@ function screenDeclare(app, dock, v) {
   }
 
   const ready = S.sel.p !== undefined && S.sel.c !== undefined;
+  if (ready) app.insertAdjacentHTML('beforeend',
+    projCard(v, S.sel.p, S.sel.c, undefined));
   const d = $(`<div class="inner">
     <div class="fc"><small id="fs">${ready ? 'Loading at ' + b.pick[S.sel.p].name : 'Pick a spot and a cargo'}</small>
       <span class="v ${ready?'':'muted'}" id="fv">${ready ? GOODS[S.sel.c] : '—'}</span></div>
@@ -482,9 +570,64 @@ function screenDeclare(app, dock, v) {
 }
 
 /* ---- stage two: the manifests are out ----------------------------------- */
+/* THE ENVELOPES.
+
+   The yard settles between the two windows now, so this is where a captain
+   finds out what their sealed bid bought — and, just as usefully, what it
+   nearly bought. Every bid is shown with a name against it: a reveal that
+   named only the winner would leave everyone guessing how close they came,
+   which is the one thing that teaches you how to bid next week.
+
+   It also matters for the decision being made on this very screen. The part
+   somebody just won is fitted NOW, so the holds in this table are what every
+   rival can actually carry on the run you are about to route. */
+function yardCard(v) {
+  const r = v.refit;
+  if (!r) return '';
+  const me = (v.seats || []).findIndex((s) => s.you);
+  let t = `<div class="card"><h2>The yard — envelopes opened</h2><table>
+    <tr><th>Lot</th><th>Condition</th><th>Won by</th><th>Paid</th></tr>`;
+  r.lots.forEach((l) => {
+    const mine = l.who === me;
+    t += `<tr class="${mine ? 'you' : ''}"><td>${l.lot + 1}</td>
+      <td class="muted">${CONDITION(l.grade)}</td>
+      <td>${l.who < 0 ? '<span class="muted">nobody bid</span>'
+                      : (mine ? 'You' : r.names[l.who])}</td>
+      <td>${l.who < 0 ? '—' : money(l.paid)}</td></tr>`;
+  });
+  t += `</table>`;
+  /* what everybody put in, which is the part worth studying */
+  t += `<table style="margin-top:10px"><tr><th>Captain</th>${
+    r.lots.map((l) => `<th>Lot ${l.lot + 1}</th>`).join('')}<th>Hold</th></tr>`;
+  r.names.forEach((n, i) => {
+    const mine = i === me;
+    t += `<tr class="${mine ? 'you' : ''}"><td>${mine ? 'You' : n}</td>${
+      r.lots.map((l) => {
+        const bid = l.bids[i];
+        const won = l.who === i;
+        return `<td class="${won ? 'g' : bid === null || bid < 1 ? 'muted' : ''}">${
+          bid === null ? '—' : bid < 1 ? 'no bid' : money(bid)}${won ? ' ✓' : ''}</td>`;
+      }).join('')}<td>${r.holdNow[i]}${
+        r.holdNow[i] !== r.holdWas[i]
+          ? ` <span class="${r.holdNow[i] > r.holdWas[i] ? 'g' : 'b'}">${
+              r.holdNow[i] > r.holdWas[i] ? '+' : '−'}${
+              Math.abs(r.holdNow[i] - r.holdWas[i])}</span>` : ''}</td></tr>`;
+  });
+  t += '</table>';
+  if (r.scrapped && r.scrapped.length) {
+    t += `<p class="note" style="margin-top:8px">${
+      r.scrapped.map((i) => i === me ? 'You' : r.names[i]).join(', ')} won nothing and took the
+      yard's scrap part, which is fitted for free and is worse than anything in the block.</p>`;
+  }
+  t += `<p class="note" style="margin-top:8px">Fitted now, not next week — whatever was won is
+    carrying cargo on this run, and the holds above are what everyone can lift.</p></div>`;
+  return t;
+}
+
 function screenRoute(app, dock, v) {
   const you = v.you, b = v.board;
   app.insertAdjacentHTML('beforeend', head(v));
+  app.insertAdjacentHTML('beforeend', yardCard(v));
 
   let m = `<div class="card"><h2>Manifests filed</h2><table>
     <tr><th>Captain</th><th>Loading</th><th>Could sell at</th></tr>`;
@@ -515,21 +658,38 @@ function screenRoute(app, dock, v) {
 
   S.sel = { p: you.declared.p, c: you.declared.c, d: S.sel.d };
   app.insertAdjacentHTML('beforeend', mapSVG(v));
+
+  /* The projection sits ABOVE the choices, not below them. Under the station
+     buttons it ended up behind the dock, which is the one place on a phone
+     where a number is guaranteed not to be read. */
+  const ready = S.sel.d !== undefined;
+  if (ready) app.insertAdjacentHTML('beforeend',
+    projCard(v, you.declared.p, you.declared.c, S.sel.d));
+
   const step = $(`<div class="step" data-step="port"><div class="lab"><span class="n">4</span>
     &nbsp;Sell it at</div><div class="opts"></div></div>`);
   b.reachD[you.declared.p].forEach((d) => {
-    const btn = $(`<button class="opt" aria-pressed="${S.sel.d === d}">
-      <span class="nm">${b.drop[d].name}</span>
-      <span class="px">${px(v.prices.sell[d][you.declared.c])}</span></button>`);
+    /* what this station pays, on the button, so the three can be compared
+       without picking each one in turn */
+    const r = projectRun(v, you.declared.p, you.declared.c, d);
+    const rivals = r ? r.risk : 0;
+    const pay = r ? r.alone : null;
+    const btn = $(`<button class="opt tall" aria-pressed="${S.sel.d === d}">
+      <span class="nm">${b.drop[d].name}<br><span class="meta">sells at ${
+        px(v.prices.sell[d][you.declared.c])}${
+        rivals ? ' · ' + rivals + ' other' + (rivals > 1 ? 's' : '') + ' could land here' : ''}</span></span>
+      <span class="px ${pay === null ? '' : cls(pay)}">${pay === null ? '' : money(Math.round(pay))}</span></button>`);
     btn.onclick = () => { S.sel = { ...S.sel, d }; render(); };
     step.querySelector('.opts').appendChild(btn);
   });
   app.appendChild(step);
 
-  const ready = S.sel.d !== undefined;
+  const pick = ready ? projectRun(v, you.declared.p, you.declared.c, S.sel.d) : null;
+  const payNow = pick ? pick.alone : null;
   const d = $(`<div class="inner">
-    <div class="fc"><small>${ready ? 'With the market to yourself' : 'Pick a station'}</small>
-      <span class="v ${ready?'':'muted'}">${ready ? b.drop[S.sel.d].name.split(' ')[0] : '—'}</span></div>
+    <div class="fc"><small>${ready ? b.drop[S.sel.d].name : 'Pick a station'}</small>
+      <span class="v ${ready ? cls(payNow) : 'muted'}">${
+        ready ? money(Math.round(payNow)) : '—'}</span></div>
     <button class="go" ${ready?'':'disabled'}>File the route</button></div>`);
   d.querySelector('.go').onclick = async () => {
     if (!ready || S.busy) return;
@@ -559,9 +719,24 @@ function screenOver(app, dock, v) {
     <td>${s.ship}%</td><td class="muted">${money(s.onParts||0)}</td>
     <td>${money(s.cash)}</td></tr>`; });
   app.insertAdjacentHTML('beforeend', t + `</table>
-    <p class="note" style="margin-top:10px">The best ship wins about one season in five — a
+    <p class="note" style="margin-top:10px">The best ship wins about one season in eight — a
     contested auction prices quality at close to what it is worth, so the captain who wins is
     the one who got a decent ship <b>cheaply</b>.</p></div>`);
+
+  /* WHO THEY ACTUALLY WERE. Withheld all season on purpose; withholding it now
+     would just be refusing to answer the first question anybody asks. */
+  if (v.who && v.who.length) {
+    let w = `<div class="card"><h2>Who you were playing against</h2><table>
+      <tr><th>Captain</th><th>What it was</th></tr>`;
+    v.who.forEach((x) => {
+      w += `<tr class="${x.you ? 'you' : ''}"><td>${x.you ? 'You' : x.name}</td>
+        <td class="muted">${x.you ? 'you' : x.isBot ? x.style : 'a person'}</td></tr>`;
+    });
+    const people = v.who.filter((x) => !x.isBot).length;
+    app.insertAdjacentHTML('beforeend', w + `</table><p class="note" style="margin-top:8px">${
+      people === 1 ? 'You were the only person at this table — the other four were the yard\'s own captains.'
+                   : people + ' of the five were people. Nobody was told which, all season.'}</p></div>`);
+  }
   const d = $(`<div class="inner"><button class="go">Another table</button></div>`);
   d.querySelector('.go').onclick = () => {
     S = { code: null, token: null, view: null, sel: {}, bids: [], busy: false, error: null, name: S.name };
@@ -586,7 +761,10 @@ function screenOver(app, dock, v) {
    unwinding.
    ====================================================================== */
 const FILM = {
-  T: { out: 2.4, load: 1.2, run: 2.7, market: 2.0, yard: 3.8 },
+  /* No yard beat. The refit now settles between the two windows and is read
+     off the envelopes screen before a port is even chosen, so replaying it
+     here would be showing somebody a thing they already watched. */
+  T: { out: 2.4, load: 1.2, run: 2.7, market: 2.4 },
   reel: null, ctx: null, t: 0, raf: 0, data: null, view: null, done: null,
 };
 FILM.LEN = Object.values(FILM.T).reduce((a, b) => a + b, 0);
@@ -601,7 +779,7 @@ function filmPhase(t) {
     if (t < acc + len) return { name, u: (t - acc) / len };
     acc += len;
   }
-  return { name: 'yard', u: 1 };
+  return { name: 'market', u: 1 };
 }
 
 /* Only ever plays a round you were actually at, and only once — a refresh or a
@@ -789,7 +967,6 @@ function drawFilm() {
 
   filmBoard(d, ph, me);
   filmHUD(d, ph, me);
-  if (ph.name === 'yard') filmYard(d, ph, me);
 }
 
 function filmFlash(x, y, text, colour, u) {
@@ -813,7 +990,7 @@ function filmBoard(d, ph, me) {
   const y0 = FPAD.y + 100 * FSCALE + 16, y1 = FH - 104;
   if (y1 - y0 < 60) return;
   const rowH = Math.min(34, (y1 - y0 - 22) / d.rows.length);
-  const takings = ph.name === 'market' || ph.name === 'yard';
+  const takings = ph.name === 'market';
   g.save();
   g.textAlign = 'left'; g.fillStyle = '#5a6d8c';
   g.font = '600 10px ui-sans-serif,sans-serif';
@@ -856,64 +1033,19 @@ function filmHUD(d, ph, me) {
   g.fillText(`ROUND ${d.round}`, 16, 30);
   let shown = d.before.cash[me];
   if (ph.name === 'market') shown = flerp(d.before.cash[me], d.after.cash[me], fease(ph.u));
-  else if (ph.name === 'yard') shown = d.after.cash[me];
   g.textAlign = 'right'; g.fillStyle = '#e6edf7';
   g.font = '600 22px ui-sans-serif,sans-serif';
   g.fillText('$' + Math.round(shown).toLocaleString(), FW - 16, 32);
   g.fillStyle = '#5a6d8c'; g.font = '11px ui-sans-serif,sans-serif';
-  const hold = ph.name === 'yard'
-    ? flerp(d.before.hold[me], d.after.hold[me], fease(f01(ph.u * 1.6))) : d.before.hold[me];
-  g.fillText('hold ' + Math.round(hold) + ' units', FW - 16, 48);
+  /* the hold no longer changes during the film — the yard settled before the
+     run and this ship flew with what it won */
+  g.fillText('hold ' + Math.round(d.before.hold[me]) + ' units', FW - 16, 48);
   if (ph.name === 'run' || ph.name === 'market') {
     const r = d.rows[me];
     g.textAlign = 'left'; g.fillStyle = GOOD_COLOUR[r.c];
     g.font = '600 12px ui-sans-serif,sans-serif';
     g.fillText(r.load + ' ' + GOODS[r.c] + ' → ' + FILM.view.board.drop[r.d].name, 16, 50);
   }
-}
-
-function filmYard(d, ph, me) {
-  const g = FILM.ctx;
-  const lots = d.refit.lots, rowH0 = 46;
-  const panelH = Math.min(FH * 0.44, 46 + lots.length * rowH0);
-  const top = FH - 108 - panelH * fease(f01(ph.u * 6));
-  g.save();
-  g.fillStyle = '#0d1420';
-  g.beginPath(); g.roundRect(10, top, FW - 20, panelH, 14); g.fill();
-  g.strokeStyle = '#22304a'; g.lineWidth = 1; g.stroke();
-  g.fillStyle = '#5a6d8c'; g.font = '600 11px ui-sans-serif,sans-serif'; g.textAlign = 'left';
-  g.fillText('THE YARD · ' + SLOTNAMES[d.block.failed[me]].toUpperCase() + ' FAILED', 24, top + 22);
-  const rowH = (panelH - 44) / lots.length;
-  const opening = f01((ph.u - 0.12) / 0.7) * lots.length;
-  lots.forEach((l, j) => {
-    const y = top + 38 + j * rowH, open = f01(opening - j), mineWon = l.who === me;
-    g.globalAlpha = 0.35 + 0.65 * f01(opening - j + 0.6);
-    g.fillStyle = mineWon && open > 0.9 ? 'rgba(242,193,78,0.10)' : 'rgba(255,255,255,0.03)';
-    g.beginPath(); g.roundRect(18, y, FW - 36, rowH - 6, 8); g.fill();
-    g.textAlign = 'left'; g.fillStyle = '#e6edf7'; g.font = '13px ui-sans-serif,sans-serif';
-    g.fillText(`Lot ${j + 1} · ${Math.round(100 * l.grade)}%`, 28, y + rowH / 2 - 1);
-    if (open > 0.05) {
-      const bids = l.bids.map((bd, i) => ({ bd, i })).filter((x) => x.bd !== null && x.bd > 0)
-        .sort((a, z) => z.bd - a.bd);
-      g.font = '11px ui-sans-serif,sans-serif';
-      let bx = 28; g.globalAlpha = open;
-      for (const { bd, i } of bids.slice(0, 5)) {
-        const label = (i === me ? 'you' : d.names[i].split(' ')[0]) + ' $' + bd.toLocaleString();
-        g.fillStyle = i === l.who ? '#f2c14e' : '#5a6d8c';
-        g.fillText(label, bx, y + rowH / 2 + 13);
-        bx += g.measureText(label).width + 12;
-        if (bx > FW - 60) break;
-      }
-      g.textAlign = 'right'; g.font = '600 13px ui-sans-serif,sans-serif';
-      g.fillStyle = l.who < 0 ? '#5a6d8c' : mineWon ? '#f2c14e' : '#8296b4';
-      g.fillText(l.who < 0 ? 'unsold'
-        : (l.who === me ? 'YOURS' : d.names[l.who].split(' ')[0]) +
-          (l.paid > 0 ? ' · $' + l.paid.toLocaleString() : ' · free'),
-        FW - 30, y + rowH / 2 - 1);
-    }
-    g.globalAlpha = 1;
-  });
-  g.restore();
 }
 
 /* ------------------------------------------------------------------ start */
