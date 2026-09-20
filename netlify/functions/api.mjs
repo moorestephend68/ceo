@@ -4,6 +4,8 @@
    This file does routing, auth and error shapes and nothing else. */
 
 import * as G from '../../lib/game.mjs';
+import * as K from '../../lib/cargo.mjs';
+import { kindOf } from '../../lib/kinds.mjs';
 import * as A from '../../lib/accounts.mjs';
 import * as B from '../../lib/billing.mjs';
 import * as P from '../../lib/public.mjs';
@@ -44,17 +46,17 @@ async function settle(db, game, now) {
      runs out, whichever comes first — nobody sits looking at an empty lobby. */
   /* Any lobby carrying a deadline starts itself: a public table when its wait
      runs out, and a class group opened by a latecomer after the class began. */
-  if (game.status === 'lobby' && P.shouldStart(game, now)) {
-    P.startPublic(game, now);
+  const kind = kindOf(game);
+  if (game.status === 'lobby' && kind.shouldStart(game, now)) {
+    kind.startPublic(game, now);
     changed = true;
   }
-  while (game.status === 'playing' && G.shouldResolve(game, now)) {
-    G.resolveRound(game, now);
-    changed = true;
-  }
+  /* Which game this is decides how a round closes, and nothing else here has
+     to know. A row with no kind is CEO — see lib/kinds.mjs. */
+  if (kind.resolveWhileDue(game, now)) changed = true;
   /* Ratings move when the game ends, and only for public games. scoreGame is
      idempotent at the database, so two requests finishing it together is fine. */
-  if (game.status === 'over' && (game.isPublic || game.league === 'bot') && !game.scored) {
+  if (game.status === 'over' && !game.kind && (game.isPublic || game.league === 'bot') && !game.scored) {
     await P.scoreGame(db, game);
     changed = true;
   }
@@ -733,6 +735,168 @@ export default async (req) => {
        matters is not "which game am I in" but "which of them is waiting for me".
        The browser holds the seat tokens; this turns them into a state of play.
        A token that does not match a seat is simply left out. */
+    /* ------------------------------------------------------ CARGO RUN ----
+       The same lobby, the same codes, the same sweep — a different game behind
+       them. Everything here is deliberately thin: it reads a row, calls into
+       lib/cargo.mjs, and lets mutateGame own the write and the retry. */
+
+    /* PLAY WITH STRANGERS. Find a table with room or open one, and let it
+       start itself when it fills or when the wait runs out — whichever comes
+       first, so nobody sits looking at an empty lobby. Empty seats become
+       bots and nobody is told which. */
+    if (route === 'cargo/public/join' && req.method === 'POST') {
+      const user = await userFrom(req, verify);
+      let name = body.name;
+      if (user) {
+        const st = await A.accountState(db, user.id);
+        if (st.companies[0]) name = st.companies[0].name;
+      }
+      name = String(name || '').trim();
+      if (!name) return fail('Your ship needs a name.');
+
+      /* Two attempts: the table found on the first can fill underneath
+         somebody between the read and the write, and the honest answer to
+         that is another table rather than a refusal — public tables are
+         interchangeable. */
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const open = attempt === 0 ? await db.openPublicGame('cargo') : null;
+        if (open) {
+          let token = null, lost = false;
+          try {
+            const { game } = await M.mutateGame(db, open.code, (g) => {
+              token = null; lost = false;
+              if (g.status !== 'lobby' || g.seats.length >= g.config.seats) { lost = true; return false; }
+              /* two strangers can easily pick the same name; rather than
+                 making the second think of a new one, open another table */
+              if (g.seats.some((x) => x.name.toLowerCase() === name.toLowerCase())) { lost = true; return false; }
+              token = K.joinGame(g, name, now).token;
+              return true;
+            });
+            if (!lost && token) {
+              return json({ code: game.code, token, view: K.viewFor(game, token), joined: true });
+            }
+          } catch (e) { /* somebody else wrote first; fall through and open one */ }
+        }
+        if (attempt === 1 || !open) {
+          let made = null;
+          for (let i = 0; i < 5; i++) {
+            made = K.createGame({ seats: K.FORMAT.seats, rounds: K.FORMAT.rounds,
+              cadence: K.FORMAT.cadence, hostName: name, isPublic: true, now });
+            if (!(await db.getGame(made.game.code))) break;
+            made = null;
+          }
+          if (!made) return fail('Could not allocate a table. Try again.', 503);
+          made.game.isPublic = true;
+          /* the wait, after which the table starts with bots in the empty seats */
+          made.game.lobbyDeadline =
+            new Date(Date.parse(now) + K.LOBBY_WAIT_SECONDS * 1000).toISOString();
+          await db.putGame(made.game, user ? user.id : null);
+          return json({ code: made.game.code, token: made.token,
+                        view: K.viewFor(made.game, made.token), opened: true,
+                        waitSeconds: K.LOBBY_WAIT_SECONDS });
+        }
+      }
+      return fail('Could not seat you at a table. Try again.', 503);
+    }
+
+    if (route === 'cargo/create' && req.method === 'POST') {
+      /* Hosting a private table is the thing that was bought, so it is checked
+         on the server and never inferred from what the page sends. */
+      const user = await requireUser(req, db, verify);
+      const state = await A.requireHost(db, user.id);
+      const owned = state.companies[0];
+      if (!owned) return fail('Your name is still being set up. Try again in a moment.');
+      let made = null;
+      for (let i = 0; i < 5; i++) {
+        made = K.createGame({ ...body, hostName: owned.name, now });
+        if (!(await db.getGame(made.game.code))) break;
+        made = null;
+      }
+      if (!made) return fail('Could not allocate a table code. Try again.', 503);
+      await db.putGame(made.game, user.id);
+      return json({ code: made.game.code, token: made.token,
+                    view: K.viewFor(made.game, made.token) });
+    }
+
+    if (route === 'cargo/join' && req.method === 'POST') {
+      const peek = await db.getGame(code);
+      if (!peek) return fail('No table with that code.', 404);
+      if (peek.kind !== 'cargo') return fail('That code is for a different game.', 409);
+      /* A public table cannot be joined by code, only by matchmaking — the
+         rated tier rests on nobody choosing who they sit with, and a code that
+         can be passed to three friends can arrange the finishing order. */
+      if (peek.isPublic) {
+        return fail('That is a public table — they are dealt by matchmaking. Use '
+          + '"Play now" to be seated at one, or host a private table to choose who plays.', 403);
+      }
+      const user = await userFrom(req, verify);
+      let name = body.name;
+      if (user) {
+        const st = await A.accountState(db, user.id);
+        if (st.companies[0]) name = st.companies[0].name;
+      }
+      if (!String(name || '').trim()) return fail('Your ship needs a name.');
+      let token = null, full = false;
+      const { game } = await M.mutateGame(db, code, async (g) => {
+        full = false; token = null;
+        if (g.status !== 'lobby') { full = true; return false; }
+        try { token = K.joinGame(g, name, now).token; }
+        catch (e) { full = true; return false; }
+        return true;
+      });
+      if (full || !token) return fail('That table is full or has already started.', 409);
+      return json({ code: game.code, token, view: K.viewFor(game, token) });
+    }
+
+    if (route === 'cargo/start' && req.method === 'POST') {
+      const { game } = await M.mutateGame(db, code, (g) => {
+        if (g.status !== 'lobby') return false;
+        K.startGame(g, token, now);
+        return true;
+      });
+      return json({ view: K.viewFor(game, token) });
+    }
+
+    /* Stage one: where you load, what you load, and your sealed bids for the
+       refit that settles at the end of the round — one filing, both halves. */
+    if (route === 'cargo/declare' && req.method === 'POST') {
+      let closed = false;
+      const { game } = await M.mutateGame(db, code, async (g) => {
+        closed = false;
+        await settle(db, g, now);
+        if (g.status !== 'playing' || g.stage !== 'declare') { closed = true; return false; }
+        K.submitDeclaration(g, token, body);
+        /* filing may be the last one outstanding, in which case the manifests
+           go up now rather than waiting for a clock nobody is watching */
+        await settle(db, g, now);
+        return true;
+      });
+      if (closed) return fail('That window has already closed.', 409);
+      return json({ view: K.viewFor(game, token) });
+    }
+
+    /* Stage two: the manifests are public, you pick a station. */
+    if (route === 'cargo/route' && req.method === 'POST') {
+      let closed = false;
+      const { game } = await M.mutateGame(db, code, async (g) => {
+        closed = false;
+        await settle(db, g, now);
+        if (g.status !== 'playing' || g.stage !== 'route') { closed = true; return false; }
+        K.submitRoute(g, token, body);
+        await settle(db, g, now);
+        return true;
+      });
+      if (closed) return fail('That window has already closed.', 409);
+      return json({ view: K.viewFor(game, token) });
+    }
+
+    if (route === 'cargo/view') {
+      const { game } = await settled(db, code, now);
+      if (!game) return fail('No table with that code.', 404);
+      if (game.kind !== 'cargo') return fail('That code is for a different game.', 409);
+      return json({ view: K.viewFor(game, token) });
+    }
+
     if (route === 'mine' && req.method === 'POST') {
       const want = Array.isArray(body.games) ? body.games.slice(0, 12) : [];
       const out = [];
