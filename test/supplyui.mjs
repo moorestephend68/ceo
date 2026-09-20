@@ -29,6 +29,19 @@ page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 const fail = (m) => { throw new Error(m); };
 const money = (x) => (x < 0 ? '-$' : '$') + Math.round(Math.abs(x)).toLocaleString('en-US');
 
+/* Two things now take over the screen when a round closes: the market film and,
+   when research lands, the product. Both are meant to — but a test that drives
+   the page has to put them away the way a player would, or it sits waiting for
+   a button underneath a canvas. */
+const clearOverlays = async (page) => {
+  for (let i = 0; i < 4; i++) {
+    const film = await page.evaluate(() => !document.getElementById('film').hidden);
+    if (film) { await page.click('#skip'); await page.waitForTimeout(150); continue; }
+    const prod = await page.evaluate(() => !document.getElementById('prod').hidden);
+    if (prod) { await page.click('#pclose'); await page.waitForTimeout(150); continue; }
+    return;
+  }
+};
 await page.goto('http://localhost:8899/g/');
 await page.waitForTimeout(400);
 await page.click('#seatchoice .choice[data-seats="3"]');
@@ -124,7 +137,7 @@ console.log(`  supply contract ${money(-predicted.supply)} · `
 if (!/Supply contract/i.test(shown)) fail('the projection does not show the contract at all');
 if (!/Renting plant in/i.test(shown)) fail('the projection does not show the rent');
 
-await page.click('#file');
+await clearOverlays(page); await page.click('#file');
 await page.waitForTimeout(800);
 for (let i = 0; i < 40; i++) {
   const r = await page.evaluate(() => S.view && S.view.round);
@@ -196,7 +209,7 @@ console.log('\nNow building well under the commitment:');
   if (!warned) fail('the projection charges for a shortfall without naming it');
 
   const r0 = await page.evaluate(() => S.view.round);
-  await page.click('#file');
+  await clearOverlays(page); await page.click('#file');
   await page.waitForTimeout(800);
   for (let i = 0; i < 40; i++) {
     const r = await page.evaluate(() => S.view && S.view.round);
@@ -270,6 +283,7 @@ console.log('\nRenting plant out:');
   }
   if (!inputs.undo) fail('a pending lease cannot be taken back');
 
+  await clearOverlays(page);
   await page.click('[data-leaseclear]');
   await page.waitForTimeout(250);
   const cleared = await page.evaluate(() => ({

@@ -31,6 +31,21 @@ const host = await hostCtx.newPage();
 const friend = await friendCtx.newPage();
 watch(host, 'host'); watch(friend, 'friend');
 
+/* Two things now take over the screen when a round closes: the market film and,
+   when research lands, the product. Both are meant to — but a test that drives
+   the page has to put them away the way a player would, or it sits waiting for
+   a button underneath a canvas. */
+const clearOverlays = async (page) => {
+  for (let i = 0; i < 4; i++) {
+    const film = await page.evaluate(() => !document.getElementById('film').hidden);
+    if (film) { await page.click('#skip'); await page.waitForTimeout(150); continue; }
+    const prod = await page.evaluate(() => !document.getElementById('prod').hidden);
+    if (prod) { await page.click('#pclose'); await page.waitForTimeout(150); continue; }
+    return;
+  }
+};
+
+
 /* ---- host creates ------------------------------------------------------- */
 await host.goto(BASE + '/g/');
 await host.waitForTimeout(400);   // let the account load
@@ -154,9 +169,11 @@ if (leaks.length) throw new Error('identity leaked during play');
   const projected = Number((await host.textContent('#projection'))
     .match(/Expected profit\s*(-?\$[\d,]+)/)[1].replace(/[^0-9.-]/g, ''))
     * ((await host.textContent('#projection')).match(/Expected profit\s*-/) ? -1 : 1);
+  await clearOverlays(host);
   await host.click('#file');
   await host.waitForTimeout(200);
   await friend.reload(); await friend.waitForTimeout(200);
+  await clearOverlays(friend);
   await friend.click('#file');
   await friend.waitForTimeout(300);
   await host.reload(); await host.waitForTimeout(300);
@@ -181,6 +198,7 @@ async function file(page, mult) {
   const val = await box.inputValue();
   await box.fill(String(Math.round(+val * mult)));
   await box.dispatchEvent('input');
+  await clearOverlays(page);
   await page.click('#file');
   await page.waitForTimeout(220);
   return true;
