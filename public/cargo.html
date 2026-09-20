@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cargo Run</title>
+<style>
+  :root{
+    --bg:#0a0e17; --panel:#121a28; --panel2:#0e1522; --line:#22304a;
+    --ink:#e6edf7; --dim:#8296b4; --dimmer:#5a6d8c;
+    --gold:#f2c14e; --good:#5fd08a; --bad:#ff7a6b; --blue:#5aa9ff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);
+    font:16px/1.45 ui-sans-serif,-apple-system,'Segoe UI',Roboto,sans-serif;
+    padding:0 16px 150px;overflow-x:hidden}
+  .wrap{max-width:560px;margin:0 auto}
+  header{padding:18px 0 10px}
+  h1{font-size:19px;margin:0;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+  .sub{color:var(--dim);font-size:13px;margin-top:3px}
+  .bar{display:flex;gap:8px;margin:12px 0 4px;font-size:12px;color:var(--dim)}
+  .bar b{color:var(--ink);font-weight:600;display:block}
+  .bar div{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+  svg{display:block;width:100%;height:auto;background:var(--panel2);
+      border:1px solid var(--line);border-radius:12px;margin:12px 0}
+  .step{margin:18px 0 0}
+  .lab{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer);margin-bottom:7px}
+  .lab .n{color:var(--gold)}
+  .opts{display:flex;flex-direction:column;gap:6px}
+  button.opt{display:flex;align-items:center;gap:10px;width:100%;min-height:54px;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    color:var(--ink);font:inherit;text-align:left;padding:8px 12px;cursor:pointer}
+  button.opt[aria-pressed=true]{border-color:var(--gold);background:#1b2233}
+  .opt .nm{flex:1;min-width:0;font-size:15px}
+  button.opt.tall{min-height:62px}
+  .opt .meta{font-size:12px;color:var(--dim)}
+  .opt .px{font-variant-numeric:tabular-nums;font-size:15px;white-space:nowrap}
+  .muted{color:var(--dimmer)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chips button.opt{width:auto;flex:1 1 46%;min-height:58px}
+  .dock{position:fixed;left:0;right:0;bottom:0;
+    background:linear-gradient(180deg,rgba(10,14,23,0) 0%,var(--bg) 22%);
+    padding:14px 16px calc(14px + env(safe-area-inset-bottom))}
+  .dock .inner{max-width:560px;margin:0 auto}
+  .fc{display:flex;justify-content:space-between;align-items:baseline;background:var(--panel2);
+    border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:8px}
+  .fc small{color:var(--dim);font-size:12px}
+  .fc .v{font-size:19px;font-variant-numeric:tabular-nums;font-weight:600}
+  button.go{width:100%;min-height:56px;border-radius:12px;border:0;font:inherit;font-size:16px;
+    font-weight:600;background:var(--gold);color:#17120a;cursor:pointer;letter-spacing:.02em}
+  button.go[disabled]{background:#243046;color:var(--dimmer);cursor:default}
+  button.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+  .card h2{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer);
+    margin:0 0 10px;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  td,th{padding:6px 4px;text-align:right;font-variant-numeric:tabular-nums}
+  th{color:var(--dimmer);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+  td:first-child,th:first-child{text-align:left;font-variant-numeric:normal}
+  tr.you td{color:var(--gold)}
+  .g{color:var(--good)} .b{color:var(--bad)}
+  .note{font-size:13px;color:var(--dim);line-height:1.55}
+  .big{font-size:30px;font-variant-numeric:tabular-nums;font-weight:600;margin:2px 0 6px}
+  input[type=range]{width:100%;height:40px;accent-color:var(--gold)}
+  input[type=text]{width:100%;min-height:52px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;color:var(--ink);font:inherit;padding:0 12px;letter-spacing:.08em}
+  .err{color:var(--bad);font-size:13px;margin:8px 2px 0}
+
+  /* the resolution film sits over everything while it runs */
+  #film{position:fixed;inset:0;z-index:50;background:#070b12}
+  #film canvas{display:block;width:100%;height:100%}
+  #film #skip{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));
+    min-height:44px;padding:0 18px;border-radius:10px;border:1px solid var(--line);
+    background:rgba(18,26,40,.9);color:var(--ink);font:inherit;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="dock" id="dock"></div>
+
+<!-- The resolution, watched rather than read. Hidden until a round closes. -->
+<div id="film" hidden>
+  <canvas id="reel"></canvas>
+  <button id="skip">Skip</button>
+</div>
+
+<script>
+/* CARGO RUN — the live page.
+
+   The engine is on the server and this page never simulates anything: it draws
+   what the API says and files what the captain chooses. That is deliberate.
+   The single-player page carries its own copy of the economy, which is fine for
+   one person against bots and would be a disaster here — a client that can
+   compute the round is a client that can be asked to compute it differently.
+
+   A round is two windows, and the reason is measured: your hold is published
+   between them but your destination is not. Publishing the destination too let
+   the sharp players route around the naive ones perfectly; publishing nothing
+   left the first round a coin flip. Your refit bids ride along with the first
+   window, so the yard costs no extra waiting.  */
+
+const KEY = 'cargo.game';
+const $ = (h) => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstChild; };
+const money = (v) => (v < 0 ? '−$' : '$') + Math.round(Math.abs(v)).toLocaleString();
+const px = (v) => '$' + Number(v).toFixed(2);
+const cls = (v) => v < 0 ? 'b' : 'g';
+const GOODS = ['Ore','Grain','Fuel Cells','Medicine','Alloys'];
+const SLOTNAMES = ['Coolant Loop','Drive Coil','Hull Plate','Nav Unit','Power Cell','Thrust Bearing'];
+const CONDITION = (g) => g>=0.88?'factory-sealed' : g>=0.72?'reconditioned'
+                       : g>=0.55?'serviceable' : g>=0.40?'well-used' : 'salvage';
+
+let S = { code: null, token: null, view: null, sel: {}, bids: [], busy: false, error: null };
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ code: S.code, token: S.token })); } catch {} };
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+
+/* Signing in is CEO's, not this page's. Hosting a private table is the thing
+   that was bought, so the server checks it — which means this page has to send
+   whatever session the site already has. Supabase keeps it under a key of its
+   own; locally there is no Supabase and a token can be dropped into
+   ceo.dev.token instead, exactly as live.html does. */
+function bearer() {
+  try {
+    const dev = localStorage.getItem('ceo.dev.token');
+    if (dev) return dev;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!/^sb-.*-auth-token$/.test(k)) continue;
+      const v = JSON.parse(localStorage.getItem(k));
+      if (v && v.access_token) return v.access_token;
+    }
+  } catch {}
+  return null;
+}
+
+async function api(route, body) {
+  const url = '/api/' + route + (S.code ? (route.includes('?') ? '&' : '?') + 'code=' + S.code
+    + (S.token ? '&token=' + S.token : '') : '');
+  const headers = {};
+  const tok = bearer();
+  if (tok) headers.authorization = 'Bearer ' + tok;
+  if (body) headers['content-type'] = 'application/json';
+  const r = await fetch(url, body ? { method: 'POST', headers, body: JSON.stringify(body) }
+                                  : { headers });
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(out.error || 'Something went wrong.');
+  return out;
+}
+
+/* Polling, not sockets. A round closes when the last captain files or when the
+   clock runs out, and either way the next request notices — so the page only
+   has to ask. Slow while it is your move, brisk while you are waiting on
+   somebody else, and stopped when the tab is hidden. */
+let timer = null;
+function poll(ms) {
+  clearTimeout(timer);
+  if (document.hidden) return;
+  timer = setTimeout(async () => {
+    try { const out = await api('cargo/view'); applyView(out.view); } catch {}
+    poll(ms);
+  }, ms);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+
+/* Every view arrives here. If it carries a round nobody has watched yet, the
+   film plays and the screen underneath is drawn when it finishes — so the
+   resolution is the default and the table is one tap away, rather than a
+   twelve-second cutscene standing between a captain and their next decision. */
+function applyView(v) {
+  S.view = v;
+  if (maybePlayFilm(v)) return;
+  render();
+}
+
+async function refresh() {
+  if (!S.code) return render();
+  try { const out = await api('cargo/view'); return applyView(out.view); }
+  catch (e) { S.error = e.message; }
+  render();
+}
+
+/* ------------------------------------------------------------------ screens */
+function render() {
+  const app = document.getElementById('app'), dock = document.getElementById('dock');
+  app.innerHTML = ''; dock.innerHTML = '';
+  const v = S.view;
+  if (!S.code || !v) return screenHome(app, dock);
+  if (v.status === 'lobby') return screenLobby(app, dock, v);
+  if (v.status === 'over') return screenOver(app, dock, v);
+  if (v.stage === 'declare') return screenDeclare(app, dock, v);
+  return screenRoute(app, dock, v);
+}
+
+function head(v) {
+  const you = v.seats.find((s) => s.you) || {};
+  const rank = [...v.seats].sort((a, b) => b.cash - a.cash).findIndex((s) => s.you) + 1;
+  const left = v.deadline ? Math.max(0, Math.round((Date.parse(v.deadline) - Date.now()) / 1000)) : null;
+  const clock = left === null ? 'no clock'
+    : left > 90 ? Math.round(left / 60) + ' min left'
+    : left + 's left';
+  return `<header><h1>Cargo Run</h1>
+    <div class="sub">${v.stage === 'declare' ? 'Manifests close' : 'Stations close'} · ${clock}</div>
+    <div class="bar">
+      <div>Round<b>${Math.min(v.round, v.rounds)} of ${v.rounds}</b></div>
+      <div>Cash<b>${money(you.cash || 0)}</b></div>
+      <div>Hold<b>${you.hold || 0}</b></div>
+      <div>Place<b>${rank} of ${v.seats.length}</b></div>
+    </div></header>`;
+}
+
+function screenHome(app, dock) {
+  app.insertAdjacentHTML('beforeend', `<header><h1>Cargo Run</h1>
+    <div class="sub">Five captains, one galaxy, eight runs</div></header>
+    <div class="card"><p class="note">Every round opens in the yard: a part of your ship has
+    failed and four replacements go under the hammer, one sealed bid each. Then you load,
+    everybody's manifest is published, and you choose where to sell — knowing what the others
+    are carrying but not where they are taking it.</p></div>`);
+  if (S.error) app.insertAdjacentHTML('beforeend', `<p class="err">${S.error}</p>`);
+
+  const n = $(`<div class="step"><div class="lab">Your outfit</div>
+    <input type="text" id="name" maxlength="24" placeholder="Halloran Freight"
+      value="${(S.name || '').replace(/"/g, '&quot;')}" style="letter-spacing:0"></div>`);
+  app.appendChild(n);
+
+  const c = $(`<div class="step"><div class="opts"></div></div>`);
+  const now = $(`<button class="opt tall"><span class="nm">Play now
+    <br><span class="meta">Seated with strangers. Starts within 90 seconds — empty seats
+    are filled.</span></span></button>`);
+  now.onclick = () => start('cargo/public/join');
+  const friends = $(`<button class="opt tall"><span class="nm">Play with friends
+    <br><span class="meta">Opens a private table and gives you a code to pass round.</span></span></button>`);
+  friends.onclick = () => start('cargo/create');
+  c.querySelector('.opts').append(now, friends);
+  app.appendChild(c);
+
+  const j = $(`<div class="step"><div class="lab">Or join with a code</div>
+    <input type="text" id="code" placeholder="ABC123" autocapitalize="characters" maxlength="6">
+    </div>`);
+  app.appendChild(j);
+  const d = $(`<div class="inner"><button class="go ghost">Join that table</button></div>`);
+  d.querySelector('.go').onclick = () => {
+    const code = (document.getElementById('code').value || '').trim().toUpperCase();
+    if (code.length < 4) { S.error = 'That code looks too short.'; return render(); }
+    S.code = code; start('cargo/join');
+  };
+  dock.appendChild(d);
+}
+
+async function start(route) {
+  if (S.busy) return;
+  const field = document.getElementById('name');
+  const name = ((field && field.value) || S.name || '').trim();
+  if (!name) { S.error = 'Your outfit needs a name.'; return render(); }
+  S.name = name; S.busy = true; S.error = null; render();
+  try {
+    const out = await api(route, { name });
+    S.code = out.code; S.token = out.token; S.view = out.view; save();
+    poll(3000);
+  } catch (e) { S.error = e.message; S.code = null; }
+  S.busy = false; render();
+}
+
+function screenLobby(app, dock, v) {
+  app.insertAdjacentHTML('beforeend', `<header><h1>Cargo Run</h1>
+    <div class="sub">Table ${v.code}</div></header>`);
+  let t = `<div class="card"><h2>At the table</h2><table>`;
+  v.seats.forEach((s) => { t += `<tr class="${s.you ? 'you' : ''}"><td>${s.name}</td>
+    <td class="muted">${s.you ? 'you' : 'ready'}</td></tr>`; });
+  for (let i = v.seats.length; i < (v.seats.length > 5 ? v.seats.length : 5); i++)
+    t += `<tr><td class="muted">empty</td><td class="muted">—</td></tr>`;
+  app.insertAdjacentHTML('beforeend', t + '</table></div>');
+  if (v.isPublic) {
+    /* No code here on purpose. A public table is dealt by matchmaking and the
+       server refuses a code join — the rated tier rests on nobody choosing who
+       they sit with. Offering a code would be inviting a captain to try
+       something that cannot work. */
+    const left = v.lobbyDeadline
+      ? Math.max(0, Math.round((Date.parse(v.lobbyDeadline) - Date.now()) / 1000)) : null;
+    app.insertAdjacentHTML('beforeend', `<div class="card"><h2>Waiting</h2>
+      <div class="big">${left === null ? '—' : left + 's'}</div>
+      <p class="note">Other captains are being seated here as they arrive. When the wait runs
+      out the table starts anyway and the yard's own captains take whatever seats are left —
+      nobody is told which.</p></div>`);
+    const d = $(`<div class="inner"><div class="fc"><small>Table ${v.code}</small>
+      <span class="v muted">${v.seats.length} of ${v.seats.length > 5 ? v.seats.length : 5}</span></div>
+      <button class="go" disabled>Waiting for the off</button></div>`);
+    dock.appendChild(d);
+  } else {
+    app.insertAdjacentHTML('beforeend', `<div class="card"><h2>The code</h2>
+      <div class="big">${v.code}</div>
+      <p class="note">Anyone with this can take a seat. Start when you are all here — any
+      seats still empty are taken by the yard's own captains, and nobody is told which.</p></div>`);
+    const d = $(`<div class="inner"><button class="go">Start now</button></div>`);
+    d.querySelector('.go').onclick = async () => {
+      try { const out = await api('cargo/start', {}); S.view = out.view; render(); }
+      catch (e) { S.error = e.message; render(); }
+    };
+    dock.appendChild(d);
+  }
+  poll(2500);
+}
+
+/* map: reachable spots, the lane you are flying, and where it can sell */
+function mapSVG(v) {
+  const b = v.board, you = v.you, sel = S.sel;
+  const reach = new Set(b.reachP[you.at]);
+  let g = '';
+  if (sel.p !== undefined) {
+    const a = b.drop[you.at], p = b.pick[sel.p];
+    g += `<line x1="${a.x}" y1="${a.y}" x2="${p.x}" y2="${p.y}" stroke="#f2c14e" stroke-width="0.7" stroke-dasharray="2 1.5"/>`;
+    for (const q of b.reachD[sel.p]) { const c = b.drop[q];
+      g += `<line x1="${p.x}" y1="${p.y}" x2="${c.x}" y2="${c.y}" stroke="#5fd08a" stroke-width="0.4" opacity="0.55"/>`; }
+    if (sel.d !== undefined) { const c = b.drop[sel.d];
+      g += `<line x1="${p.x}" y1="${p.y}" x2="${c.x}" y2="${c.y}" stroke="#f2c14e" stroke-width="0.9"/>`; }
+  }
+  b.pick.forEach((p) => { const on = reach.has(p.i), pick = sel.p === p.i;
+    g += `<circle cx="${p.x}" cy="${p.y}" r="${pick?2.4:1.5}" fill="${pick?'#f2c14e':on?'#5aa9ff':'#2b3a55'}"/>`; });
+  b.drop.forEach((d) => { const home = you.at === d.i, s = sel.d === d.i;
+    g += `<rect x="${d.x-2.2}" y="${d.y-2.2}" width="4.4" height="4.4" rx="0.8"
+      fill="${s?'#f2c14e':home?'#e6edf7':'#2b3a55'}"/>`;
+    g += `<text x="${d.x}" y="${d.y-3.4}" font-size="3" text-anchor="middle"
+      fill="${s||home?'#e6edf7':'#5a6d8c'}">${d.name.split(' ')[0]}</text>`; });
+  return `<svg viewBox="0 0 100 100" role="img" aria-label="galaxy map">${g}</svg>`;
+}
+
+function lastRoundCard(v) {
+  const h = (v.history || [])[0];
+  if (!h) return '';
+  const me = v.seats.findIndex((s) => s.you);
+  const mine = h.rows[me];
+  const r = v.you.lastRefit;
+  let s = `<div class="card"><h2>Last round</h2>
+    <div class="big ${cls(mine.profit)}">${money(mine.profit)}</div>
+    <p class="note">${GOODS[mine.c]} into ${v.board.drop[mine.d].name} —
+    ${mine.stackS > 1 ? `<b class="b">${mine.stackS} ships</b> sold there` : 'you had it to yourself'}.</p>`;
+  if (r) s += `<p class="note">${r.lot === null
+    ? `Outbid on every part. The yard fitted a scrap ${SLOTNAMES[r.slot]} for nothing.`
+    : `You took a ${CONDITION(r.grade)} ${SLOTNAMES[r.slot]} at ${Math.round(100*r.grade)}%${
+        r.paid > 0 ? ' for ' + money(r.paid) : ' for nothing'}.`}</p>`;
+  return s + '</div>';
+}
+
+/* ---- stage one: the yard and the manifest, filed together ---------------- */
+function screenDeclare(app, dock, v) {
+  const you = v.you, b = v.board;
+  app.insertAdjacentHTML('beforeend', head(v));
+  if (you.declared) {
+    app.insertAdjacentHTML('beforeend', `<div class="card"><h2>Filed</h2>
+      <p class="note">${GOODS[you.declared.c]} from ${b.pick[you.declared.p].name}, and your
+      bids are in. Waiting for ${v.seats.filter((s) => !s.filed).length} more.</p></div>`);
+    app.insertAdjacentHTML('beforeend', lastRoundCard(v));
+    poll(3000);
+    return;
+  }
+  app.insertAdjacentHTML('beforeend', lastRoundCard(v));
+
+  /* the yard */
+  if (v.block) {
+    const failed = v.block.failed;
+    if (S.bids.length !== v.block.grades.length) S.bids = v.block.grades.map(() => 0);
+    let sh = `<div class="card"><h2>Your ship — ${SLOTNAMES[failed]} has failed</h2><table>`;
+    you.parts.forEach((g, k) => {
+      sh += `<tr class="${k === failed ? 'you' : ''}"><td>${SLOTNAMES[k]}</td>
+        <td class="muted">${k === failed ? '' : CONDITION(g)}</td>
+        <td>${k === failed ? '<b>failed</b>' : Math.round(100*g) + '%'}</td></tr>`;
+    });
+    app.insertAdjacentHTML('beforeend', sh + `</table><p class="note" style="margin-top:8px">
+      A unit of hold returns about ${money(v.perUnit)} a round — that is what to judge every
+      bid against. The refit settles at the end of this round, out of the same purse you are
+      trading with.</p></div>`);
+
+    const step = $(`<div class="step" data-step="block"><div class="lab"><span class="n">1</span>
+      &nbsp;Sealed bids — any part fits your ${SLOTNAMES[failed]}</div><div class="opts"></div></div>`);
+    v.block.grades.forEach((g, j) => {
+      const full = v.block.worth[j];
+      const cap = Math.max(100, Math.ceil(full * 1.25 / 25) * 25);
+      const row = $(`<div class="card" style="margin:6px 0;padding:11px 12px">
+        <div style="display:flex;gap:10px;align-items:baseline">
+          <span style="flex:1">Lot ${j+1} · ${CONDITION(g)} <b>${Math.round(100*g)}%</b>
+            <br><span class="meta" style="font-size:11.5px">beats
+            ${j === v.block.grades.length-1 ? 'a scrap part' : 'Lot ' + (j+2)} by ${money(full)}</span></span>
+          <span style="text-align:right"><span class="px" id="bv${j}">—</span>
+            <br><span class="meta" id="bu${j}" style="font-size:11.5px">&nbsp;</span></span>
+        </div>
+        <input type="range" min="0" max="${cap}" step="25" value="${S.bids[j]||0}" id="bid${j}">
+      </div>`);
+      step.querySelector('.opts').appendChild(row);
+    });
+    app.appendChild(step);
+  }
+
+  app.insertAdjacentHTML('beforeend', mapSVG(v));
+
+  /* where to load */
+  const s2 = $(`<div class="step" data-step="pickup"><div class="lab"><span class="n">2</span>
+    &nbsp;Fly out to</div><div class="opts"></div></div>`);
+  b.reachP[you.at].forEach((p) => {
+    const cheapest = Math.min(...v.prices.buy[p]);
+    const serves = b.reachD[p].map((d) => b.drop[d].name.split(' ')[0]).join(' · ');
+    const btn = $(`<button class="opt tall" aria-pressed="${S.sel.p === p}">
+      <span class="nm">${b.pick[p].name}<br><span class="meta">ships to ${serves}</span></span>
+      <span class="px">${px(cheapest)}<span class="meta"> low</span></span></button>`);
+    btn.onclick = () => { S.sel = { p }; render(); };
+    s2.querySelector('.opts').appendChild(btn);
+  });
+  app.appendChild(s2);
+
+  /* what to load */
+  if (S.sel.p !== undefined) {
+    const s3 = $(`<div class="step" data-step="cargo"><div class="lab"><span class="n">3</span>
+      &nbsp;Load up on</div><div class="opts chips"></div></div>`);
+    for (let c = 0; c < 5; c++) {
+      const bp = v.prices.buy[S.sel.p][c];
+      const best = b.reachD[S.sel.p].reduce((a, d) => v.prices.sell[d][c] > v.prices.sell[a][c] ? d : a,
+                                            b.reachD[S.sel.p][0]);
+      const marg = v.prices.sell[best][c] - bp;
+      const btn = $(`<button class="opt" aria-pressed="${S.sel.c === c}">
+        <span class="nm">${GOODS[c]}<br><span class="meta">buy ${px(bp)}</span></span>
+        <span class="px ${cls(marg)}">${marg>=0?'+':'−'}${px(Math.abs(marg))}</span></button>`);
+      btn.onclick = () => { S.sel = { p: S.sel.p, c }; render(); };
+      s3.querySelector('.opts').appendChild(btn);
+    }
+    app.appendChild(s3);
+  }
+
+  const ready = S.sel.p !== undefined && S.sel.c !== undefined;
+  const d = $(`<div class="inner">
+    <div class="fc"><small id="fs">${ready ? 'Loading at ' + b.pick[S.sel.p].name : 'Pick a spot and a cargo'}</small>
+      <span class="v ${ready?'':'muted'}" id="fv">${ready ? GOODS[S.sel.c] : '—'}</span></div>
+    <button class="go" ${ready?'':'disabled'}>File manifest and bids</button></div>`);
+  d.querySelector('.go').onclick = async () => {
+    if (!ready || S.busy) return;
+    S.busy = true;
+    try {
+      const out = await api('cargo/declare', { pickup: S.sel.p, commodity: S.sel.c, bids: S.bids });
+      S.sel = {}; S.bids = []; S.busy = false;
+      return applyView(out.view);
+    } catch (e) { S.error = e.message; }
+    S.busy = false; render();
+  };
+  dock.appendChild(d);
+  if (S.error) app.insertAdjacentHTML('beforeend', `<p class="err">${S.error}</p>`);
+
+  /* live bid readouts */
+  if (v.block) {
+    const paint = () => {
+      v.block.grades.forEach((g, j) => {
+        const el = document.getElementById('bv' + j), eu = document.getElementById('bu' + j);
+        const val = S.bids[j] || 0, full = v.block.worth[j];
+        if (el) { el.textContent = val < 1 ? '—' : money(val);
+                  el.className = 'px ' + (val < 1 ? 'muted' : val > full + 1 ? 'b' : 'g'); }
+        /* what the bid works out at per unit of hold per round — the number
+           that decides a season, against the ~$46 a unit returns */
+        if (eu) {
+          const units = full / (v.perUnit || 46);
+          eu.innerHTML = val < 1 ? '&nbsp;'
+            : `<span style="color:var(--${(val/Math.max(units,0.01)) > v.perUnit ? 'bad':'good'})">$${
+                Math.round(val / Math.max(units, 0.01))}</span> a unit`;
+        }
+      });
+    };
+    v.block.grades.forEach((g, j) => {
+      const sl = document.getElementById('bid' + j);
+      if (sl) sl.addEventListener('input', (e) => { S.bids[j] = Number(e.target.value); paint(); });
+    });
+    paint();
+  }
+  poll(8000);
+}
+
+/* ---- stage two: the manifests are out ----------------------------------- */
+function screenRoute(app, dock, v) {
+  const you = v.you, b = v.board;
+  app.insertAdjacentHTML('beforeend', head(v));
+
+  let m = `<div class="card"><h2>Manifests filed</h2><table>
+    <tr><th>Captain</th><th>Loading</th><th>Could sell at</th></tr>`;
+  (v.manifests || []).forEach((x) => {
+    m += `<tr class="${x.you ? 'you' : ''}"><td>${x.you ? 'You' : x.name}</td>
+      <td>${GOODS[x.c]}<br><span class="meta">at ${b.pick[x.p].name}</span></td>
+      <td class="muted">${x.couldSell.map((d) => b.drop[d].name.split(' ')[0]).join('<br>')}</td></tr>`;
+  });
+  app.insertAdjacentHTML('beforeend', m + '</table></div>');
+
+  const sharing = (v.manifests || []).filter((x) => !x.you && x.c === you.declared.c);
+  if (sharing.length) {
+    const where = [...new Set(sharing.flatMap((x) => x.couldSell))]
+      .filter((d) => b.reachD[you.declared.p].includes(d)).map((d) => b.drop[d].name.split(' ')[0]);
+    app.insertAdjacentHTML('beforeend', `<div class="card"><h2>Watch out</h2><p class="note">
+      ${sharing.length === 1 ? 'One other captain is' : sharing.length + ' others are'} carrying
+      ${GOODS[you.declared.c]} too${where.length ? `, and could land at <b>${where.join(' or ')}</b>` : ''}.
+      Meet them there and you all get less for it.</p></div>`);
+  }
+
+  if (you.routed) {
+    app.insertAdjacentHTML('beforeend', `<div class="card"><h2>Filed</h2>
+      <p class="note">Selling at ${b.drop[you.routed.d].name}. Waiting for
+      ${v.seats.filter((s) => !s.filed).length} more.</p></div>`);
+    poll(3000);
+    return;
+  }
+
+  S.sel = { p: you.declared.p, c: you.declared.c, d: S.sel.d };
+  app.insertAdjacentHTML('beforeend', mapSVG(v));
+  const step = $(`<div class="step" data-step="port"><div class="lab"><span class="n">4</span>
+    &nbsp;Sell it at</div><div class="opts"></div></div>`);
+  b.reachD[you.declared.p].forEach((d) => {
+    const btn = $(`<button class="opt" aria-pressed="${S.sel.d === d}">
+      <span class="nm">${b.drop[d].name}</span>
+      <span class="px">${px(v.prices.sell[d][you.declared.c])}</span></button>`);
+    btn.onclick = () => { S.sel = { ...S.sel, d }; render(); };
+    step.querySelector('.opts').appendChild(btn);
+  });
+  app.appendChild(step);
+
+  const ready = S.sel.d !== undefined;
+  const d = $(`<div class="inner">
+    <div class="fc"><small>${ready ? 'With the market to yourself' : 'Pick a station'}</small>
+      <span class="v ${ready?'':'muted'}">${ready ? b.drop[S.sel.d].name.split(' ')[0] : '—'}</span></div>
+    <button class="go" ${ready?'':'disabled'}>File the route</button></div>`);
+  d.querySelector('.go').onclick = async () => {
+    if (!ready || S.busy) return;
+    S.busy = true;
+    try {
+      const out = await api('cargo/route', { drop: S.sel.d });
+      S.sel = {}; S.busy = false;
+      /* filing last closes the round, so the film may start the moment the
+         button is released — which is the good version of waiting */
+      return applyView(out.view);
+    } catch (e) { S.error = e.message; }
+    S.busy = false; render();
+  };
+  dock.appendChild(d);
+  poll(8000);
+}
+
+function screenOver(app, dock, v) {
+  const fin = [...v.seats].sort((a, b) => b.cash - a.cash);
+  const place = fin.findIndex((s) => s.you) + 1;
+  app.insertAdjacentHTML('beforeend', head(v));
+  app.insertAdjacentHTML('beforeend', `<div class="card"><h2>${v.rounds} rounds done</h2>
+    <div class="big">${['','First','Second','Third','Fourth','Fifth'][place] || place}</div></div>`);
+  let t = `<div class="card"><h2>Final</h2><table>
+    <tr><th>Captain</th><th>Ship</th><th>On parts</th><th>Cash</th></tr>`;
+  fin.forEach((s) => { t += `<tr class="${s.you?'you':''}"><td>${s.name}</td>
+    <td>${s.ship}%</td><td class="muted">${money(s.onParts||0)}</td>
+    <td>${money(s.cash)}</td></tr>`; });
+  app.insertAdjacentHTML('beforeend', t + `</table>
+    <p class="note" style="margin-top:10px">The best ship wins about one season in five — a
+    contested auction prices quality at close to what it is worth, so the captain who wins is
+    the one who got a decent ship <b>cheaply</b>.</p></div>`);
+  const d = $(`<div class="inner"><button class="go">Another table</button></div>`);
+  d.querySelector('.go').onclick = () => {
+    S = { code: null, token: null, view: null, sel: {}, bids: [], busy: false, error: null, name: S.name };
+    try { localStorage.removeItem(KEY); } catch {}
+    render();
+  };
+  dock.appendChild(d);
+}
+
+/* ======================================================================
+   THE RESOLUTION, WATCHED
+
+   Everything below draws one round that has already happened. It is handed
+   the `replay` block the server recorded while settling — where each ship
+   started, what it carried, what the market did to it, and every bid in the
+   yard — and it never works anything out for itself. A drawing that recomputes
+   the economy is a second copy of the economy waiting to disagree with the
+   first, and this page has gone to some trouble not to have one.
+
+   The clock is the only state. Every position, every number and every panel is
+   a pure function of it, which is what makes Skip a one-liner rather than an
+   unwinding.
+   ====================================================================== */
+const FILM = {
+  T: { out: 2.4, load: 1.2, run: 2.7, market: 2.0, yard: 3.8 },
+  reel: null, ctx: null, t: 0, raf: 0, data: null, view: null, done: null,
+};
+FILM.LEN = Object.values(FILM.T).reduce((a, b) => a + b, 0);
+const GOOD_COLOUR = ['#8b9bb4','#d8c47a','#5fd08a','#7fd4ff','#c98fe0'];
+const fease = (u) => u < 0.5 ? 4*u*u*u : 1 - Math.pow(-2*u + 2, 3) / 2;
+const f01 = (u) => Math.max(0, Math.min(1, u));
+const flerp = (a, b, u) => a + (b - a) * u;
+
+function filmPhase(t) {
+  let acc = 0;
+  for (const [name, len] of Object.entries(FILM.T)) {
+    if (t < acc + len) return { name, u: (t - acc) / len };
+    acc += len;
+  }
+  return { name: 'yard', u: 1 };
+}
+
+/* Only ever plays a round you were actually at, and only once — a refresh or a
+   second tab should not replay a week you have already watched. */
+function maybePlayFilm(view) {
+  const h = (view.history || [])[0];
+  if (!h || !h.replay) return false;
+  /* Once per browser rather than once per tab: reloading the page should not
+     replay a week you have already watched, and a second tab should not play it
+     at you again. */
+  let seen = 0;
+  try { seen = Number(localStorage.getItem('cargo.seen.' + view.code) || 0); } catch {}
+  if (h.replay.round <= seen) return false;
+  try { localStorage.setItem('cargo.seen.' + view.code, String(h.replay.round)); } catch {}
+  playFilm(view, h.replay);
+  return true;
+}
+
+function playFilm(view, data) {
+  FILM.data = data; FILM.view = view; FILM.t = 0;
+  const wrap = document.getElementById('film');
+  wrap.hidden = false;
+  FILM.reel = document.getElementById('reel');
+  FILM.ctx = FILM.reel.getContext('2d');
+  filmLayout();
+  document.getElementById('skip').onclick = endFilm;
+  FILM.reel.onclick = endFilm;
+  let last = performance.now();
+  const step = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    FILM.t += dt;
+    if (FILM.t >= FILM.LEN) return endFilm();
+    drawFilm();
+    FILM.raf = requestAnimationFrame(step);
+  };
+  FILM.raf = requestAnimationFrame(step);
+}
+function endFilm() {
+  cancelAnimationFrame(FILM.raf);
+  document.getElementById('film').hidden = true;
+  FILM.data = null;
+  render();
+}
+
+let FW = 0, FH = 0, FPAD = { x: 0, y: 0 }, FSCALE = 1;
+function filmLayout() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  FW = FILM.reel.clientWidth; FH = FILM.reel.clientHeight;
+  FILM.reel.width = Math.round(FW * dpr); FILM.reel.height = Math.round(FH * dpr);
+  FILM.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const top = 62;
+  const usable = Math.min(FW - 20, FH - top - 230);
+  FSCALE = usable / 100;
+  FPAD = { x: (FW - usable) / 2, y: top };
+}
+window.addEventListener('resize', () => { if (FILM.data) filmLayout(); });
+const fx = (x) => FPAD.x + x * FSCALE;
+const fy = (y) => FPAD.y + y * FSCALE;
+
+const FSTARS = (() => {
+  let s = 987654;
+  const r = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  return Array.from({ length: 180 }, () => ({ x: r(), y: r(), z: 0.3 + r() * 0.7 }));
+})();
+
+function filmShip(d, i, ph) {
+  const b = FILM.view.board;
+  const from = b.drop[d.at[i]], to = b.pick[d.declared[i].p], end = b.drop[d.rows[i].d];
+  let a = from, z = to, u = 0, flying = false, face = to;
+  if (ph.name === 'out') { u = fease(ph.u); flying = true; }
+  else if (ph.name === 'load') { a = to; z = to; face = end; }
+  else if (ph.name === 'run') { a = to; z = end; u = fease(ph.u); flying = true; face = end; }
+  else if (ph.name !== 'out') { a = end; z = end; face = null; }
+  const ref = face || to;
+  const ang = (a === z) ? Math.atan2(ref.y - a.y, ref.x - a.x) || 0
+                        : Math.atan2(z.y - a.y, z.x - a.x);
+  return { x: flerp(a.x, z.x, u), y: flerp(a.y, z.y, u), ang, flying, a, b: z, u };
+}
+
+function drawFilm() {
+  const g = FILM.ctx, d = FILM.data, v = FILM.view, t = FILM.t;
+  const me = v.seats.findIndex((s) => s.you);
+  const ph = filmPhase(t);
+  g.fillStyle = '#070b12'; g.fillRect(0, 0, FW, FH);
+
+  for (const s of FSTARS) {
+    const x = FPAD.x + ((s.x * 110 + (t * 2 * s.z) % 110) % 110 - 5) * FSCALE;
+    const y = FPAD.y + s.y * 100 * FSCALE;
+    if (x < FPAD.x - 4 || x > FPAD.x + 100 * FSCALE + 4) continue;
+    g.fillStyle = `rgba(200,220,255,${(0.1 + 0.45 * s.z).toFixed(3)})`;
+    g.fillRect(x, y, s.z * 1.6, s.z * 1.6);
+  }
+
+  /* the lanes, then the places */
+  const b = v.board;
+  g.lineWidth = 1; g.strokeStyle = 'rgba(90,120,170,0.10)';
+  b.pick.forEach((p) => { for (const q of b.reachD[p.i]) {
+    const st = b.drop[q];
+    g.beginPath(); g.moveTo(fx(p.x), fy(p.y)); g.lineTo(fx(st.x), fy(st.y)); g.stroke(); } });
+  b.pick.forEach((p) => {
+    const busy = d.rows.filter((r) => r.p === p.i).length;
+    g.beginPath(); g.arc(fx(p.x), fy(p.y), 1.2 * FSCALE, 0, 7);
+    g.fillStyle = busy ? '#3d5580' : '#22304a'; g.fill();
+  });
+  b.drop.forEach((st) => {
+    const sz = 2.4 * FSCALE;
+    g.save(); g.translate(fx(st.x), fy(st.y)); g.rotate(Math.PI / 4);
+    g.fillStyle = '#2b3a55'; g.fillRect(-sz/2, -sz/2, sz, sz); g.restore();
+    g.fillStyle = 'rgba(230,237,247,0.55)';
+    g.font = `${Math.max(9, 3.1 * FSCALE)}px ui-sans-serif,sans-serif`;
+    g.textAlign = 'center';
+    g.fillText(st.name.split(' ')[0], fx(st.x), fy(st.y) - 3 * FSCALE);
+  });
+
+  /* the ships */
+  for (let i = v.seats.length - 1; i >= 0; i--) {
+    const mine = i === me;
+    const st = filmShip(d, i, ph);
+    const x = fx(st.x), y = fy(st.y), size = (mine ? 2.1 : 1.8) * FSCALE;
+    if (st.flying && st.u > 0.01) {
+      const back = Math.min(0.28, st.u);
+      const tx = fx(flerp(st.a.x, st.b.x, st.u - back)), ty = fy(flerp(st.a.y, st.b.y, st.u - back));
+      const grd = g.createLinearGradient(tx, ty, x, y);
+      grd.addColorStop(0, 'rgba(0,0,0,0)');
+      grd.addColorStop(1, mine ? 'rgba(242,193,78,0.55)' : 'rgba(127,147,181,0.32)');
+      g.strokeStyle = grd; g.lineWidth = mine ? 2.4 : 1.6; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(tx, ty); g.lineTo(x, y); g.stroke();
+    }
+    g.save(); g.translate(x, y); g.rotate(st.ang);
+    if (mine) { g.shadowColor = 'rgba(242,193,78,0.8)'; g.shadowBlur = 12; }
+    g.beginPath();
+    g.moveTo(size, 0); g.lineTo(-size * 0.7, size * 0.62);
+    g.lineTo(-size * 0.35, 0); g.lineTo(-size * 0.7, -size * 0.62);
+    g.closePath(); g.fillStyle = mine ? '#f2c14e' : '#7f93b5'; g.fill();
+    g.shadowBlur = 0;
+    if (ph.name === 'run' || ph.name === 'market') {
+      g.beginPath(); g.arc(-size * 0.25, 0, size * 0.38, 0, 7);
+      g.fillStyle = GOOD_COLOUR[d.rows[i].c]; g.fill();
+    }
+    g.restore();
+    if (ph.name === 'out' || ph.name === 'load') {
+      g.fillStyle = mine ? 'rgba(242,193,78,0.95)' : 'rgba(150,170,200,0.7)';
+      g.font = `${Math.max(8, 2.7 * FSCALE)}px ui-sans-serif,sans-serif`;
+      g.textAlign = 'center';
+      g.fillText(mine ? 'YOU' : d.names[i].split(' ')[0], x, y - size - 4);
+    }
+  }
+
+  /* the crowd, which is the whole game in one label */
+  const crowd = (keyOf, placeOf, dy, word, pct) => {
+    const by = new Map();
+    d.rows.forEach((r, i) => { const k = keyOf(r); by.set(k, (by.get(k) || []).concat(r)); });
+    for (const [, rows] of by) {
+      if (rows.length < 2) continue;
+      const p = placeOf(rows[0]);
+      filmFlash(fx(p.x), fy(p.y) + dy, `${rows.length} ${word} · ${pct(rows[0])}`, '#ff7a6b', ph.u);
+    }
+  };
+  if (ph.name === 'load')
+    crowd((r) => r.p + ':' + r.c, (r) => b.pick[r.p], -5 * FSCALE, 'buying',
+          (r) => Math.round((r.paid / d.prices.buy[r.p][r.c] - 1) * 100) + '% dearer');
+  if (ph.name === 'market')
+    crowd((r) => r.d + ':' + r.c, (r) => b.drop[r.d], 5 * FSCALE, 'selling',
+          (r) => Math.round((1 - r.got / d.prices.sell[r.d][r.c]) * 100) + '% less');
+
+  /* what each captain made, stacked so a busy station stays readable */
+  if (ph.name === 'market') {
+    const byStation = new Map();
+    d.rows.forEach((r, i) => byStation.set(r.d, (byStation.get(r.d) || []).concat({ r, i })));
+    for (const [d0, list] of byStation) {
+      const st = b.drop[d0];
+      list.sort((a, z) => z.r.profit - a.r.profit);
+      list.forEach(({ r, i }, k) => {
+        g.save();
+        g.globalAlpha = f01(1.6 - ph.u * 1.6);
+        g.font = `600 ${Math.max(11, (i === me ? 4.2 : 3.1) * FSCALE)}px ui-sans-serif,sans-serif`;
+        g.textAlign = 'center';
+        g.fillStyle = r.profit >= 0 ? '#5fd08a' : '#ff7a6b';
+        g.fillText((r.profit >= 0 ? '+' : '−') + '$' + Math.abs(r.profit).toLocaleString(),
+          fx(st.x), fy(st.y) - fease(f01(ph.u * 1.4)) * 4 * FSCALE - (2.4 + k * 2.1) * FSCALE);
+        g.restore();
+      });
+    }
+  }
+
+  filmBoard(d, ph, me);
+  filmHUD(d, ph, me);
+  if (ph.name === 'yard') filmYard(d, ph, me);
+}
+
+function filmFlash(x, y, text, colour, u) {
+  const g = FILM.ctx;
+  g.save();
+  g.globalAlpha = f01(Math.sin(f01(u) * Math.PI) * 1.6);
+  g.font = `600 ${Math.max(10, 3.0 * FSCALE)}px ui-sans-serif,sans-serif`;
+  g.textAlign = 'center';
+  const w = g.measureText(text).width + 14;
+  const cx = Math.max(w / 2 + 8, Math.min(FW - w / 2 - 8, x));
+  g.fillStyle = 'rgba(10,14,23,0.85)';
+  g.beginPath(); g.roundRect(cx - w/2, y - 11, w, 20, 6); g.fill();
+  g.strokeStyle = colour; g.lineWidth = 1; g.stroke();
+  g.fillStyle = colour; g.fillText(text, cx, y + 4);
+  g.restore();
+}
+
+/* the band under the square map, which is where the table lives */
+function filmBoard(d, ph, me) {
+  const g = FILM.ctx;
+  const y0 = FPAD.y + 100 * FSCALE + 16, y1 = FH - 104;
+  if (y1 - y0 < 60) return;
+  const rowH = Math.min(34, (y1 - y0 - 22) / d.rows.length);
+  const takings = ph.name === 'market' || ph.name === 'yard';
+  g.save();
+  g.textAlign = 'left'; g.fillStyle = '#5a6d8c';
+  g.font = '600 10px ui-sans-serif,sans-serif';
+  g.fillText(takings ? 'WHAT THEY MADE' : 'MANIFESTS FILED', 18, y0 + 8);
+  const order = d.rows.map((r, i) => i)
+    .sort((a, z) => (takings ? d.rows[z].profit - d.rows[a].profit : a - z));
+  order.forEach((i, k) => {
+    const y = y0 + 22 + k * rowH + rowH * 0.62, r = d.rows[i], mine = i === me;
+    if (mine) {
+      g.fillStyle = 'rgba(242,193,78,0.07)';
+      g.beginPath(); g.roundRect(12, y - rowH * 0.62, FW - 24, rowH - 2, 6); g.fill();
+    }
+    g.fillStyle = mine ? '#f2c14e' : '#7f93b5';
+    g.font = `${mine ? 600 : 400} 12px ui-sans-serif,sans-serif`;
+    g.textAlign = 'left';
+    g.fillText(mine ? 'You' : d.names[i].split(' ')[0], 18, y);
+    g.beginPath(); g.arc(104, y - 4, 4, 0, 7); g.fillStyle = GOOD_COLOUR[r.c]; g.fill();
+    g.fillStyle = mine ? '#e6edf7' : '#5a6d8c';
+    g.font = '12px ui-sans-serif,sans-serif';
+    g.fillText(GOODS[r.c], 114, y);
+    g.textAlign = 'right';
+    if (takings) {
+      g.fillStyle = r.profit >= 0 ? '#5fd08a' : '#ff7a6b';
+      g.font = '600 12px ui-sans-serif,sans-serif';
+      g.fillText((r.profit >= 0 ? '+' : '−') + '$' + Math.abs(r.profit).toLocaleString(), FW - 18, y);
+      g.fillStyle = '#4a5d7c'; g.font = '11px ui-sans-serif,sans-serif';
+      g.fillText(FILM.view.board.drop[r.d].name.split(' ')[0], FW - 96, y);
+    } else {
+      g.fillStyle = '#4a5d7c'; g.font = '11px ui-sans-serif,sans-serif';
+      g.fillText('at ' + FILM.view.board.pick[r.p].name, FW - 18, y);
+    }
+  });
+  g.restore();
+}
+
+function filmHUD(d, ph, me) {
+  const g = FILM.ctx;
+  g.textAlign = 'left'; g.fillStyle = '#5a6d8c';
+  g.font = '600 11px ui-sans-serif,sans-serif';
+  g.fillText(`ROUND ${d.round}`, 16, 30);
+  let shown = d.before.cash[me];
+  if (ph.name === 'market') shown = flerp(d.before.cash[me], d.after.cash[me], fease(ph.u));
+  else if (ph.name === 'yard') shown = d.after.cash[me];
+  g.textAlign = 'right'; g.fillStyle = '#e6edf7';
+  g.font = '600 22px ui-sans-serif,sans-serif';
+  g.fillText('$' + Math.round(shown).toLocaleString(), FW - 16, 32);
+  g.fillStyle = '#5a6d8c'; g.font = '11px ui-sans-serif,sans-serif';
+  const hold = ph.name === 'yard'
+    ? flerp(d.before.hold[me], d.after.hold[me], fease(f01(ph.u * 1.6))) : d.before.hold[me];
+  g.fillText('hold ' + Math.round(hold) + ' units', FW - 16, 48);
+  if (ph.name === 'run' || ph.name === 'market') {
+    const r = d.rows[me];
+    g.textAlign = 'left'; g.fillStyle = GOOD_COLOUR[r.c];
+    g.font = '600 12px ui-sans-serif,sans-serif';
+    g.fillText(r.load + ' ' + GOODS[r.c] + ' → ' + FILM.view.board.drop[r.d].name, 16, 50);
+  }
+}
+
+function filmYard(d, ph, me) {
+  const g = FILM.ctx;
+  const lots = d.refit.lots, rowH0 = 46;
+  const panelH = Math.min(FH * 0.44, 46 + lots.length * rowH0);
+  const top = FH - 108 - panelH * fease(f01(ph.u * 6));
+  g.save();
+  g.fillStyle = '#0d1420';
+  g.beginPath(); g.roundRect(10, top, FW - 20, panelH, 14); g.fill();
+  g.strokeStyle = '#22304a'; g.lineWidth = 1; g.stroke();
+  g.fillStyle = '#5a6d8c'; g.font = '600 11px ui-sans-serif,sans-serif'; g.textAlign = 'left';
+  g.fillText('THE YARD · ' + SLOTNAMES[d.block.failed[me]].toUpperCase() + ' FAILED', 24, top + 22);
+  const rowH = (panelH - 44) / lots.length;
+  const opening = f01((ph.u - 0.12) / 0.7) * lots.length;
+  lots.forEach((l, j) => {
+    const y = top + 38 + j * rowH, open = f01(opening - j), mineWon = l.who === me;
+    g.globalAlpha = 0.35 + 0.65 * f01(opening - j + 0.6);
+    g.fillStyle = mineWon && open > 0.9 ? 'rgba(242,193,78,0.10)' : 'rgba(255,255,255,0.03)';
+    g.beginPath(); g.roundRect(18, y, FW - 36, rowH - 6, 8); g.fill();
+    g.textAlign = 'left'; g.fillStyle = '#e6edf7'; g.font = '13px ui-sans-serif,sans-serif';
+    g.fillText(`Lot ${j + 1} · ${Math.round(100 * l.grade)}%`, 28, y + rowH / 2 - 1);
+    if (open > 0.05) {
+      const bids = l.bids.map((bd, i) => ({ bd, i })).filter((x) => x.bd !== null && x.bd > 0)
+        .sort((a, z) => z.bd - a.bd);
+      g.font = '11px ui-sans-serif,sans-serif';
+      let bx = 28; g.globalAlpha = open;
+      for (const { bd, i } of bids.slice(0, 5)) {
+        const label = (i === me ? 'you' : d.names[i].split(' ')[0]) + ' $' + bd.toLocaleString();
+        g.fillStyle = i === l.who ? '#f2c14e' : '#5a6d8c';
+        g.fillText(label, bx, y + rowH / 2 + 13);
+        bx += g.measureText(label).width + 12;
+        if (bx > FW - 60) break;
+      }
+      g.textAlign = 'right'; g.font = '600 13px ui-sans-serif,sans-serif';
+      g.fillStyle = l.who < 0 ? '#5a6d8c' : mineWon ? '#f2c14e' : '#8296b4';
+      g.fillText(l.who < 0 ? 'unsold'
+        : (l.who === me ? 'YOURS' : d.names[l.who].split(' ')[0]) +
+          (l.paid > 0 ? ' · $' + l.paid.toLocaleString() : ' · free'),
+        FW - 30, y + rowH / 2 - 1);
+    }
+    g.globalAlpha = 1;
+  });
+  g.restore();
+}
+
+/* ------------------------------------------------------------------ start */
+(async () => {
+  const saved = load();
+  /* a code in the address bar wins over whatever was last played here, so a
+     link a friend sends does what it looks like it does */
+  const fromUrl = (location.pathname.match(/\/c\/([A-Za-z0-9]{4,8})/) || [])[1];
+  if (fromUrl) { S.code = fromUrl.toUpperCase(); }
+  else if (saved.code) { S.code = saved.code; S.token = saved.token; }
+  if (S.code && S.token) { await refresh(); poll(5000); }
+  else render();
+})();
+</script>
+</body>
+</html>
