@@ -68,6 +68,30 @@ ok(/failed/.test(hostBody), 'the round opens in the yard with a failed part');
 ok((await host.$$('[data-step=block] input')).length === 4, 'four lots, four sliders');
 ok((await host.$$('[data-step=pickup] .opt')).length > 0, 'and the loading spots are on the same screen');
 
+/* THE SHED. Every other style in this game is about getting away from the
+   crowd; this is the one that wants it to turn up. It has to be reachable
+   from the declare screen, priced, and honest about the closing rounds. */
+{
+  await host.evaluate(() => {
+    document.querySelector('[data-step=pickup] .opt').click();
+  });
+  await host.waitForTimeout(400);
+  await host.evaluate(() => document.querySelector('[data-step=cargo] .opt').click());
+  await host.waitForTimeout(400);
+  const shed = await host.evaluate(() => {
+    const st = document.querySelector('[data-step=shed]');
+    return st ? { text: st.textContent.replace(/\s+/g, ' '),
+                  slider: !!st.querySelector('#store') } : null;
+  });
+  ok(!!shed, 'the shed is on the declare screen');
+  ok(shed && shed.slider, 'with a slider for how much to leave behind');
+  ok(shed && /does not use your hold/.test(shed.text),
+    'and it says storage does not come out of the hold — the mistake that '
+    + 'cost this mechanic $49,000 a season in the harness');
+  ok(shed && /40%/.test(shed.text) && /\$5 a unit a round/.test(shed.text),
+    'the cut and the rent are both on the card');
+}
+
 /* THE NUMBER HAS TO BE THERE BEFORE THE CHOICE IS MADE.
 
    The first version of the projection only appeared once a spot and a cargo

@@ -111,7 +111,7 @@ const SLOTNAMES = ['Coolant Loop','Drive Coil','Hull Plate','Nav Unit','Power Ce
 const CONDITION = (g) => g>=0.88?'factory-sealed' : g>=0.72?'reconditioned'
                        : g>=0.55?'serviceable' : g>=0.40?'well-used' : 'salvage';
 
-let S = { code: null, token: null, view: null, sel: {}, bids: [], busy: false, error: null };
+let S = { code: null, token: null, view: null, sel: {}, bids: [], store: 0, collect: 0, busy: false, error: null };
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ code: S.code, token: S.token })); } catch {} };
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
 
@@ -558,6 +558,61 @@ function screenDeclare(app, dock, v) {
     app.appendChild(s3);
   }
 
+  /* ---- THE SHED -------------------------------------------------------
+
+     Every other way to play this game is about getting away from the crowd.
+     This is the one where you want the crowd to turn up: goods left at a
+     loading spot earn nothing until somebody comes and buys that cargo at
+     that rock, and then you take a cut of what they sell it for — without
+     them ever learning whose it was.
+
+     Bought ON TOP of a full hold, deliberately. If storage came out of the
+     hold it would carry the hold's opportunity cost and the whole point would
+     be lost; that mistake cost the mechanic $49,000 a season in the harness
+     before anybody noticed. */
+  if (S.sel.p !== undefined && S.sel.c !== undefined && v.sheds && v.sheds.on) {
+    const bp = v.prices.buy[S.sel.p][S.sel.c];
+    const here = (v.sheds.mine || []).find((x) => x.p === S.sel.p && x.c === S.sel.c);
+    const pub = (v.sheds.stock || []).find((x) => x.p === S.sel.p && x.c === S.sel.c);
+    const most = Math.min(v.sheds.max, Math.floor(Math.max(0, you.cash) / Math.max(bp, 1)));
+    if (S.store === undefined) S.store = 0;
+    if (S.collect === undefined) S.collect = 0;
+    const st = $(`<div class="step" data-step="shed"><div class="lab"><span class="n">4</span>
+      &nbsp;Leave some behind</div></div>`);
+    const card = $(`<div class="card"></div>`);
+    if (!v.sheds.canStore) {
+      card.innerHTML = `<p class="note">The sheds are shut for the last
+        ${v.sheds.windDown} rounds — anything left now could not find a buyer before
+        the season ends, and would just be money burnt.</p>`;
+    } else {
+      card.innerHTML = `
+        <p class="note" style="margin:0 0 10px">Buy extra ${GOODS[S.sel.c]} at
+          ${b.pick[S.sel.p].name} and leave it in a rented shed. It does not use your
+          hold. When another captain buys ${GOODS[S.sel.c]} here, it comes out of the
+          pile and you take <b>${Math.round(v.sheds.royalty * 100)}%</b> of what they
+          sell it for. Rent is ${money(v.sheds.rent)} a unit a round until it goes.</p>
+        <input type="range" id="store" min="0" max="${most}" step="1" value="${Math.min(S.store, most)}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span class="note" id="storeq">${S.store} units</span>
+          <span class="note" id="storec"></span>
+        </div>`;
+    }
+    if (pub && pub.units > 0) {
+      card.insertAdjacentHTML('beforeend', `<p class="note" style="margin-top:10px">
+        There ${pub.units === 1 ? 'is' : 'are'} already <b>${pub.units}</b> units of
+        ${GOODS[S.sel.c]} sitting here${here ? ` — <b>${here.units}</b> of them yours` : ''}.
+        Stock is supply: it holds the buy price down for everyone loading here.</p>`);
+    }
+    if (here && here.units > 0) {
+      card.insertAdjacentHTML('beforeend', `<label style="display:flex;gap:8px;
+        align-items:center;margin-top:10px;font-size:13.5px;color:var(--ink)">
+        <input type="checkbox" id="collect" ${S.collect ? 'checked' : ''}>
+        Take my ${Math.min(here.units, you.hold)} units back into the hold this run</label>`);
+    }
+    st.appendChild(card);
+    app.appendChild(st);
+  }
+
   const ready = S.sel.p !== undefined && S.sel.c !== undefined;
   const d = $(`<div class="inner">
     <div class="fc"><small id="fs">${ready ? 'Loading at ' + b.pick[S.sel.p].name : 'Pick a spot and a cargo'}</small>
@@ -567,8 +622,9 @@ function screenDeclare(app, dock, v) {
     if (!ready || S.busy) return;
     S.busy = true;
     try {
-      const out = await api('cargo/declare', { pickup: S.sel.p, commodity: S.sel.c, bids: S.bids });
-      S.sel = {}; S.bids = []; S.busy = false;
+      const out = await api('cargo/declare', { pickup: S.sel.p, commodity: S.sel.c, bids: S.bids,
+        store: S.store || 0, collect: S.collect || 0 });
+      S.sel = {}; S.bids = []; S.store = 0; S.collect = 0; S.busy = false;
       return applyView(out.view);
     } catch (e) { S.error = e.message; }
     S.busy = false; render();
@@ -599,6 +655,27 @@ function screenDeclare(app, dock, v) {
       if (sl) sl.addEventListener('input', (e) => { S.bids[j] = Number(e.target.value); paint(); });
     });
     paint();
+  }
+  /* the shed's live readout, the same shape as the bid sliders above it */
+  {
+    const sl = document.getElementById('store');
+    if (sl) {
+      const bp2 = v.prices.buy[S.sel.p][S.sel.c];
+      const paint = () => {
+        const n = Number(sl.value) || 0;
+        S.store = n;
+        const q = document.getElementById('storeq'), cst = document.getElementById('storec');
+        if (q) q.textContent = n === 0 ? 'nothing' : n + ' units';
+        if (cst) cst.innerHTML = n === 0 ? '&nbsp;'
+          : `${money(n * bp2)} now · ${money(n * v.sheds.rent)} a round in rent`;
+      };
+      sl.addEventListener('input', paint);
+      paint();
+    }
+    const cb = document.getElementById('collect');
+    if (cb) cb.addEventListener('change', (e) => {
+      S.collect = e.target.checked ? 9999 : 0;   /* the server clamps to the pile */
+    });
   }
   poll(8000);
 }
@@ -773,7 +850,7 @@ function screenOver(app, dock, v) {
   }
   const d = $(`<div class="inner"><button class="go">Another table</button></div>`);
   d.querySelector('.go').onclick = () => {
-    S = { code: null, token: null, view: null, sel: {}, bids: [], busy: false, error: null, name: S.name };
+    S = { code: null, token: null, view: null, sel: {}, bids: [], store: 0, collect: 0, busy: false, error: null, name: S.name };
     try { localStorage.removeItem(KEY); } catch {}
     render();
   };
@@ -1088,7 +1165,7 @@ function filmHUD(d, ph, me) {
    two rounds of "is my change live?" that nobody could answer by looking.
    Both halves are shown because they are uploaded separately and it is
    entirely possible to have one without the other. */
-const PAGE_BUILD = '2026-09-20 · the yard mid-round, and what the run pays';
+const PAGE_BUILD = '2026-09-20 · warehouses';
 async function stamp() {
   let server = 'not reached';
   try {
