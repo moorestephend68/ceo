@@ -61,7 +61,8 @@ const table = (opts = {}) => {
   const storedRow = b.game.history[0].rows.find((r) => r.name === 'Salty Dogs & Co');
   ok(storedRow.load === plainLoad,
     `storing 60 units did not shrink the run: ${storedRow.load} units carried either way`);
-  ok(K.seatByToken(b.game, b.token).stored === 60, 'and 60 units are sitting in the shed');
+  ok(K.storedBy(b.game, b.game.seats.indexOf(K.seatByToken(b.game, b.token))) === 60,
+    'and 60 units are sitting in the shed');
   /* the yard's own keeper stores too, so this asks for MY entry rather than
      assuming the table held only one */
   const mineStored = b.game.history[0].stored
@@ -93,15 +94,16 @@ const table = (opts = {}) => {
   const spot = K.boardFor(game.seed).reachP[0][0];
   K.submitDeclaration(game, token, { pickup: spot, commodity: 0, bids: [0,0,0,0], store: 50 });
   K.resolveStage(game, now); K.resolveStage(game, now);
-  ok(K.seatByToken(game, token).stored === 50, '50 units in the shed');
+  const mineIdx = game.seats.indexOf(K.seatByToken(game, token));
+  ok(K.storedBy(game, mineIdx) === 50, '50 units in the shed');
   /* go back for them */
   const me = K.seatByToken(game, token);
   const back = K.boardFor(game.seed).reachP[me.at];
   if (back.includes(spot)) {
     K.submitDeclaration(game, token, { pickup: spot, commodity: 0, bids: [0,0,0,0], collect: 50 });
     K.resolveStage(game, now); K.resolveStage(game, now);
-    ok(K.seatByToken(game, token).stored < 50,
-      `and they can be fetched back: ${Math.round(K.seatByToken(game, token).stored)} left`);
+    ok(K.storedBy(game, mineIdx) < 50,
+      `and they can be fetched back: ${Math.round(K.storedBy(game, mineIdx))} left`);
   } else {
     ok(true, 'and they can be fetched back (this seed did not fly past the shed; covered below)');
   }
@@ -138,6 +140,51 @@ const table = (opts = {}) => {
     `and paid ${keeper ? money(keeper.rentPaid) : ''} of rent for the privilege`);
   const paid = game.history.some((h) => h.rows.some((r) => (r.royalties || []).length));
   ok(paid, 'and the round records which carrier paid it');
+}
+
+/* ------------------------------------------------------- the whole loop
+
+   Reported from a real game: "I was warehousing but it did not show anyone
+   taking my commodities and I did not take anyone else's." The engine was
+   doing it; nothing on screen ever said so, and nothing showed a captain
+   where the piles were so they could go and buy one. This is the round trip
+   the page now has to be able to narrate. */
+{
+  const { game, token } = K.createGame({ seats: 5, rounds: 8, cadence: '5m',
+    hostName: 'Keeper', seed: 77, warehouses: true, now });
+  const mate = K.joinGame(game, 'Carrier', now).token;
+  K.startGame(game, game.hostToken, now);
+  const B = K.boardFor(game.seed);
+  const spot = B.reachP[K.seatByToken(game, token).at]
+    .find((p) => B.reachP[K.seatByToken(game, mate).at].includes(p));
+  K.submitDeclaration(game, token, { pickup: spot, commodity: 2, bids: [0,0,0,0], store: 120 });
+  K.submitDeclaration(game, mate, { pickup: spot, commodity: 0, bids: [0,0,0,0] });
+  K.resolveStage(game, now); K.resolveStage(game, now);
+  ok(K.storedBy(game, 0) === 120, '120 units go into a shed at a spot the other captain can reach');
+
+  const you2 = K.seatByToken(game, mate);
+  const back = B.reachP[you2.at].includes(spot) ? spot : B.reachP[you2.at][0];
+  K.submitDeclaration(game, mate, { pickup: back, commodity: 2, bids: [0,0,0,0] });
+  K.submitDeclaration(game, token,
+    { pickup: B.reachP[K.seatByToken(game, token).at][0], commodity: 1, bids: [0,0,0,0] });
+  K.resolveStage(game, now); K.resolveStage(game, now);
+
+  const row = game.history[1].rows.find((r) => r.name === 'Carrier');
+  ok(row.fromPiles > 0,
+    `the carrier's row says ${row.fromPiles} of ${row.bought} units came out of a shed`);
+  ok((row.royalties || []).length === 1 && row.royalties[0].owner === 0,
+    'and which seat is owed for them');
+  const keeper = K.seatByToken(game, token);
+  ok((keeper.royalties || 0) > 0, `the keeper was paid ${money(keeper.royalties)}`);
+  const v = K.viewFor(game, token);
+  ok(v.sheds.royalties > 0 && v.sheds.rentPaid > 0,
+    `and their own view totals it: ${money(v.sheds.royalties)} earned against `
+    + `${money(v.sheds.rentPaid)} of rent`);
+  /* the carrier is told the units came from a shed, and never whose */
+  const cv = K.viewFor(game, mate);
+  const crow = (cv.history[0].rows || []).find((r) => r.name === 'Carrier');
+  ok(crow && crow.fromPiles > 0, 'the carrier is told their cargo came out of somebody\'s shed');
+  ok(!(cv.sheds.mine || []).length, 'and the carrier has no shed of their own to confuse it with');
 }
 
 /* ------------------------------------------- whose it is, is nobody's business */

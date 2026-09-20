@@ -351,7 +351,62 @@ function lastRoundCard(v) {
     ? `Outbid on every part. The yard fitted a scrap ${SLOTNAMES[r.slot]} for nothing.`
     : `You took a ${CONDITION(r.grade)} ${SLOTNAMES[r.slot]} at ${Math.round(100*r.grade)}%${
         r.paid > 0 ? ' for ' + money(r.paid) : ' for nothing'}.`}</p>`;
+
+  /* WHAT THE SHEDS DID. Without this the mechanic is invisible: a captain
+     keeps a warehouse, somebody empties half of it, and the only evidence is
+     a cash balance that moved for no stated reason. Both directions get said —
+     what your pile earned, and how much of what YOU bought came out of
+     somebody else's, which is the half nobody would otherwise ever learn. */
+  if (v.sheds && v.sheds.on) {
+    /* somebody bought from a pile of yours */
+    let earned = 0, units = 0;
+    h.rows.forEach((row) => (row.royalties || []).forEach((q) => {
+      if (q.owner === me) { earned += q.cut; units += q.units; }
+    }));
+    if (units > 0) {
+      s += `<p class="note" style="color:var(--good)"><b>${units} units</b> went out of your
+        shed — another captain bought them and sold them on, and your cut was
+        <b>${money(earned)}</b>.</p>`;
+    }
+    if (mine.fromPiles > 0) {
+      s += `<p class="note"><b>${mine.fromPiles}</b> of the ${mine.bought} units you bought came
+        out of somebody's shed. They took ${Math.round(v.sheds.royalty * 100)}% of what you sold
+        them for — you are not told whose it was.</p>`;
+    }
+    if (mine.collect > 0) {
+      s += `<p class="note">You brought <b>${mine.collect}</b> units back out of your own
+        shed and carried them yourself.</p>`;
+    }
+  }
   return s + '</div>';
+}
+
+/* ---- YOUR SHEDS -------------------------------------------------------
+   Standing, not just after a round that happened to pay. A pile costs rent
+   every round whether anybody comes or not, and a captain needs to be able
+   to see what they are paying for and where it is. */
+function shedCard(v) {
+  const sh = v.sheds;
+  if (!sh || !sh.on) return '';
+  const mine = sh.mine || [];
+  if (!mine.length) {
+    return sh.stored === 0 && !sh.royalties ? '' : '';
+  }
+  const rent = mine.reduce((a, x) => a + x.units, 0) * sh.rent;
+  let t = `<div class="card"><h2>Your sheds</h2><table>
+    <tr><th>Where</th><th>What</th><th>Units</th><th>Rent a round</th></tr>`;
+  mine.forEach((x) => {
+    t += `<tr class="you"><td>${v.board.pick[x.p].name}</td><td>${GOODS[x.c]}</td>
+      <td>${x.units}</td><td class="b">−${money(x.units * sh.rent)}</td></tr>`;
+  });
+  t += `</table><p class="note" style="margin-top:8px">${money(rent)} a round until somebody
+    comes for it. They pay the going rate at the rock and you take
+    ${Math.round(sh.royalty * 100)}% of what they sell it for.${
+      sh.royalties ? ` So far this season your sheds have earned <b class="g">${
+        money(sh.royalties)}</b> against <b class="b">${money(sh.rentPaid)}</b> of rent.` : ''}</p>`;
+  if (!sh.canStore) t += `<p class="note">The sheds are shut for the last ${sh.windDown}
+    rounds — collect what you can while you still fly past it.</p>`;
+  return t + '</div>';
 }
 
 /* ---- stage one: the yard and the manifest, filed together ---------------- */
@@ -470,10 +525,12 @@ function screenDeclare(app, dock, v) {
       <p class="note">${GOODS[you.declared.c]} from ${b.pick[you.declared.p].name}, and your
       bids are in. Waiting for ${v.seats.filter((s) => !s.filed).length} more.</p></div>`);
     app.insertAdjacentHTML('beforeend', lastRoundCard(v));
+    app.insertAdjacentHTML('beforeend', shedCard(v));
     poll(3000);
     return;
   }
   app.insertAdjacentHTML('beforeend', lastRoundCard(v));
+  app.insertAdjacentHTML('beforeend', shedCard(v));
 
   /* the yard */
   if (v.block) {
@@ -529,8 +586,11 @@ function screenDeclare(app, dock, v) {
   b.reachP[you.at].forEach((p) => {
     const cheapest = Math.min(...v.prices.buy[p]);
     const serves = b.reachD[p].map((d) => b.drop[d].name.split(' ')[0]).join(' · ');
+    const shed = ((v.sheds && v.sheds.stock) || [])
+      .filter((x) => x.p === p).reduce((a, x) => a + x.units, 0);
     const btn = $(`<button class="opt tall" aria-pressed="${S.sel.p === p}">
-      <span class="nm">${b.pick[p].name}<br><span class="meta">ships to ${serves}</span></span>
+      <span class="nm">${b.pick[p].name}<br><span class="meta">ships to ${serves}${
+        shed ? ` · <b style="color:var(--blue)">${shed} in sheds</b>` : ''}</span></span>
       <span class="px">${px(cheapest)}<span class="meta"> low</span></span></button>`);
     btn.onclick = () => { S.sel = { p }; render(); };
     s2.querySelector('.opts').appendChild(btn);
@@ -739,6 +799,7 @@ function screenRoute(app, dock, v) {
   const you = v.you, b = v.board;
   app.insertAdjacentHTML('beforeend', head(v));
   app.insertAdjacentHTML('beforeend', yardCard(v));
+  app.insertAdjacentHTML('beforeend', shedCard(v));
 
   let m = `<div class="card"><h2>Manifests filed</h2><table>
     <tr><th>Captain</th><th>Loading</th><th>Could sell at</th></tr>`;
@@ -1165,7 +1226,7 @@ function filmHUD(d, ph, me) {
    two rounds of "is my change live?" that nobody could answer by looking.
    Both halves are shown because they are uploaded separately and it is
    entirely possible to have one without the other. */
-const PAGE_BUILD = '2026-09-20 · warehouses';
+const PAGE_BUILD = '2026-09-20 · warehouses that say so';
 async function stamp() {
   let server = 'not reached';
   try {
