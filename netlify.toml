@@ -31,3 +31,9 @@
   from = "/c/*"
   to = "/cargo.html"
   status = 200
+
+# A hunt's code in the address bar, same reason.
+[[redirects]]
+  from = "/h/*"
+  to = "/hunt.html"
+  status = 200
