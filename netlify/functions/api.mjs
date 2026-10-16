@@ -5,6 +5,7 @@
 
 import * as G from '../../lib/game.mjs';
 import * as K from '../../lib/cargo.mjs';
+import * as HU from '../../lib/hunt.mjs';
 import { kindOf } from '../../lib/kinds.mjs';
 import * as A from '../../lib/accounts.mjs';
 import * as B from '../../lib/billing.mjs';
@@ -895,6 +896,91 @@ export default async (req) => {
       if (!game) return fail('No table with that code.', 404);
       if (game.kind !== 'cargo') return fail('That code is for a different game.', 409);
       return json({ view: K.viewFor(game, token) });
+    }
+
+    /* ---------------------------------------------------------- the hunt
+
+       One shared market, a filing an hour. The routes are the same five shapes
+       as cargo's because the rails are the same rails; what differs is that a
+       hunt has one window rather than two, and that its filing carries three
+       separate things — where you are going, what you will part with, and what
+       you want. */
+    if (route === 'hunt/create' && req.method === 'POST') {
+      const user = await requireUser(req, db, verify);
+      const state = await A.requireHost(db, user.id);
+      const owned = state.companies[0];
+      if (!owned) return fail('Your name is still being set up. Try again in a moment.');
+      let made = null;
+      for (let i = 0; i < 5; i++) {
+        made = HU.createGame({ ...body, hostName: owned.name, now });
+        if (!(await db.getGame(made.game.code))) break;
+        made = null;
+      }
+      if (!made) return fail('Could not allocate a code. Try again.', 503);
+      await db.putGame(made.game, user.id);
+      return json({ code: made.game.code, token: made.token,
+                    view: HU.viewFor(made.game, made.token) });
+    }
+
+    if (route === 'hunt/join' && req.method === 'POST') {
+      const peek = await db.getGame(code);
+      if (!peek) return fail('No hunt with that code.', 404);
+      if (peek.kind !== 'hunt') return fail('That code is for a different game.', 409);
+      if (peek.isPublic) {
+        return fail('That hunt is dealt by qualification rather than by code.', 403);
+      }
+      const user = await userFrom(req, verify);
+      let name = body.name;
+      if (user) {
+        const st = await A.accountState(db, user.id);
+        if (st.companies[0]) name = st.companies[0].name;
+      }
+      if (!String(name || '').trim()) return fail('You need a name.');
+      let token = null, shut = false;
+      const { game } = await M.mutateGame(db, code, async (g) => {
+        shut = false; token = null;
+        if (g.status !== 'lobby') { shut = true; return false; }
+        try { token = HU.joinGame(g, name, now).token; }
+        catch (e) { shut = true; return false; }
+        return true;
+      });
+      if (shut || !token) return fail('That hunt is full or has already started.', 409);
+      return json({ code: game.code, token, view: HU.viewFor(game, token) });
+    }
+
+    if (route === 'hunt/start' && req.method === 'POST') {
+      const { game } = await M.mutateGame(db, code, (g) => {
+        if (g.status !== 'lobby') return false;
+        HU.startGame(g, token, now);
+        return true;
+      });
+      return json({ view: HU.viewFor(game, token) });
+    }
+
+    /* The filing. Re-filing inside the same round replaces the last one, which
+       is on purpose: an hour is long enough to change your mind and there is
+       nothing secret about your own intentions. */
+    if (route === 'hunt/file' && req.method === 'POST') {
+      let closed = false;
+      const { game } = await M.mutateGame(db, code, async (g) => {
+        closed = false;
+        await settle(db, g, now);
+        if (g.status !== 'playing') { closed = true; return false; }
+        HU.submitFiling(g, token, body);
+        /* it may be the last filing outstanding, in which case the market
+           clears now rather than waiting on a clock nobody is watching */
+        await settle(db, g, now);
+        return true;
+      });
+      if (closed) return fail('That hunt is no longer running.', 409);
+      return json({ view: HU.viewFor(game, token) });
+    }
+
+    if (route === 'hunt/view') {
+      const { game } = await settled(db, code, now);
+      if (!game) return fail('No hunt with that code.', 404);
+      if (game.kind !== 'hunt') return fail('That code is for a different game.', 409);
+      return json({ view: HU.viewFor(game, token) });
     }
 
     if (route === 'mine' && req.method === 'POST') {
