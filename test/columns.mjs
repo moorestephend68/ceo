@@ -27,6 +27,7 @@
 import { readFileSync } from 'node:fs';
 import { memoryDb } from '../lib/db.mjs';
 import * as K from '../lib/cargo.mjs';
+import * as T from '../lib/hunt.mjs';
 import * as G from '../lib/game.mjs';
 
 let bad = 0;
@@ -121,6 +122,15 @@ const fits = (v, type) => {
   K.resolveStage(cargo, new Date(Date.now() + 1200000).toISOString());  /* → settled */
   capture(cargo);
 
+  /* and the third game, which has no `stage` at all — the column is an
+     integer and an absent field must not become the string 'undefined' */
+  const hunt = T.createGame({ seats: 24, hostName: 'Halloran Freight', seed: 14, now }).game;
+  capture(hunt);
+  T.startGame(hunt, hunt.hostToken, now);
+  capture(hunt);
+  T.resolveRound(hunt, new Date(Date.now() + 3700000).toISOString());
+  capture(hunt);
+
   const ceo = G.createGame({ hostName: 'Ravensworth & Co', seats: 4, rounds: 10,
     preset: 'standard', seed: 13, cadence: '5m', now }).game;
   capture(ceo);
@@ -136,7 +146,7 @@ const fits = (v, type) => {
       }
     }
   }
-  ok(wrong.length === 0, `${seen.length} writes across both games, every column the `
+  ok(wrong.length === 0, `${seen.length} writes across all three games, every column the `
     + `type the schema declares` + (wrong.length ? ' — ' + wrong[0] : ''));
 
   /* and the one that actually bit: never a string in the integer column */
