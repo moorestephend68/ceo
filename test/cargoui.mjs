@@ -88,8 +88,45 @@ ok((await host.$$('[data-step=pickup] .opt')).length > 0, 'and the loading spots
   ok(shed && /does not use your hold/.test(shed.text),
     'and it says storage does not come out of the hold — the mistake that '
     + 'cost this mechanic $49,000 a season in the harness');
-  ok(shed && /40%/.test(shed.text) && /\$5 a unit a round/.test(shed.text),
-    'the cut and the rent are both on the card');
+  /* The three things a captain has to be told before they tie money up in a
+     shed, and the first two are the ones the first version got wrong: who pays
+     them, and what happens to the leftovers. The third is that this is not a
+     way to win — saying so is the honest version of a mechanic measured to cost
+     $616 a season at the level the bots use it. */
+  /* THE YARD'S OPENING POSITION.
+
+     Every bid slider used to start at zero, reading "—", and a captain who
+     left it there won no part at all — 1.7% of seasons won, 61% finishing
+     last. The page's opening position was its losing one and nothing on
+     screen said how far to drag. This is the assertion that keeps it fixed. */
+  const yard = await host.evaluate(() => {
+    const sliders = [...document.querySelectorAll('input[type=range]')]
+      .filter((el) => /^bid\d+$/.test(el.id));
+    return { n: sliders.length,
+             values: sliders.map((el) => Number(el.value)),
+             readouts: [...document.querySelectorAll('[id^=bv]')].map((el) => el.textContent.trim()),
+             /* collapse whitespace: the page's template literals wrap mid-sentence,
+                so a raw textContent match fails on a newline inside a phrase */
+             text: ((document.querySelector('#app') || {}).textContent || '')
+               .replace(/\s+/g, ' ') };
+  });
+  ok(yard.n > 0, `the yard is showing ${yard.n} bid sliders`);
+  ok(yard.values.every((v) => v > 0),
+    `and not one of them starts at zero: ${yard.values.map((v) => '$' + v).join(', ')}`);
+  ok(yard.readouts.every((t) => t !== '—'),
+    'the readout shows money rather than a dash, so what is filed is what is shown');
+  ok(/of what a lot is worth/.test(yard.text),
+    'and the card says what the field tends to pay, which is the number that decides a bid');
+  ok(/you win nothing/.test(yard.text),
+    'and warns that a low bid wins nothing at all rather than a little');
+
+  ok(shed && /pays <b>you<\/b> the going rate|pays you the going rate/.test(shed.text),
+    'the card says the carrier pays YOU, not the market');
+  ok(shed && /sold back at the posted price/.test(shed.text),
+    'and that what nobody comes for is sold back rather than burnt');
+  ok(shed && /\$2 a unit a round/.test(shed.text), 'and what the rent is');
+  ok(shed && /not a way to get rich/.test(shed.text),
+    'and that it is not a way to get rich, which is what the measurement says');
 }
 
 /* THE NUMBER HAS TO BE THERE BEFORE THE CHOICE IS MADE.

@@ -134,4 +134,62 @@ console.log('\n  A whole season with one live captain');
   ok(fin.every(Number.isFinite), 'and five finishing numbers that are numbers');
   console.log('      finished: ' + fin.map((v) => '$' + Math.round(v).toLocaleString()).join('  '));
 }
+/* ------------------------------------------- THE GOING RATE IN THE YARD
+
+   The yard decides the season, and a cautious opening bid was measured to be
+   identical to no bid at all: 40% of what a lot is worth won zero parts, 1.7%
+   of seasons and 61% finishing last, because the field files 50-65% and there
+   are four lots for five captains. Every slider on the page opened at zero.
+
+   So the server now sends what a lot tends to go for, and its provenance. */
+{
+  const now = at(900);
+  const { game, token } = K.createGame({ seats: 5, rounds: 8, cadence: '5m',
+    hostName: 'Halloran Freight', seed: 31, warehouses: true, now });
+  K.startGame(game, game.hostToken, now);
+
+  let v = K.viewFor(game, token);
+  ok(Array.isArray(v.block.going) && v.block.going.length === v.block.grades.length,
+    'round one quotes a rate for every lot on the block');
+  ok(v.block.goingFrom === 'table',
+    `and says where it came from: ${v.block.goingFrom} - the habits of the field actually sitting there`);
+  ok(v.block.going.every((x, j) => (x > 0) === (v.block.worth[j] > 0)),
+    'a lot worth nothing is quoted at nothing, and every other lot at something');
+  ok(v.block.goingShade > 0.45 && v.block.goingShade < 0.75,
+    `the quote is ${Math.round(100 * v.block.goingShade)}% of worth - inside the band that wins parts`);
+  ok(v.block.going.every((x, j) => v.block.worth[j] < 1 || x / v.block.worth[j] > 0.5),
+    'every quote clears the half-of-worth floor where bids stop winning anything');
+
+  const me = K.seatByToken(game, token);
+  const purse = Math.max(0, me.cash) * 0.6;
+  const bids = v.block.going.map((x) => Math.round(Math.min(x, purse) / 25) * 25);
+  const r = K.routesFor(game, me, null)[0];
+  const holdBefore = me.hold;
+  K.submitDeclaration(game, token, { pickup: r.p, commodity: r.c, bids });
+  K.resolveStage(game, now); K.resolveStage(game, now);
+  ok(K.seatByToken(game, token).hold !== holdBefore,
+    'a captain who simply accepts the quote comes out of the yard with a part');
+
+  v = K.viewFor(game, token);
+  ok(v.block.goingFrom === 'reveal',
+    'and from the second round the quote is a fact off the envelopes, not an estimate');
+  const lots = game.history[0].refit.lots.filter((l) => l.who >= 0 && l.paid > 0);
+  ok(lots.length > 0 && lots.every((l) => l.worth > 0),
+    'which works because the refit records what each lot was WORTH beside what it fetched');
+}
+
+/* ----------------------------- an all-human table has nothing to go on */
+{
+  const now = at(1000);
+  const { game, token } = K.createGame({ seats: 2, rounds: 8, cadence: '5m',
+    hostName: 'Halloran Freight', seed: 12, warehouses: true, now });
+  K.joinGame(game, 'Okafor Lines', now);
+  K.startGame(game, game.hostToken, now);
+  const v = K.viewFor(game, token);
+  ok(v.block.goingFrom === 'estimate',
+    'with nobody to read, the page is told the figure is an estimate and not a fact');
+  ok(Math.abs(v.block.goingShade - 0.6) < 1e-9,
+    'set at the measured best reply against a bidding field, 60%');
+}
+
 console.log('\n  all good.\n');
