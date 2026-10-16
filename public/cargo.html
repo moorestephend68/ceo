@@ -360,18 +360,19 @@ function lastRoundCard(v) {
   if (v.sheds && v.sheds.on) {
     /* somebody bought from a pile of yours */
     let earned = 0, units = 0;
-    h.rows.forEach((row) => (row.royalties || []).forEach((q) => {
-      if (q.owner === me) { earned += q.cut; units += q.units; }
+    h.rows.forEach((row) => (row.takings || []).forEach((q) => {
+      if (q.owner === me) { earned += q.paid; units += q.units; }
     }));
     if (units > 0) {
       s += `<p class="note" style="color:var(--good)"><b>${units} units</b> went out of your
-        shed — another captain bought them and sold them on, and your cut was
-        <b>${money(earned)}</b>.</p>`;
+        shed — another captain loaded them and paid you the going rate at the rock,
+        <b>${money(earned)}</b>. They are not told whose they were.</p>`;
     }
     if (mine.fromPiles > 0) {
-      s += `<p class="note"><b>${mine.fromPiles}</b> of the ${mine.bought} units you bought came
-        out of somebody's shed. They took ${Math.round(v.sheds.royalty * 100)}% of what you sold
-        them for — you are not told whose it was.</p>`;
+      s += `<p class="note"><b>${mine.fromPiles}</b> of the ${mine.bought} units you loaded came
+        out of somebody's shed. You paid the posted price for them exactly as you would
+        at an empty rock — the money went to the captain who left them there instead of
+        to the market, and you are not told who that was.</p>`;
     }
     if (mine.collect > 0) {
       s += `<p class="note">You brought <b>${mine.collect}</b> units back out of your own
@@ -389,9 +390,7 @@ function shedCard(v) {
   const sh = v.sheds;
   if (!sh || !sh.on) return '';
   const mine = sh.mine || [];
-  if (!mine.length) {
-    return sh.stored === 0 && !sh.royalties ? '' : '';
-  }
+  if (!mine.length) return '';
   const rent = mine.reduce((a, x) => a + x.units, 0) * sh.rent;
   let t = `<div class="card"><h2>Your sheds</h2><table>
     <tr><th>Where</th><th>What</th><th>Units</th><th>Rent a round</th></tr>`;
@@ -399,11 +398,13 @@ function shedCard(v) {
     t += `<tr class="you"><td>${v.board.pick[x.p].name}</td><td>${GOODS[x.c]}</td>
       <td>${x.units}</td><td class="b">−${money(x.units * sh.rent)}</td></tr>`;
   });
-  t += `</table><p class="note" style="margin-top:8px">${money(rent)} a round until somebody
-    comes for it. They pay the going rate at the rock and you take
-    ${Math.round(sh.royalty * 100)}% of what they sell it for.${
-      sh.royalties ? ` So far this season your sheds have earned <b class="g">${
-        money(sh.royalties)}</b> against <b class="b">${money(sh.rentPaid)}</b> of rent.` : ''}</p>`;
+  t += `</table><p class="note" style="margin-top:8px">${money(rent)} a round until it moves.
+    Any captain who loads that good at that rock takes yours first and pays you the going
+    rate for it — and whatever is still here when the season ends is sold back at the
+    posted price, so a shed is stock, not a bonfire. What it costs you is the rent and
+    the price it fetches in the end.${
+      sh.takings ? ` So far this season your sheds have taken <b class="g">${
+        money(sh.takings)}</b> against <b class="b">${money(sh.rentPaid)}</b> of rent.` : ''}</p>`;
   if (!sh.canStore) t += `<p class="note">The sheds are shut for the last ${sh.windDown}
     rounds — collect what you can while you still fly past it.</p>`;
   return t + '</div>';
@@ -535,17 +536,50 @@ function screenDeclare(app, dock, v) {
   /* the yard */
   if (v.block) {
     const failed = v.block.failed;
-    if (S.bids.length !== v.block.grades.length) S.bids = v.block.grades.map(() => 0);
+    /* THE SLIDERS NO LONGER START AT ZERO.
+
+       They used to, all four, reading "—", and a captain who left them there —
+       or dragged them only part way — won no part at all. Measured: bidding
+       40% of what a lot is worth is the same as bidding nothing, 1.7% of
+       seasons won and 61% finishing last, because the field files between 50%
+       and 65% and there are four lots for five captains. The game's opening
+       position was its losing one.
+
+       So they open at the going rate the server sends, which is what a captain
+       who had already played a season would know. It is a starting point and
+       not an instruction: dragging up still beats leaving it, and the reveal
+       at the end of the round is there to be read. */
+    if (S.bids.length !== v.block.grades.length) {
+      const purse = Math.max(0, you.cash) * 0.6;   /* the cap a bid may commit */
+      S.bids = v.block.grades.map((g, j) => {
+        const want = (v.block.going || [])[j] || 0;
+        return Math.round(Math.min(want, purse) / 25) * 25;
+      });
+    }
     let sh = `<div class="card"><h2>Your ship — ${SLOTNAMES[failed]} has failed</h2><table>`;
     you.parts.forEach((g, k) => {
       sh += `<tr class="${k === failed ? 'you' : ''}"><td>${SLOTNAMES[k]}</td>
         <td class="muted">${k === failed ? '' : CONDITION(g)}</td>
         <td>${k === failed ? '<b>failed</b>' : Math.round(100*g) + '%'}</td></tr>`;
     });
+    /* WHERE THE FIGURE COMES FROM, said plainly. The server sends its
+       provenance so the page can be truthful about how much it is worth
+       believing, rather than implying a confidence nobody has. */
+    const rate = v.block.goingFrom === 'reveal'
+      ? `Lots have been going for about <b>${Math.round(100 * v.block.goingShade)}%</b> of what
+         a lot is worth at this table — the sliders start there. Below about half, you win
+         nothing at all: there are four lots and five captains.`
+      : v.block.goingFrom === 'table'
+      ? `A field like this one files around <b>${Math.round(100 * v.block.goingShade)}%</b> of
+         what a lot is worth, so the sliders start there. Below about half, you win nothing at
+         all: there are four lots and five captains.`
+      : `Nothing has gone under the hammer yet, so the sliders start at
+         <b>${Math.round(100 * v.block.goingShade)}%</b> of what a lot is worth — the figure
+         that holds up best against a field that is bidding. Below about half, you win nothing.`;
     app.insertAdjacentHTML('beforeend', sh + `</table><p class="note" style="margin-top:8px">
       A unit of hold returns about ${money(v.perUnit)} a round — that is what to judge every
       bid against. The refit settles at the end of this round, out of the same purse you are
-      trading with.</p></div>`);
+      trading with.</p><p class="note" style="margin-top:6px">${rate}</p></div>`);
 
     const step = $(`<div class="step" data-step="block"><div class="lab"><span class="n">1</span>
       &nbsp;Sealed bids — any part fits your ${SLOTNAMES[failed]}</div><div class="opts"></div></div>`);
@@ -590,7 +624,7 @@ function screenDeclare(app, dock, v) {
       .filter((x) => x.p === p).reduce((a, x) => a + x.units, 0);
     const btn = $(`<button class="opt tall" aria-pressed="${S.sel.p === p}">
       <span class="nm">${b.pick[p].name}<br><span class="meta">ships to ${serves}${
-        shed ? ` · <b style="color:var(--blue)">${shed} in sheds</b>` : ''}</span></span>
+        shed ? ` · <b style="color:var(--blue)" title="Stock in sheds here. It holds the buy price down for whoever loads, and never costs them anything — the money for it goes to whoever left it.">${shed} in sheds</b>` : ''}</span></span>
       <span class="px">${px(cheapest)}<span class="meta"> low</span></span></button>`);
     btn.onclick = () => { S.sel = { p }; render(); };
     s2.querySelector('.opts').appendChild(btn);
@@ -642,15 +676,17 @@ function screenDeclare(app, dock, v) {
     const card = $(`<div class="card"></div>`);
     if (!v.sheds.canStore) {
       card.innerHTML = `<p class="note">The sheds are shut for the last
-        ${v.sheds.windDown} rounds — anything left now could not find a buyer before
-        the season ends, and would just be money burnt.</p>`;
+        ${v.sheds.windDown} rounds — there is no longer time for anybody to come
+        past and load it.</p>`;
     } else {
       card.innerHTML = `
         <p class="note" style="margin:0 0 10px">Buy extra ${GOODS[S.sel.c]} at
           ${b.pick[S.sel.p].name} and leave it in a rented shed. It does not use your
-          hold. When another captain buys ${GOODS[S.sel.c]} here, it comes out of the
-          pile and you take <b>${Math.round(v.sheds.royalty * 100)}%</b> of what they
-          sell it for. Rent is ${money(v.sheds.rent)} a unit a round until it goes.</p>
+          hold. Any captain loading ${GOODS[S.sel.c]} here takes it out of the pile and
+          pays <b>you</b> the going rate instead of the market — and anything still
+          here at the end of the season is sold back at the posted price. Rent is
+          ${money(v.sheds.rent)} a unit a round until it moves. It is a bet on the
+          price and a way to sit out of the crowd; it is not a way to get rich.</p>
         <input type="range" id="store" min="0" max="${most}" step="1" value="${Math.min(S.store, most)}">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <span class="note" id="storeq">${S.store} units</span>
@@ -661,7 +697,9 @@ function screenDeclare(app, dock, v) {
       card.insertAdjacentHTML('beforeend', `<p class="note" style="margin-top:10px">
         There ${pub.units === 1 ? 'is' : 'are'} already <b>${pub.units}</b> units of
         ${GOODS[S.sel.c]} sitting here${here ? ` — <b>${here.units}</b> of them yours` : ''}.
-        Stock is supply: it holds the buy price down for everyone loading here.</p>`);
+        Stock is supply: it holds the buy price down for everyone loading here, and
+        loading it costs you no more than an empty rock would — the money just goes
+        to whoever left it rather than to the market.</p>`);
     }
     if (here && here.units > 0) {
       card.insertAdjacentHTML('beforeend', `<label style="display:flex;gap:8px;
@@ -1226,7 +1264,7 @@ function filmHUD(d, ph, me) {
    two rounds of "is my change live?" that nobody could answer by looking.
    Both halves are shown because they are uploaded separately and it is
    entirely possible to have one without the other. */
-const PAGE_BUILD = '2026-09-20 · warehouses that say so';
+const PAGE_BUILD = '2026-10-16 · the yard tells you the going rate';
 async function stamp() {
   let server = 'not reached';
   try {
