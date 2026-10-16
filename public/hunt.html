@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Prize Hunt</title>
+<style>
+  :root{
+    --bg:#0a0e17; --panel:#121a28; --panel2:#0e1522; --line:#22304a;
+    --ink:#e6edf7; --dim:#8296b4; --dimmer:#5a6d8c;
+    --gold:#f2c14e; --good:#5fd08a; --bad:#ff7a6b; --blue:#5aa9ff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);
+    font:16px/1.45 ui-sans-serif,-apple-system,'Segoe UI',Roboto,sans-serif;
+    padding:0 16px 170px;overflow-x:hidden}
+  .wrap{max-width:560px;margin:0 auto}
+  header{padding:18px 0 10px}
+  h1{font-size:19px;margin:0;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+  .sub{color:var(--dim);font-size:13px;margin-top:3px}
+  .bar{display:flex;gap:8px;margin:12px 0 4px;font-size:12px;color:var(--dim)}
+  .bar b{color:var(--ink);font-weight:600;display:block}
+  .bar div{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+  .step{margin:18px 0 0}
+  .lab{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer);margin-bottom:7px}
+  .lab .n{color:var(--gold)}
+  .lab .r{float:right;letter-spacing:0;text-transform:none;font-size:11.5px}
+  .opts{display:flex;flex-direction:column;gap:6px}
+  button.opt{display:flex;align-items:center;gap:10px;width:100%;min-height:54px;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    color:var(--ink);font:inherit;text-align:left;padding:8px 12px;cursor:pointer}
+  button.opt[aria-pressed=true]{border-color:var(--gold);background:#1b2233}
+  button.opt[disabled]{opacity:.45;cursor:default}
+  .opt .nm{flex:1;min-width:0;font-size:15px}
+  .opt .meta{font-size:12px;color:var(--dim)}
+  .opt .px{font-variant-numeric:tabular-nums;font-size:15px;white-space:nowrap}
+  .muted{color:var(--dimmer)}
+  /* the two grids: places three across, items two across */
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .grid3 button.opt{min-height:62px;padding:7px 8px;flex-direction:column;
+    align-items:flex-start;justify-content:center;gap:2px}
+  .grid3 .nm{font-size:13px;line-height:1.25}
+  .grid3 .meta{font-size:11px}
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+  .grid2 button.opt{min-height:56px;padding:7px 10px}
+  .dock{position:fixed;left:0;right:0;bottom:0;
+    background:linear-gradient(180deg,rgba(10,14,23,0) 0%,var(--bg) 22%);
+    padding:14px 16px calc(14px + env(safe-area-inset-bottom))}
+  .dock .inner{max-width:560px;margin:0 auto}
+  .fc{display:flex;justify-content:space-between;align-items:baseline;background:var(--panel2);
+    border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:8px;gap:10px}
+  .fc small{color:var(--dim);font-size:12px}
+  .fc .v{font-size:14px;font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+  button.go{width:100%;min-height:56px;border-radius:12px;border:0;font:inherit;font-size:16px;
+    font-weight:600;background:var(--gold);color:#17120a;cursor:pointer;letter-spacing:.02em}
+  button.go[disabled]{background:#243046;color:var(--dimmer);cursor:default}
+  button.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+  .card h2{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer);
+    margin:0 0 10px;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  td,th{padding:6px 4px;text-align:right;font-variant-numeric:tabular-nums}
+  th{color:var(--dimmer);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+  td:first-child,th:first-child{text-align:left;font-variant-numeric:normal}
+  tr.you td{color:var(--gold)}
+  .g{color:var(--good)} .b{color:var(--bad)} .bl{color:var(--blue)}
+  .note{font-size:13px;color:var(--dim);line-height:1.55}
+  .big{font-size:30px;font-variant-numeric:tabular-nums;font-weight:600;margin:2px 0 6px}
+  input[type=text]{width:100%;min-height:52px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;color:var(--ink);font:inherit;padding:0 12px;letter-spacing:.08em}
+  .err{color:var(--bad);font-size:13px;margin:8px 2px 0}
+  /* the three components, and the five letters */
+  .pips{display:flex;gap:6px;margin:8px 0 0}
+  .pip{flex:1;text-align:center;font-size:11.5px;padding:7px 4px;border-radius:8px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--dimmer)}
+  .pip.on{border-color:var(--good);color:var(--good)}
+  .code{display:flex;gap:6px;margin-top:8px}
+  .code span{flex:1;text-align:center;font-size:18px;font-weight:600;padding:9px 0;
+    border-radius:8px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--dimmer);letter-spacing:.1em}
+  .code span.on{border-color:var(--gold);color:var(--gold);background:#1b2233}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<p id="build" style="text-align:center;font-size:11px;color:#5a6d8c;margin:22px 0 0"></p>
+<div class="dock" id="dock"></div>
+
+<script>
+/* THE PRIZE HUNT — the live page.
+
+   The engine is on the server and this page never works anything out: it draws
+   what the API says and files what the captain chooses. In this game that is
+   more than good hygiene. The whole design rests on the items meaning nothing,
+   so a page that knew what combined with what would be a page that could be
+   asked — and the answer would be worth a gift card.
+
+   SO THERE IS NOTHING HERE TO READ. No recipe table, no hint of what the five
+   uncharted places want, not even the captain's own three recipes, because the
+   server does not send them either. A captain finds out what an item is for by
+   holding the right three at once and being told it just happened.
+
+   ONE FILING, THREE PARTS: where you are going, what you will part with, what
+   you want. They go up together, the market clears on the hour, and you never
+   learn who you dealt with. */
+
+const KEY = 'hunt.game';
+const $ = (h) => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstChild; };
+
+let S = { code: null, token: null, view: null,
+          place: null, give: [], want: [], busy: false, error: null };
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ code: S.code, token: S.token })); } catch {} };
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+
+/* Signing in belongs to the rest of the site, so this page sends on whatever
+   session it already has — Supabase keeps it under a key of its own, and
+   locally a token can be dropped into ceo.dev.token instead. */
+function bearer() {
+  try {
+    const dev = localStorage.getItem('ceo.dev.token');
+    if (dev) return dev;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!/^sb-.*-auth-token$/.test(k)) continue;
+      const v = JSON.parse(localStorage.getItem(k));
+      if (v && v.access_token) return v.access_token;
+    }
+  } catch {}
+  return null;
+}
+
+async function api(route, body) {
+  const url = '/api/' + route + (S.code ? (route.includes('?') ? '&' : '?') + 'code=' + S.code
+    + (S.token ? '&token=' + S.token : '') : '');
+  const headers = {};
+  const tok = bearer();
+  if (tok) headers.authorization = 'Bearer ' + tok;
+  if (body) headers['content-type'] = 'application/json';
+  const r = await fetch(url, body ? { method: 'POST', headers, body: JSON.stringify(body) }
+                                  : { headers });
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(out.error || 'Something went wrong.');
+  return out;
+}
+
+/* Polling, not sockets, same as the other two. Three failures in a row is news
+   rather than noise — a page that swallows a dead poll is a page that silently
+   stops, which is the one failure a captain cannot report. */
+let timer = null, pollFails = 0;
+function poll(ms) {
+  clearTimeout(timer);
+  if (document.hidden) return;
+  timer = setTimeout(async () => {
+    try {
+      const out = await api('hunt/view');
+      pollFails = 0; if (S.error) S.error = null;
+      applyView(out.view);
+    } catch (e) { if (++pollFails >= 3) { S.error = e.message; render(); } }
+    poll(ms);
+  }, ms);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+
+function applyView(v) {
+  const was = S.view;
+  S.view = v;
+  /* a new round wipes the pending filing: last round's choices are not this
+     round's, and a stale selection quietly filed again would be a bug a
+     captain would never spot */
+  if (!was || was.round !== v.round) { S.place = null; S.give = []; S.want = []; }
+  render();
+}
+
+async function refresh() {
+  if (!S.code) return render();
+  try { const out = await api('hunt/view'); return applyView(out.view); }
+  catch (e) { S.error = e.message; }
+  render();
+}
+
+/* ------------------------------------------------------------------ screens */
+function render() {
+  const app = document.getElementById('app'), dock = document.getElementById('dock');
+  app.innerHTML = ''; dock.innerHTML = '';
+  const v = S.view;
+  if (!S.code || !v) return screenHome(app, dock);
+  if (v.status === 'lobby') return screenLobby(app, dock, v);
+  if (v.status === 'over') return screenOver(app, dock, v);
+  return screenRound(app, dock, v);
+}
+
+function clockText(v) {
+  if (!v.deadline) return 'no clock';
+  const left = Math.max(0, Math.round((Date.parse(v.deadline) - Date.now()) / 1000));
+  return left > 90 ? Math.round(left / 60) + ' min left' : left + 's left';
+}
+
+function head(v) {
+  const you = v.seats.find((s) => s.you) || {};
+  return `<header><h1>The Prize Hunt</h1>
+    <div class="sub">The market clears · ${clockText(v)}</div>
+    <div class="bar">
+      <div>Round<b>${v.round}</b></div>
+      <div>Day<b>${v.day} of ${v.daysMax}</b></div>
+      <div>Built<b>${you.built || 0} of 3</b></div>
+      <div>Letters<b>${you.letters || 0} of ${v.rules.letters}</b></div>
+    </div></header>`;
+}
+
+function screenHome(app, dock) {
+  app.insertAdjacentHTML('beforeend', `<header><h1>The Prize Hunt</h1>
+    <div class="sub">One market, a filing an hour, first to the safe</div></header>
+    <div class="card"><p class="note">You hold a hand of salvage. The names tell you
+    nothing about what any of it does — that is the puzzle, not an oversight.
+    Somewhere in your hand are the makings of three things: a galactic GPS, a
+    navigation module, and the key that puts them together. Three items each,
+    and you find out which three by happening to hold them.</p>
+    <p class="note">Every hour you move to one of twelve places, offer up to three
+    items, ask for up to three, and the whole market clears at once. You never
+    learn who you dealt with. Build all three and the uncharted territory opens:
+    five places, five letters, and a safe.</p>
+    <p class="note muted">Finishing a season of CEO or Cargo Run hands you another
+    item. You will need them — a hand of fourteen is not enough on its own.</p></div>`);
+
+  const join = $(`<div class="step"><div class="lab"><span class="n">1</span>&nbsp;Have a code?</div>
+    <input type="text" id="code" placeholder="CODE" autocapitalize="characters" maxlength="6">
+    <div class="opts" style="margin-top:8px"></div></div>`);
+  app.appendChild(join);
+  const nameBox = $(`<div class="step"><div class="lab"><span class="n">2</span>&nbsp;Your name</div>
+    <input type="text" id="name" placeholder="Halloran Freight" maxlength="24"></div>`);
+  app.appendChild(nameBox);
+  const saved = load();
+  if (saved.name) nameBox.querySelector('#name').value = saved.name;
+
+  const inner = $(`<div class="inner"></div>`);
+  const b1 = $(`<button class="go">Join a hunt</button>`);
+  b1.onclick = () => enter('hunt/join');
+  const b2 = $(`<button class="go ghost" style="margin-top:8px">Open a private hunt</button>`);
+  b2.onclick = () => enter('hunt/create');
+  inner.appendChild(b1); inner.appendChild(b2);
+  if (S.error) inner.appendChild($(`<p class="err">${S.error}</p>`));
+  dock.appendChild(inner);
+}
+
+async function enter(route) {
+  const code = (document.getElementById('code') || {}).value || '';
+  const name = (document.getElementById('name') || {}).value || '';
+  S.error = null;
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ name }));
+    S.code = route === 'hunt/create' ? null : code.trim().toUpperCase();
+    const out = await api(route, { name, seats: 40 });
+    S.code = out.code; S.token = out.token; save();
+    applyView(out.view);
+    poll(6000);
+  } catch (e) { S.error = e.message; S.code = null; render(); }
+}
+
+function screenLobby(app, dock, v) {
+  app.insertAdjacentHTML('beforeend', `<header><h1>The Prize Hunt</h1>
+    <div class="sub">${v.seats.length} captain${v.seats.length === 1 ? '' : 's'} waiting</div></header>`);
+  if (!v.isPublic) app.insertAdjacentHTML('beforeend',
+    `<div class="card"><h2>The code</h2><div class="big">${v.code}</div>
+     <p class="note">Anybody with this opens the same hunt.</p></div>`);
+  app.insertAdjacentHTML('beforeend', `<div class="card"><h2>Who is in</h2><table>${
+    v.seats.map((s) => `<tr class="${s.you ? 'you' : ''}"><td>${s.name}</td>
+      <td class="muted">${s.you ? 'you' : ''}</td></tr>`).join('')}</table>
+    <p class="note" style="margin-top:10px">A hunt runs with fourteen or more — below that the
+    market seizes up, so the yard makes up the difference with brokers of its own.</p></div>`);
+  const inner = $(`<div class="inner"></div>`);
+  const go = $(`<button class="go">Open the market</button>`);
+  go.onclick = async () => {
+    go.disabled = true;
+    try { const out = await api('hunt/start', {}); applyView(out.view); poll(6000); }
+    catch (e) { S.error = e.message; render(); }
+  };
+  inner.appendChild(go);
+  if (S.error) inner.appendChild($(`<p class="err">${S.error}</p>`));
+  dock.appendChild(inner);
+}
+
+/* ---------------------------------------------------------- the round */
+function screenRound(app, dock, v) {
+  app.insertAdjacentHTML('beforeend', head(v));
+  const you = v.you;
+  const filed = you.filed;
+
+  /* WHAT YOU HAVE BUILT. Three pips, and the five letters under them once the
+     territory is open. This is the only progress a captain has, and it is the
+     only thing about another captain's progress that travels. */
+  app.insertAdjacentHTML('beforeend', `<div class="card"><h2>Your work</h2>
+    <div class="pips">${v.components.map((n, i) =>
+      `<div class="pip ${you.built[i] ? 'on' : ''}">${you.built[i] ? '✓ ' : ''}${n}</div>`).join('')}</div>
+    ${you.built.every(Boolean) ? `<p class="note" style="margin:10px 0 0">The uncharted
+      territory is open. Each of its five places will hand over a letter the moment you are
+      holding what it wants.</p>
+      <div class="code">${Array.from({ length: v.rules.letters }, (_, i) =>
+        `<span class="${i < you.letters ? 'on' : ''}">${i < you.letters ? you.code[i] : '·'}</span>`).join('')}</div>`
+      : `<p class="note" style="margin:10px 0 0">Three items make each one. Nothing will tell
+      you which three — you find out by holding them.</p>`}</div>`);
+
+  /* -------------------------------------------------- 1. where to go */
+  const s1 = $(`<div class="step"><div class="lab"><span class="n">1</span>&nbsp;Move to
+    <span class="r muted">you are at ${you.place}</span></div><div class="grid3"></div></div>`);
+  v.places.forEach((p) => {
+    const here = p.i === you.at;
+    const b = $(`<button class="opt" ${here ? 'disabled' : ''}
+      aria-pressed="${S.place === p.i}">
+      <span class="nm">${p.name}</span>
+      <span class="meta">${here ? 'you are here'
+        : p.crowdLast ? p.crowdLast + ' were here' : 'empty last round'}</span></button>`);
+    if (!here) b.onclick = () => { S.place = p.i; render(); };
+    s1.querySelector('.grid3').appendChild(b);
+  });
+  app.appendChild(s1);
+  app.insertAdjacentHTML('beforeend', `<p class="note" style="margin:8px 2px 0">A crowd is
+    more people to deal with and more competition for them — only ${v.rules.take} trades go
+    through for any one captain in a round, so in a crowd most of your partners are already
+    spent. Drifting at random is the one thing measured to lose.</p>`);
+
+  /* ------------------------------------------- 2. what you will part with */
+  const s2 = $(`<div class="step"><div class="lab"><span class="n">2</span>&nbsp;Part with
+    <span class="r ${S.give.length > v.rules.give ? 'b' : 'muted'}">${S.give.length} of ${v.rules.give}</span>
+    </div><div class="grid2"></div></div>`);
+  you.hand.forEach((it) => {
+    const picked = S.give.filter((t) => t === it.t).length;
+    const b = $(`<button class="opt" aria-pressed="${picked > 0}">
+      <span class="nm">${it.name}<br><span class="meta">${
+        it.n > 1 ? it.n + ' held' : 'the only one'}${picked ? ' · offering ' + picked : ''}</span></span>
+      </button>`);
+    b.onclick = () => {
+      const n = S.give.filter((t) => t === it.t).length;
+      if (n < it.n && S.give.length < v.rules.give) S.give.push(it.t);
+      else S.give = S.give.filter((t) => t !== it.t);
+      render();
+    };
+    s2.querySelector('.grid2').appendChild(b);
+  });
+  app.appendChild(s2);
+  app.insertAdjacentHTML('beforeend', `<p class="note" style="margin:8px 2px 0">Something you
+    hold two of costs you nothing to offer. Offering your only one is a real risk, and taking
+    it well is the strongest thing a captain can do — the trick is knowing which singles the
+    market will hand back.</p>`);
+
+  /* ---- what the market has been handing over, which is the only read on
+     scarcity the game offers and the thing the risk above turns on */
+  if (you.seen && you.seen.length) {
+    app.insertAdjacentHTML('beforeend', `<div class="card"><h2>What has been coming through</h2>
+      <table><tr><th>Item</th><th>Times you have been handed one</th></tr>${
+        you.seen.slice(0, 6).map((x) => `<tr><td>${x.name}</td><td class="bl">${x.n}</td></tr>`).join('')
+      }</table><p class="note" style="margin-top:8px">A type that keeps turning up is one you
+      can afford to let go of. A type you have never once been handed is not.</p></div>`);
+  }
+
+  /* --------------------------------------------------- 3. what you want */
+  const s3 = $(`<div class="step"><div class="lab"><span class="n">3</span>&nbsp;Ask for
+    <span class="r muted">${S.want.length} of ${v.rules.want}</span></div><div class="grid2"></div></div>`);
+  const holding = new Set(you.hand.map((x) => x.t));
+  v.items.forEach((name, t) => {
+    if (holding.has(t) && !S.want.includes(t)) return;   /* asking for what you hold is a wasted slot */
+    const on = S.want.includes(t);
+    const b = $(`<button class="opt" aria-pressed="${on}">
+      <span class="nm">${name}</span></button>`);
+    b.onclick = () => {
+      if (on) S.want = S.want.filter((x) => x !== t);
+      else if (S.want.length < v.rules.want) S.want.push(t);
+      render();
+    };
+    s3.querySelector('.grid2').appendChild(b);
+  });
+  app.appendChild(s3);
+  app.insertAdjacentHTML('beforeend', `<p class="note" style="margin:8px 2px 0">Only types you
+    are not already holding are listed — a slot spent on something in your hand is a slot
+    wasted.</p>`);
+
+  /* ------------------------------------------------- what happened last */
+  if (v.announced.length) {
+    app.insertAdjacentHTML('beforeend', `<div class="card"><h2>Word around the market</h2>
+      <table>${v.announced.slice(-6).reverse().map((a) =>
+        `<tr class="${a.you ? 'you' : ''}"><td>${a.who}</td>
+         <td class="g">finished ${a.comp}</td></tr>`).join('')}</table></div>`);
+  }
+  app.insertAdjacentHTML('beforeend', `<div class="card"><h2>The field</h2><table>
+    <tr><th>Captain</th><th>Built</th><th>Letters</th></tr>${
+      v.seats.slice().sort((a, b) => (b.built - a.built) || (b.letters - a.letters))
+        .slice(0, 10).map((s) => `<tr class="${s.you ? 'you' : ''}"><td>${s.name}</td>
+          <td>${s.built} of 3</td><td>${s.letters || '—'}</td></tr>`).join('')
+    }</table></div>`);
+
+  /* ------------------------------------------------------------ the dock */
+  const inner = $(`<div class="inner"></div>`);
+  const placeName = S.place === null ? (filed ? v.places[filed.place].name : '—')
+                                     : v.places[S.place].name;
+  inner.appendChild($(`<div class="fc"><small>Filing</small>
+    <span class="v">${placeName} · part with ${S.give.length} · ask ${S.want.length}</span></div>`));
+  const go = $(`<button class="go" ${S.place === null || S.busy ? 'disabled' : ''}>${
+    filed ? 'Change the filing' : 'File it'}</button>`);
+  go.onclick = async () => {
+    if (S.place === null) return;
+    S.busy = true; go.disabled = true;
+    try {
+      const out = await api('hunt/file', { place: S.place, give: S.give, want: S.want });
+      S.busy = false;
+      applyView(out.view);
+    } catch (e) { S.busy = false; S.error = e.message; render(); }
+  };
+  inner.appendChild(go);
+  if (filed) inner.appendChild($(`<p class="note" style="margin:8px 2px 0">Filed for
+    ${v.places[filed.place].name}. You can change it until the hour is up.</p>`));
+  if (S.error) inner.appendChild($(`<p class="err">${S.error}</p>`));
+  dock.appendChild(inner);
+}
+
+function screenOver(app, dock, v) {
+  app.insertAdjacentHTML('beforeend', `<header><h1>The Prize Hunt</h1>
+    <div class="sub">${v.winner ? 'The safe is open' : 'The season ran out'}</div></header>`);
+  app.insertAdjacentHTML('beforeend', `<div class="card">
+    <div class="big">${v.youWon ? 'You did it' : (v.winner || 'Nobody')}</div>
+    <p class="note">${v.youWon
+      ? 'All three built, five letters earned, and the safe open. The prize is yours.'
+      : v.winner ? v.winner + ' reached the safe first.'
+      : 'No captain assembled all three and finished the letters before the season closed.'}</p></div>`);
+  if (v.reveal) app.insertAdjacentHTML('beforeend', `<div class="card"><h2>Everything, now
+    there is nothing left to protect</h2><table>
+    <tr><th>Captain</th><th>Built</th><th>Letters</th><th>Traded</th><th>Alone</th></tr>${
+      v.reveal.slice().sort((a, b) => (b.letters - a.letters) || (b.built - a.built))
+        .map((s) => `<tr><td>${s.name}</td><td>${s.built}</td><td>${s.letters}</td>
+          <td>${s.traded}</td><td class="muted">${s.alone}</td></tr>`).join('')
+    }</table><p class="note" style="margin-top:8px">"Alone" is rounds spent somewhere nobody
+    else turned up — a round thrown away, and the measured cost of drifting.</p></div>`);
+  const inner = $(`<div class="inner"></div>`);
+  const b = $(`<button class="go ghost">Back to the start</button>`);
+  b.onclick = () => { S = { code: null, token: null, view: null, place: null, give: [], want: [], busy: false, error: null };
+    try { localStorage.removeItem(KEY); } catch {} render(); };
+  inner.appendChild(b);
+  dock.appendChild(inner);
+}
+
+/* -------------------------------------------------------------- the stamp */
+const PAGE_BUILD = '2026-10-16 · the hunt, playable';
+(async () => {
+  let server = '—';
+  try { const c = await (await fetch('/api/config')).json(); server = c.build || '—'; } catch {}
+  const el = document.getElementById('build');
+  if (el) el.textContent = `page ${PAGE_BUILD} · server ${server}`;
+})();
+
+/* The test harness reads the view the page is holding, to prove that what is
+   not on screen is also not in the client. */
+window.S = S;
+
+/* ------------------------------------------------------------------- boot */
+(() => {
+  const saved = load();
+  const fromUrl = (location.pathname.match(/\/h\/([A-Z0-9]{6})/i) || [])[1];
+  if (fromUrl) S.code = fromUrl.toUpperCase();
+  else if (saved.code) { S.code = saved.code; S.token = saved.token; }
+  if (S.code) { refresh().then(() => poll(6000)); } else render();
+  setInterval(() => {
+    const v = S.view;
+    if (!v || v.status !== 'playing') return;
+    const sub = document.querySelector('.sub');
+    if (sub) sub.textContent = 'The market clears · ' + clockText(v);
+  }, 1000);
+})();
+</script>
+</body>
+</html>
