@@ -86,9 +86,20 @@ await host.goto(BASE + '/h/testing');
 const empty = await until(host, /No table is open here yet/, 6000);
 ok(empty || /already|Join this hunt|Waiting|Send this/.test(await scr(host)),
   'the named door always says where things stand' + (empty ? ' (nothing open)' : ' (one was already running)'));
-ok(/Open the testing table|fresh testing table/.test(await scr(host)),
-  'and a fresh table can always be laid out from here — a hunt runs for weeks, so a host who could not reopen would get one night and then wait out a season');
-await host.click('.dock button.go');   // opens one, or lays out a fresh one
+ok(/Open the testing table|fresh table/i.test(await scr(host)),
+  'and a fresh table can always be laid out from here, in EVERY state the door can be in — empty, waiting or running. A hunt runs for weeks, and the seat token lives in one browser, so a host without that exact browser must still be able to clear the table or the key is locked inside.');
+/* whichever button is present — open, or lay out a fresh one — is the one to press */
+const opener = await host.evaluate(() => {
+  const b = [...document.querySelectorAll('.dock button')]
+    .find((x) => /Open the testing table|fresh/i.test(x.textContent.replace(/\s+/g, ' ')));
+  return b ? b.textContent.replace(/\s+/g, ' ').trim() : null;
+});
+ok(!!opener, `the control reads "${opener}"`);
+await host.evaluate(() => {
+  const b = [...document.querySelectorAll('.dock button')]
+    .find((x) => /Open the testing table|fresh/i.test(x.textContent.replace(/\s+/g, ' ')));
+  b.click();
+});
 ok(await until(host, /Send this to your captains/), 'the host opens it and gets a link to share');
 const shown = await host.evaluate(() => (document.querySelector('#joinlink') || {}).textContent.trim());
 ok(/\/h\/testing$/.test(shown), `the link is the door they already know: ${shown}`);
@@ -149,6 +160,49 @@ const field = await t0.evaluate(() => window.S.view.seats.length);
 ok(field >= 14, `the floor of fourteen is made up with brokers: ${field} captains`);
 ok(!(await t0.evaluate(() => JSON.stringify(window.S.view))).match(/recipe|placeItem|affinity/),
   'and none of them can see what anything is for');
+
+/* ---- AND CLEARING IT AWAY AGAIN ----
+   A hunt takes no new captains once its market is open. That is right for a
+   prize hunt and merciless for a test night: start a minute early and everyone
+   who arrives after is locked out for the season. The host could not fix it,
+   because the fresh-table button was only ever drawn for a visitor with NO
+   seat — and the host always has a seat in their own table. Reported live:
+   "I started a game but now I need to end it so I can let other people in." */
+{
+  /* template literals wrap mid-sentence, so DOM text carries newlines where
+     the screen shows spaces — match on normalised text, as the rest does */
+  const tapByText = (p, re) => p.evaluate((r) => {
+    const b = [...document.querySelectorAll('button.opt')]
+      .find((x) => new RegExp(r).test(x.textContent.replace(/\s+/g, ' ')));
+    if (!b) return false; b.click(); return true;
+  }, re.source);
+
+  const late = await fresh(false);
+  await late.goto(BASE + '/h/testing');
+  await until(late, /already|Join this hunt/, 10000);
+  ok(/already/.test(await scr(late)),
+    'a latecomer is turned away from a running hunt — which is what makes a reset necessary');
+
+  ok(/Lay out a fresh table/.test(await scr(host)),
+    'the host, seated and playing, is offered a fresh table');
+  ok(await tapByText(host, /Lay out a fresh table/), 'the control answers a tap');
+  await host.waitForTimeout(400);
+  ok(/Tap again to discard/.test(await scr(host)),
+    'one tap arms it — discarding a live hunt should not be a single mis-tap');
+  ok(await tapByText(host, /Tap again to discard/), 'and the confirmation answers');
+  ok(await until(host, /Send this to your captains/, 12000), 'the second tap deals a fresh table');
+  ok((await host.evaluate(() => window.S.view.status)) === 'lobby', 'which is back in its lobby');
+  ok((await host.evaluate(() => window.S.code)) === 'TESTING',
+    'under the same name, so the link already sent out still works');
+
+  await late.goto(BASE + '/h/testing');
+  ok(await until(late, /Join this hunt/, 12000),
+    'and the latecomer reloads that same link and can finally join');
+  await late.fill('#name', 'Late Arrival');
+  await late.click('.dock button.go');
+  ok(await until(late, /Who is in|Waiting/, 12000), 'and is in');
+  await late.close();
+}
 
 console.log(errs.length ? `\nerrors: ${errs.join(' | ')}` : '\nno console errors');
 console.log(bad ? `\n${bad} FAILED` : '\ntest night OK');
