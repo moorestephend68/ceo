@@ -549,11 +549,21 @@ function screenDeclare(app, dock, v) {
        who had already played a season would know. It is a starting point and
        not an instruction: dragging up still beats leaving it, and the reveal
        at the end of the round is there to be read. */
+    /* THE STEP HAS TO FIT THE LOT. A flat $25 step was fine while every
+       slider opened at zero and nobody was being quoted a price. It is not
+       fine now: a lot worth $19 goes for about $11, and $11 snapped to the
+       nearest $25 is zero — so the one slider that most needed a starting
+       point was handed back the losing position the whole change was meant to
+       remove. Caught by the test that asserts no slider opens at zero. */
+    const stepFor = (full) => full >= 400 ? 25 : full >= 120 ? 10 : full >= 40 ? 5 : 1;
     if (S.bids.length !== v.block.grades.length) {
       const purse = Math.max(0, you.cash) * 0.6;   /* the cap a bid may commit */
       S.bids = v.block.grades.map((g, j) => {
         const want = (v.block.going || [])[j] || 0;
-        return Math.round(Math.min(want, purse) / 25) * 25;
+        const st = stepFor(v.block.worth[j] || 0);
+        const seeded = Math.round(Math.min(want, purse) / st) * st;
+        /* a lot worth anything at all never opens at nothing */
+        return (want >= 1 && seeded < st) ? st : seeded;
       });
     }
     let sh = `<div class="card"><h2>Your ship — ${SLOTNAMES[failed]} has failed</h2><table>`;
@@ -585,7 +595,8 @@ function screenDeclare(app, dock, v) {
       &nbsp;Sealed bids — any part fits your ${SLOTNAMES[failed]}</div><div class="opts"></div></div>`);
     v.block.grades.forEach((g, j) => {
       const full = v.block.worth[j];
-      const cap = Math.max(100, Math.ceil(full * 1.25 / 25) * 25);
+      const st = stepFor(full);
+      const cap = Math.max(100, Math.ceil(full * 1.25 / st) * st);
       const row = $(`<div class="card" style="margin:6px 0;padding:11px 12px">
         <div style="display:flex;gap:10px;align-items:baseline">
           <span style="flex:1">Lot ${j+1} · ${CONDITION(g)} <b>${Math.round(100*g)}%</b>
@@ -594,7 +605,7 @@ function screenDeclare(app, dock, v) {
           <span style="text-align:right"><span class="px" id="bv${j}">—</span>
             <br><span class="meta" id="bu${j}" style="font-size:11.5px">&nbsp;</span></span>
         </div>
-        <input type="range" min="0" max="${cap}" step="25" value="${S.bids[j]||0}" id="bid${j}">
+        <input type="range" min="0" max="${cap}" step="${st}" value="${S.bids[j]||0}" id="bid${j}">
       </div>`);
       step.querySelector('.opts').appendChild(row);
     });
@@ -1264,7 +1275,7 @@ function filmHUD(d, ph, me) {
    two rounds of "is my change live?" that nobody could answer by looking.
    Both halves are shown because they are uploaded separately and it is
    entirely possible to have one without the other. */
-const PAGE_BUILD = '2026-10-16 · the yard tells you the going rate';
+const PAGE_BUILD = '2026-10-17 · a step that fits the lot';
 async function stamp() {
   let server = 'not reached';
   try {

@@ -80,6 +80,9 @@
     border-radius:8px;border:1px solid var(--line);background:var(--panel2);
     color:var(--dimmer);letter-spacing:.1em}
   .code span.on{border-color:var(--gold);color:var(--gold);background:#1b2233}
+  /* the one hint: an item needed for something unfinished */
+  .mark{color:var(--gold);font-size:13px;margin-left:5px}
+  button.opt.want{border-color:#4a4327}
 </style>
 </head>
 <body>
@@ -325,9 +328,15 @@ function screenRound(app, dock, v) {
     </div><div class="grid2"></div></div>`);
   you.hand.forEach((it) => {
     const picked = S.give.filter((t) => t === it.t).length;
-    const b = $(`<button class="opt" aria-pressed="${picked > 0}">
-      <span class="nm">${it.name}<br><span class="meta">${
-        it.n > 1 ? it.n + ' held' : 'the only one'}${picked ? ' · offering ' + picked : ''}</span></span>
+    /* THE MARK. This item is needed for something you have not finished. It
+       does not say which of the three, or whether it is for a component at
+       all rather than one of the five places — working that out is still
+       yours. Parting with a marked item you hold only one of is a real
+       decision rather than a mistake, so it is never forbidden, only shown. */
+    const b = $(`<button class="opt ${it.wanted ? 'want' : ''}" aria-pressed="${picked > 0}">
+      <span class="nm">${it.name}${it.wanted ? '<span class="mark" title="Needed for something you have not finished">◆</span>' : ''}<br><span class="meta">${
+        it.n > 1 ? it.n + ' held' : 'the only one'}${it.wanted ? ' · wanted' : ''}${
+        picked ? ' · offering ' + picked : ''}</span></span>
       </button>`);
     b.onclick = () => {
       const n = S.give.filter((t) => t === it.t).length;
@@ -338,10 +347,15 @@ function screenRound(app, dock, v) {
     s2.querySelector('.grid2').appendChild(b);
   });
   app.appendChild(s2);
+  const marked = you.hand.filter((x) => x.wanted).length;
   app.insertAdjacentHTML('beforeend', `<p class="note" style="margin:8px 2px 0">Something you
     hold two of costs you nothing to offer. Offering your only one is a real risk, and taking
     it well is the strongest thing a captain can do — the trick is knowing which singles the
-    market will hand back.</p>`);
+    market will hand back.</p>
+    <p class="note" style="margin:6px 2px 0"><span class="mark" style="margin:0">◆</span>
+    marks an item needed for something you have not finished${
+      marked ? ` — ${marked} of what you are holding` : ''}. It will not say what for.
+    Letting one go is allowed, and sometimes right.</p>`);
 
   /* ---- what the market has been handing over, which is the only read on
      scarcity the game offers and the thing the risk above turns on */
@@ -438,7 +452,7 @@ function screenOver(app, dock, v) {
 }
 
 /* -------------------------------------------------------------- the stamp */
-const PAGE_BUILD = '2026-10-16 · the hunt, playable';
+const PAGE_BUILD = '2026-10-17 · the hunt, with marks';
 (async () => {
   let server = '—';
   try { const c = await (await fetch('/api/config')).json(); server = c.build || '—'; } catch {}
