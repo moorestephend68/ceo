@@ -270,8 +270,22 @@ function screenHome(app, dock) {
   const b2 = $(`<button class="go ghost" style="margin-top:8px">Open a private hunt</button>`);
   b2.onclick = () => enter('hunt/create');
   inner.appendChild(b1); inner.appendChild(b2);
-  if (S.error) inner.appendChild($(`<p class="err">${S.error}</p>`));
+  if (S.error) inner.appendChild(errorNote());
   dock.appendChild(inner);
+}
+
+/* AN ERROR THAT NAMES A DOOR HAS TO OPEN IT. "Please sign in." was perfectly
+   true and perfectly useless: signing in lives on /g/ and this page never
+   mentioned it, so the one person who can open a table was told to do
+   something with no way to do it. Reported from the site, not caught here —
+   every test in this repo runs with a token already in hand, so no test has
+   ever been signed out. */
+function errorNote() {
+  const auth = /sign in/i.test(S.error || '');
+  return $(`<p class="err">${S.error}${auth
+    ? ' <a href="/g/" style="color:var(--blue);text-decoration:underline">Sign in on the'
+      + ' home page</a>, then come back to this link. Captains joining need no account.'
+    : ''}</p>`);
 }
 
 async function enter(route) {
@@ -311,7 +325,7 @@ function freshTable(label) {
     } catch (e) { S.error = e.message; render(); }
   };
   inner.appendChild(go);
-  if (S.error) inner.appendChild($(`<p class="err">${S.error}</p>`));
+  if (S.error) inner.appendChild(errorNote());
   return inner;
 }
 
@@ -321,7 +335,11 @@ function screenSlugEmpty(app, dock) {
     <div class="card"><p class="note">No table is open here yet. Whoever is running the
     session opens it, and then this same link puts everybody in the one hunt — no code to
     type, no account to make.</p>
-    <p class="note muted">Keep the page open; it checks every few seconds.</p></div>`);
+    <p class="note muted">Keep the page open; it checks every few seconds.</p>
+    ${bearer() ? '' : `<p class="note" style="margin-top:10px"><b>Opening a table needs an
+      account</b> — <a href="/g/" style="color:var(--blue);text-decoration:underline">sign in
+      on the home page</a> and come back here. Everyone you send the link to joins with no
+      account at all.</p>`}</div>`);
   dock.appendChild(freshTable(`Open the ${S.slug.toLowerCase()} table`));
   if (!refresh.slugTimer) refresh.slugTimer = setInterval(() => { if (!S.view) refresh(); }, 5000);
 }
@@ -347,6 +365,10 @@ function screenInvited(app, dock, v) {
        this the only person who can reopen the table is told to go and ask
        somebody else to do it. The button is offered to everyone and the server
        decides — it already refuses anybody but the owner. */
+    if (S.slug && !bearer()) app.insertAdjacentHTML('beforeend',
+      `<div class="card"><p class="note"><b>Laying out a fresh table needs an account</b> —
+       <a href="/g/" style="color:var(--blue);text-decoration:underline">sign in on the home
+       page</a> and come back to this link. Joining one needs nothing at all.</p></div>`);
     if (S.slug) dock.appendChild(freshTable());
     return;
   }
@@ -368,7 +390,7 @@ function screenInvited(app, dock, v) {
   const go = $(`<button class="go">Join this hunt</button>`);
   go.onclick = () => enter('hunt/join');
   inner.appendChild(go);
-  if (S.error) inner.appendChild($(`<p class="err">${S.error}</p>`));
+  if (S.error) inner.appendChild(errorNote());
   dock.appendChild(inner);
   const el = box.querySelector('#name');
   if (el && !el.value) setTimeout(() => el.focus(), 60);
@@ -410,7 +432,7 @@ function screenLobby(app, dock, v) {
     inner.appendChild($(`<div class="fc"><small>Waiting</small>
       <span class="v">${v.seats[0] ? v.seats[0].name : 'the host'} opens the market</span></div>`));
   }
-  if (S.error) inner.appendChild($(`<p class="err">${S.error}</p>`));
+  if (S.error) inner.appendChild(errorNote());
   dock.appendChild(inner);
 }
 
@@ -575,7 +597,7 @@ function screenRound(app, dock, v) {
   inner.appendChild(go);
   if (filed) inner.appendChild($(`<p class="note" style="margin:8px 2px 0">Filed for
     ${v.places[filed.place].name}. You can change it until the hour is up.</p>`));
-  if (S.error) inner.appendChild($(`<p class="err">${S.error}</p>`));
+  if (S.error) inner.appendChild(errorNote());
   dock.appendChild(inner);
 }
 
