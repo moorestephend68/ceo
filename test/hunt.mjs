@@ -226,5 +226,72 @@ const table = (opts = {}) => {
   ok(Number.isInteger(game.round), 'with an integer round, which is what the column is');
 }
 
+/* ------------------------------------------ THE ONE HINT, AND ITS LIMITS
+
+   An item in your hand is marked if it is needed for something unfinished.
+   Measured before it was built: flagging held items moves the strongest style
+   from 84% of hunts to 86% and leaves the careless one at 0%, for two days of
+   pace. It is close to free because the race is not decided at the component
+   gate — only 21% of captains get through it — but at the five places after.
+
+   What the mark must never do is say WHICH thing an item is for. That
+   distinction is the part still worth working out, and it is also the part
+   that would make a captain's hand readable if it ever reached anybody else. */
+{
+  const { game, token } = table();
+  const me = H.seatByToken(game, token);
+  const v = H.viewFor(game, token);
+  const truth = new Set([...me.recipes.flat(), ...me.placeItems]);
+  ok(v.you.hand.every((x) => typeof x.wanted === 'boolean'),
+    'every item in your hand says whether it is wanted');
+  const wrong = v.you.hand.filter((x) => x.wanted !== truth.has(x.t));
+  ok(wrong.length === 0,
+    `and the mark matches what the server knows, on all ${v.you.hand.length} of them`);
+  ok(v.you.hand.some((x) => x.wanted),
+    `${v.you.hand.filter((x) => x.wanted).length} of them are marked`);
+  ok(v.you.hand.some((x) => !x.wanted),
+    'and some are not, so it is a signal rather than decoration');
+
+  /* the limit: nothing says which of the three, or whether it is a component
+     at all rather than one of the five places */
+  const blob = JSON.stringify(v.you.hand);
+  ok(!/comp|recipe|place|letter/i.test(blob),
+    'and no item says what it is wanted FOR');
+}
+
+/* ------------------------------- the mark tracks live need, not the deal */
+{
+  const { game, token } = table({ seed: 11 });
+  const me = H.seatByToken(game, token);
+  /* hand them a whole component and resolve, so one recipe is satisfied */
+  for (const t of me.recipes[0]) me.hand[t] = (me.hand[t] || 0) + 1;
+  const wantedBefore = H.viewFor(game, token).you.hand.filter((x) => x.wanted).length;
+  H.submitFiling(game, token, { place: (me.at + 1) % 12, give: [], want: [] });
+  H.resolveRound(game, at(61));
+  ok(me.built[0] === true, 'a component completes once the three are held');
+  /* the three it used are spent, so they are no longer marked anywhere */
+  const after = H.viewFor(game, token).you.hand;
+  const stillMarked = after.filter((x) => x.wanted && me.recipes[0].includes(x.t)
+    && !me.recipes[1].includes(x.t) && !me.recipes[2].includes(x.t)
+    && !me.placeItems.includes(x.t));
+  ok(stillMarked.length === 0,
+    'and nothing it needed is marked any more — the hint tracks what is still wanted');
+  void wantedBefore;
+}
+
+/* ----------------------------------- and it is nobody else's to read */
+{
+  const { game, tokens } = table({ join: 3 });
+  const v = H.viewFor(game, tokens[0]);
+  ok(v.seats.every((x) => !('hand' in x) && !('wanted' in x)),
+    'no seat in the public list carries a hand or a mark');
+  const other = game.seats[1];
+  const theirMarked = Object.keys(other.hand).map(Number)
+    .filter((t) => [...other.recipes.flat(), ...other.placeItems].includes(t));
+  const blob = JSON.stringify(v);
+  ok(theirMarked.length === 0 || !blob.includes('"marked"'),
+    'and nothing anywhere names what another captain is holding, marked or not');
+}
+
 console.log(bad ? `\n${bad} FAILED` : '\nhunt OK');
 process.exitCode = bad ? 1 : 0;

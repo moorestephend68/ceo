@@ -162,6 +162,39 @@ ok(await until(host, /Move to/), 'the market opens and the first round is live')
     `the dock reads it back: "${dockText}"`);
 }
 
+/* ------------------------------------------- THE MARK IS ON SCREEN, AND MUTE
+
+   An item needed for something unfinished carries a mark. What the page must
+   never do is say what it is wanted FOR — that distinction is the part still
+   worth working out, and the measurement only holds while it stays unsaid. */
+{
+  const marks = await host.evaluate(() => {
+    const s = [...document.querySelectorAll('.step')].find((x) =>
+      /Part with/.test((x.querySelector('.lab') || {}).textContent || ''));
+    const btns = [...s.querySelectorAll('button.opt')];
+    const v = window.S && window.S.view;
+    return {
+      shown: btns.filter((b) => b.querySelector('.mark')).length,
+      total: btns.length,
+      truth: v ? v.you.hand.filter((x) => x.wanted).length : -1,
+      says: btns.map((b) => b.textContent.replace(/\s+/g, ' ')).join(' | '),
+    };
+  });
+  ok(marks.shown === marks.truth,
+    `${marks.shown} of ${marks.total} items carry the mark, matching the view exactly`);
+  ok(marks.shown > 0 && marks.shown < marks.total,
+    'some are marked and some are not, so it reads as a signal');
+  ok(!/galactic GPS|navigation module|the key|place/i.test(marks.says),
+    'and no marked item says which of the three it is for');
+  const explained = await screen(host);
+  ok(/marks an item needed for something you have not finished/.test(explained),
+    'the page explains the mark in words rather than leaving a symbol to guess at');
+  ok(/It will not say what for/.test(explained),
+    'and says plainly that it will not tell you more');
+  ok(/Letting one go is allowed/.test(explained),
+    'and that parting with one is a decision rather than a mistake');
+}
+
 /* -------------------------------------- only types you lack can be asked for */
 {
   const overlap = await host.evaluate(() => {
