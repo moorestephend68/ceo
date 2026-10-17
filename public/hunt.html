@@ -311,6 +311,48 @@ async function enter(route) {
    /h/testing before anybody has opened the table. Only a signed-in host can
    open one — the server decides that, not this page — so everyone else is
    told plainly what they are waiting for rather than shown a dead button. */
+/* ------------------------------------------- clearing a named table away
+
+   THE HOST COULD NEVER REACH THIS. Laying out a fresh table was offered only
+   to a visitor with no seat — and the host always has a seat in their own
+   table, so the one person allowed to reset it was the one person never shown
+   the button. Reported from a live session: "I started a game but now I need
+   to end it so I can let other people in."
+
+   A hunt takes no new captains once its market is open, which is correct for
+   a prize hunt and merciless for a test night: start it a minute early and
+   everyone who arrives after is locked out until the season ends. So on a
+   named table the host can throw it away and deal again. Two taps, because
+   it discards a running game. */
+function hostReset(app, v) {
+  if (!S.slug || !v.you || !v.you.isHost) return;
+  const card = $(`<div class="card"><h2>Running this session</h2>
+    <p class="note">A hunt takes no new captains once the market is open. If people are
+    still arriving, lay out a fresh table — everyone re-joins on the same link.</p></div>`);
+  const b = $(`<button class="opt" style="margin-top:4px"><span class="nm">Lay out a fresh
+    table<br><span class="meta">discards this one and deals again</span></span></button>`);
+  let armed = false;
+  b.onclick = async () => {
+    if (!armed) {
+      armed = true;
+      b.setAttribute('aria-pressed', 'true');
+      b.querySelector('.nm').innerHTML = 'Tap again to discard this hunt'
+        + '<br><span class="meta">round ' + v.round + ' and everything in it goes</span>';
+      setTimeout(() => { if (armed) render(); }, 6000);
+      return;
+    }
+    b.disabled = true; S.error = null;
+    try {
+      const out = await api('hunt/create', { code: S.slug, seats: 40, cadence: '5m' });
+      S.code = out.code; S.token = out.token; save();
+      S.place = null; S.give = []; S.want = [];
+      applyView(out.view); poll(5000);
+    } catch (e) { S.error = e.message; render(); }
+  };
+  card.appendChild(b);
+  app.appendChild(card);
+}
+
 /* opening a named table, from either side of the door */
 function freshTable(label) {
   const inner = $(`<div class="inner"></div>`);
@@ -386,12 +428,24 @@ function screenInvited(app, dock, v) {
   const saved = load();
   if (saved.name) box.querySelector('#name').value = saved.name;
 
+  /* A HOST WHOSE BROWSER FORGOT THEM. The seat token lives in localStorage, so
+     a cleared browser, a second device or a private window leaves the owner
+     looking at their own table as a stranger — and they cannot even re-join,
+     because the join route stamps a signed-in captain with their company name
+     and that name is already sitting in seat zero. Without a way to lay out a
+     fresh table from here, that is a locked door with the key inside. */
+  if (S.slug) app.insertAdjacentHTML('beforeend', `<p class="note muted"
+    style="margin:10px 2px 0">Running this session and this is not your seat? You can lay
+    out a fresh table below — it discards this one and everybody re-joins on the same
+    link.</p>`);
+
   const inner = $(`<div class="inner"></div>`);
   const go = $(`<button class="go">Join this hunt</button>`);
   go.onclick = () => enter('hunt/join');
   inner.appendChild(go);
   if (S.error) inner.appendChild(errorNote());
   dock.appendChild(inner);
+  if (S.slug) dock.appendChild(freshTable());
   const el = box.querySelector('#name');
   if (el && !el.value) setTimeout(() => el.focus(), 60);
 }
@@ -416,6 +470,8 @@ function screenLobby(app, dock, v) {
       <td class="muted">${s.you ? 'you' : ''}</td></tr>`).join('')}</table>
     <p class="note" style="margin-top:10px">A hunt runs with fourteen or more — below that the
     market seizes up, so the yard makes up the difference with brokers of its own.</p></div>`);
+  hostReset(app, v);
+
   const inner = $(`<div class="inner"></div>`);
   /* ONLY THE HOST OPENS THE MARKET. Everyone else waits, and is told so. The
      button used to be drawn for anybody who had the lobby on screen, which
@@ -576,6 +632,8 @@ function screenRound(app, dock, v) {
         .slice(0, 10).map((s) => `<tr class="${s.you ? 'you' : ''}"><td>${s.name}</td>
           <td>${s.built} of 3</td><td>${s.letters || '—'}</td></tr>`).join('')
     }</table></div>`);
+
+  hostReset(app, v);
 
   /* ------------------------------------------------------------ the dock */
   const inner = $(`<div class="inner"></div>`);
