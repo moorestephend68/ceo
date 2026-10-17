@@ -71,7 +71,9 @@ await host.waitForSelector('#name');
 await host.fill('#name', 'Halloran Freight');
 await host.click('button.go.ghost');                 // open a private hunt
 ok(await until(host, /The code/), 'a private hunt opens and shows its code');
-const code = (await host.textContent('.big') || '').trim();
+/* the lobby leads with the LINK now, because a link can be tapped and a code
+   has to be read out and typed. The code keeps its own element beside it. */
+const code = (await host.textContent('#joincode') || '').trim();
 ok(/^[A-Z0-9]{6}$/.test(code), `the code is six characters: ${code}`);
 
 await mate.goto(BASE + '/hunt.html');

@@ -97,9 +97,14 @@ const server = http.createServer(async (req, res) => {
       res.end(await r.text());
       return;
     }
-    /* the /g/* rewrite Netlify does */
-    let file = url.pathname === '/' ? '/index.html'
-      : url.pathname.startsWith('/g/') ? '/live.html' : url.pathname;
+    /* EVERY rewrite netlify.toml declares, not just the first one. Only /g/*
+       was mirrored here, so /c/CODE and /h/CODE — the links a player is
+       actually sent — were served as 404 locally and no test ever touched
+       them. A harness that cannot reach a URL cannot tell you it is broken. */
+    const REWRITES = [['/g/', '/live.html'], ['/c/', '/cargo.html'], ['/h/', '/hunt.html']];
+    let file = url.pathname === '/' ? '/index.html' : url.pathname;
+    for (const [prefix, target] of REWRITES)
+      if (file.startsWith(prefix)) { file = target; break; }
     const ext = file.slice(file.lastIndexOf('.'));
     const data = await readFile('public' + file);
     res.writeHead(200, { 'content-type': TYPES[ext] || 'application/octet-stream' });
