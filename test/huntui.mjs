@@ -162,6 +162,89 @@ ok(await until(host, /Move to/), 'the market opens and the first round is live')
     `the dock reads it back: "${dockText}"`);
 }
 
+/* ------------------------------------------ PICKING WHAT TO TRADE, REPORTED
+   BROKEN BY A PLAYER AND REPRODUCED HERE.
+
+   Three faults, one chain. A tap on an item held more than once ADDED another
+   copy, so the tap meant to undo the first made it worse and there was no way
+   back short of tapping past your own stock. At the cap, unchosen items stayed
+   bright and silently ignored every tap. And tap-highlight is off page-wide
+   with no :active rule, so a tap that did nothing looked exactly like a tap
+   the phone missed — which invites the second tap that starts the whole thing
+   again.
+
+   Duplicates are gone rather than fixed. The matcher re-checks what you are
+   HOLDING each time it hands something over, so a repeated slot buys no second
+   partner, it buys nothing: over 600 paired hunts on the same seeds, three
+   different types took in 59.6 items against 49.7, ahead in 64.7% of runs,
+   with 30% of the duplicate style's slots dead. The tap is now a plain toggle. */
+{
+  const sel = async (lab, i) => host.evaluate(([l, k]) => {
+    const s = [...document.querySelectorAll('.step')].find((x) =>
+      new RegExp(l).test((x.querySelector('.lab') || {}).textContent || ''));
+    const b = [...s.querySelectorAll('button.opt')][k];
+    if (b && !b.disabled) b.click();
+    return window.S.give.slice();
+  }, [lab, i]);
+  const step = async (lab) => host.evaluate((l) => {
+    const s = [...document.querySelectorAll('.step')].find((x) =>
+      new RegExp(l).test((x.querySelector('.lab') || {}).textContent || ''));
+    const b = [...s.querySelectorAll('button.opt')];
+    return { label: (s.querySelector('.lab .r') || {}).textContent.trim(),
+      off: b.filter((x) => x.getAttribute('aria-pressed') !== 'true').length,
+      offLive: b.filter((x) => x.getAttribute('aria-pressed') !== 'true' && !x.disabled).length };
+  }, lab);
+
+  await host.evaluate(() => { window.S.give = []; window.S.want = []; render(); });
+  const multi = await host.evaluate(() =>
+    window.S.view.you.hand.findIndex((x) => x.n >= 2));
+  if (multi >= 0) {
+    const one = await sel('Part with', multi);
+    const back = await sel('Part with', multi);
+    ok(one.length === 1, `one tap offers one item: [${one}]`);
+    ok(back.length === 0,
+      'and a second tap on the SAME item takes it back rather than adding a copy');
+    await sel('Part with', multi); await sel('Part with', multi);
+    await sel('Part with', multi); await sel('Part with', multi);
+    const spam = await host.evaluate(() => window.S.give.slice());
+    ok(new Set(spam).size === spam.length,
+      `no amount of tapping can stack the same type twice: [${spam}]`);
+  } else ok(true, 'one tap offers one item (no duplicate dealt this run)');
+
+  await host.evaluate(() => { window.S.give = []; render(); });
+  const cap = await host.evaluate(() => window.S.view.rules.give);
+  for (let k = 0; k < cap; k++) await sel('Part with', k);
+  const g = await step('Part with');
+  ok((await host.evaluate(() => window.S.give.length)) === cap,
+    `${cap} different items chosen, which is the limit`);
+  ok(g.offLive === 0 && g.off > 0,
+    `at the cap all ${g.off} unchosen items go grey — a bright button that ignores a tap reads as a broken page`);
+  ok(/That is all/.test(await text(host)),
+    'and the page says so in words');
+  const live = await host.evaluate(() => {
+    const s = [...document.querySelectorAll('.step')].find((x) =>
+      /Part with/.test((x.querySelector('.lab') || {}).textContent || ''));
+    return [...s.querySelectorAll('button.opt')]
+      .filter((b) => b.getAttribute('aria-pressed') === 'true' && !b.disabled).length;
+  });
+  ok(live === cap, 'while every chosen item stays tappable, so the cap is never a dead end');
+
+  const wcap = await host.evaluate(() => window.S.view.rules.want);
+  for (let k = 0; k < wcap; k++) await sel('Ask for', k);
+  const w = await step('Ask for');
+  ok(w.offLive === 0 && w.off > 0,
+    `the same on what you ask for: ${w.off} greyed, counter "${w.label}"`);
+
+  const feedback = await host.evaluate(() => {
+    const r = [...document.styleSheets[0].cssRules].map((x) => x.cssText);
+    return r.some((t) => /button\.opt:active/.test(t))
+      && r.some((t) => /aria-pressed=\"?true/.test(t) && /box-shadow/.test(t));
+  });
+  ok(feedback,
+    'a press has a visible state and a chosen item a ring, so a dead tap and a missed tap no longer look alike');
+  await host.evaluate(() => { window.S.give = []; window.S.want = []; render(); });
+}
+
 /* ------------------------------------------- THE MARK IS ON SCREEN, AND MUTE
 
    An item needed for something unfinished carries a mark. What the page must

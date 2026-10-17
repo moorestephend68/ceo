@@ -1,4 +1,4 @@
-/* THE PRIZE HUNT.
+/* GALACTIC TREASURE HUNT.
 
    A third game on the same rails, and the one with the most to give away. CEO
    and Cargo Run keep one secret each — the destination, the sealed bid. This
