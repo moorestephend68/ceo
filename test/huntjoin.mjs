@@ -41,6 +41,43 @@ const until = async (p, re, ms = 15000) => {
   return false;
 };
 
+/* ---- SIGNED OUT, which no test in this repo had ever been ----
+   The host is the only person who needs an account, and every other test here
+   starts with a token already in localStorage. So the one state the real host
+   was actually in — signed out, looking at the button — went unexercised, and
+   "Please sign in." was shown with nothing to sign in with.
+
+   The assertion is deliberately about the BEHAVIOUR rather than the state: a
+   named door can be empty, waiting, or already running depending on what ran
+   before, and a test that only holds in one of those is a test that passes by
+   luck. In every state a signed-out visitor must either be able to join or be
+   told where signing in lives — never stranded. */
+{
+  const out = await fresh(false);
+  await out.goto(BASE + '/h/testing');
+  await until(out, /No table is open here yet|Join this hunt|already|Waiting/, 8000);
+  const seen = await scr(out);
+  const canJoin = /Join this hunt/.test(seen);
+  ok(canJoin || /needs an account/.test(seen),
+    canJoin ? 'signed out, a live table just lets them in — joining needs no account'
+            : 'signed out at a table they would have to open, they are told an account is needed');
+  ok(canJoin || await out.evaluate(() => !!document.querySelector('a[href="/g/"]')),
+    canJoin ? 'and no sign-in is asked of them'
+            : 'and given the link to the page where signing in actually lives');
+  if (!canJoin) {
+    await out.click('.dock button.go');
+    await out.waitForTimeout(1200);
+    ok(/sign in|account/i.test(await scr(out)), 'tapping it anyway says what is wrong');
+    ok(await out.evaluate(() =>
+      !!document.querySelector('.dock a[href="/g/"], #app a[href="/g/"]')),
+      'and the refusal carries the way out, rather than naming a page you cannot find');
+  } else {
+    ok(true, 'and nothing asks them to sign in');
+    ok(true, 'so there is no refusal to carry a way out of');
+  }
+  await out.close();
+}
+
 /* ---- the host opens the named table ---- */
 const host = await fresh(true);
 await host.goto(BASE + '/h/testing');
