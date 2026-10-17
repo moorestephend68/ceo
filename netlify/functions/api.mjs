@@ -910,11 +910,36 @@ export default async (req) => {
       const state = await A.requireHost(db, user.id);
       const owned = state.companies[0];
       if (!owned) return fail('Your name is still being set up. Try again in a moment.');
+
+      /* A NAMED DOOR. /h/testing asks for the code TESTING so a tester can be
+         sent one link that never changes. Reserved words are seven characters
+         or more and a generated code is always exactly six, so claiming one
+         can never take a code a real hunt is using. Still host-only — this
+         route already requires an account — and a finished table at that name
+         gives way to a fresh one, which is how a second test night starts. */
+      const RESERVED = ['TESTING'];
+      const wanted = String(body.code || '').toUpperCase();
       let made = null;
-      for (let i = 0; i < 5; i++) {
+      if (wanted) {
+        if (!RESERVED.includes(wanted)) return fail('That is not a name you can open.', 400);
+        /* WHOEVER OPENED IT CAN OPEN IT AGAIN. A hunt runs for weeks, so a
+           host who could not replace their own named table would get one test
+           night and then wait out a season for the next. Company names are
+           claimed and unique, so the name in seat zero identifies the owner.
+           Anybody else is told to join rather than allowed to clobber it. */
+        const sitting = await db.getGame(wanted);
+        const mine = sitting && sitting.seats && sitting.seats[0]
+          && sitting.seats[0].name === owned.name;
+        if (sitting && sitting.status !== 'over' && !mine)
+          return fail('That table is already open. Follow the link to join it.', 409);
         made = HU.createGame({ ...body, hostName: owned.name, now });
-        if (!(await db.getGame(made.game.code))) break;
-        made = null;
+        made.game.code = wanted;
+      } else {
+        for (let i = 0; i < 5; i++) {
+          made = HU.createGame({ ...body, hostName: owned.name, now });
+          if (!(await db.getGame(made.game.code))) break;
+          made = null;
+        }
       }
       if (!made) return fail('Could not allocate a code. Try again.', 503);
       await db.putGame(made.game, user.id);
