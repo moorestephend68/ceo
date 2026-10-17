@@ -119,9 +119,18 @@
 const KEY = 'hunt.game';
 const $ = (h) => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstChild; };
 
-let S = { code: null, token: null, view: null,
+/* NAMED DOORS. A reserved word in place of a code, so a link can be spoken
+   aloud and typed from memory: ceo-the-game.netlify.app/h/testing. Reserved
+   words are longer than six characters on purpose — a generated code is
+   always exactly six, so the two can never collide. */
+const RESERVED = ['TESTING'];
+
+let S = { code: null, token: null, name: null, slug: null, view: null,
           place: null, give: [], want: [], busy: false, error: null };
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ code: S.code, token: S.token })); } catch {} };
+/* the name goes in too. It was written on the way in and then overwritten by
+   the next save, so the box that offers it back was always empty. */
+const save = () => { try { localStorage.setItem(KEY,
+  JSON.stringify({ code: S.code, token: S.token, name: S.name })); } catch {} };
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
 
 /* Signing in belongs to the rest of the site, so this page sends on whatever
@@ -186,7 +195,12 @@ function applyView(v) {
 async function refresh() {
   if (!S.code) return render();
   try { const out = await api('hunt/view'); return applyView(out.view); }
-  catch (e) { S.error = e.message; }
+  catch (e) {
+    /* a named door with nothing behind it yet is not an error to show — it is
+       an empty room, and somebody has to open the table */
+    if (S.slug) { S.view = null; S.error = null; render(); return; }
+    S.error = e.message;
+  }
   render();
 }
 
@@ -195,7 +209,13 @@ function render() {
   const app = document.getElementById('app'), dock = document.getElementById('dock');
   app.innerHTML = ''; dock.innerHTML = '';
   const v = S.view;
+  if (S.slug && !v) return screenSlugEmpty(app, dock);
   if (!S.code || !v) return screenHome(app, dock);
+  /* A CODE IS NOT A SEAT. Following an invite link gives the page a code and
+     nothing else, and it used to hand that visitor the lobby — the host's
+     lobby, with the host's start button, which they could tap. Having a seat
+     is the thing that decides which screen you are on, not having a code. */
+  if (!(v.seats || []).some((s) => s.you)) return screenInvited(app, dock, v);
   if (v.status === 'lobby') return screenLobby(app, dock, v);
   if (v.status === 'over') return screenOver(app, dock, v);
   return screenRound(app, dock, v);
@@ -255,11 +275,15 @@ function screenHome(app, dock) {
 }
 
 async function enter(route) {
-  const code = (document.getElementById('code') || {}).value || '';
+  /* the invite screen has no code box — the code came in on the URL and is
+     already in S. Reading the missing field used to blank it. */
+  const typed = (document.getElementById('code') || {}).value || '';
+  const code = typed.trim() ? typed : (S.code || '');
   const name = (document.getElementById('name') || {}).value || '';
   S.error = null;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ name }));
+    S.name = name;
+    save();
     S.code = route === 'hunt/create' ? null : code.trim().toUpperCase();
     const out = await api(route, { name, seats: 40 });
     S.code = out.code; S.token = out.token; save();
@@ -268,25 +292,124 @@ async function enter(route) {
   } catch (e) { S.error = e.message; S.code = null; render(); }
 }
 
+/* --------------------------------------------- a named door with nobody home
+
+   /h/testing before anybody has opened the table. Only a signed-in host can
+   open one — the server decides that, not this page — so everyone else is
+   told plainly what they are waiting for rather than shown a dead button. */
+/* opening a named table, from either side of the door */
+function freshTable(label) {
+  const inner = $(`<div class="inner"></div>`);
+  const go = $(`<button class="go ghost">${label
+    || 'Lay out a fresh ' + S.slug.toLowerCase() + ' table'}</button>`);
+  go.onclick = async () => {
+    go.disabled = true; S.error = null;
+    try {
+      const out = await api('hunt/create', { code: S.slug, seats: 40, cadence: '5m' });
+      S.code = out.code; S.token = out.token; save();
+      applyView(out.view); poll(5000);
+    } catch (e) { S.error = e.message; render(); }
+  };
+  inner.appendChild(go);
+  if (S.error) inner.appendChild($(`<p class="err">${S.error}</p>`));
+  return inner;
+}
+
+function screenSlugEmpty(app, dock) {
+  app.insertAdjacentHTML('beforeend', `<header><h1>Galactic Treasure Hunt</h1>
+    <div class="sub">the ${S.slug.toLowerCase()} table</div></header>
+    <div class="card"><p class="note">No table is open here yet. Whoever is running the
+    session opens it, and then this same link puts everybody in the one hunt — no code to
+    type, no account to make.</p>
+    <p class="note muted">Keep the page open; it checks every few seconds.</p></div>`);
+  dock.appendChild(freshTable(`Open the ${S.slug.toLowerCase()} table`));
+  if (!refresh.slugTimer) refresh.slugTimer = setInterval(() => { if (!S.view) refresh(); }, 5000);
+}
+
+/* ------------------------------------------------- arrived on someone's link
+
+   No account, no code typed, nothing saved: just a name to give. The join
+   route has never required signing in — it takes a name in the body and only
+   uses an account's company name if one happens to be there — so this is the
+   whole of what a tester needs. */
+function screenInvited(app, dock, v) {
+  const started = v.status !== 'lobby';
+  const humans = (v.seats || []).filter((s) => !s.bot).length;
+  app.insertAdjacentHTML('beforeend', `<header><h1>Galactic Treasure Hunt</h1>
+    <div class="sub">${started ? 'already under way'
+      : humans + ' captain' + (humans === 1 ? '' : 's') + ' waiting'}</div></header>`);
+  if (started) {
+    app.insertAdjacentHTML('beforeend', `<div class="card"><p class="note">This hunt opened
+      its market already, and a hunt takes no new captains once it is running.${
+        S.slug ? ' Whoever runs these sessions can lay out a fresh table at this same link.'
+               : ' Ask whoever sent you the link to start a fresh one.'}</p></div>`);
+    /* A HOST COMING BACK FOR A SECOND NIGHT. A hunt runs for weeks, so without
+       this the only person who can reopen the table is told to go and ask
+       somebody else to do it. The button is offered to everyone and the server
+       decides — it already refuses anybody but the owner. */
+    if (S.slug) dock.appendChild(freshTable());
+    return;
+  }
+  app.insertAdjacentHTML('beforeend', `<div class="card"><p class="note">You hold a hand of
+    salvage with names that tell you nothing. Somewhere in it are the makings of three
+    things — a galactic GPS, a navigation module, and the key that puts them together —
+    and you find out which three by happening to hold them.</p>
+    <p class="note">Every round you move to one of twelve places, offer up to three items,
+    ask for up to three, and the market clears at once. You never learn who you dealt
+    with.</p>
+    <p class="note muted">No account needed. Pick a name and you are in.</p></div>`);
+  const box = $(`<div class="step"><div class="lab">Your name</div>
+    <input type="text" id="name" placeholder="Halloran Freight" maxlength="24"></div>`);
+  app.appendChild(box);
+  const saved = load();
+  if (saved.name) box.querySelector('#name').value = saved.name;
+
+  const inner = $(`<div class="inner"></div>`);
+  const go = $(`<button class="go">Join this hunt</button>`);
+  go.onclick = () => enter('hunt/join');
+  inner.appendChild(go);
+  if (S.error) inner.appendChild($(`<p class="err">${S.error}</p>`));
+  dock.appendChild(inner);
+  const el = box.querySelector('#name');
+  if (el && !el.value) setTimeout(() => el.focus(), 60);
+}
+
 function screenLobby(app, dock, v) {
   app.insertAdjacentHTML('beforeend', `<header><h1>Galactic Treasure Hunt</h1>
     <div class="sub">${v.seats.length} captain${v.seats.length === 1 ? '' : 's'} waiting</div></header>`);
-  if (!v.isPublic) app.insertAdjacentHTML('beforeend',
-    `<div class="card"><h2>The code</h2><div class="big">${v.code}</div>
-     <p class="note">Anybody with this opens the same hunt.</p></div>`);
+  if (!v.isPublic) {
+    /* the link, not the code. A code has to be read out and typed; a link can
+       be sent to a group chat and tapped, and it needs no account at all. */
+    const door = (RESERVED.includes(v.code) ? v.code.toLowerCase() : v.code);
+    app.insertAdjacentHTML('beforeend',
+      `<div class="card"><h2>Send this to your captains</h2>
+       <div class="big" id="joinlink" style="font-size:19px;word-break:break-all">${location.host}/h/${door}</div>
+       <p class="note">They tap it, pick a name and they are in. No code to type, no
+       account to make.</p>
+       <p class="note muted">The code on its own is <b id="joincode">${v.code}</b> if anyone
+       would rather type it.</p></div>`);
+  }
   app.insertAdjacentHTML('beforeend', `<div class="card"><h2>Who is in</h2><table>${
     v.seats.map((s) => `<tr class="${s.you ? 'you' : ''}"><td>${s.name}</td>
       <td class="muted">${s.you ? 'you' : ''}</td></tr>`).join('')}</table>
     <p class="note" style="margin-top:10px">A hunt runs with fourteen or more — below that the
     market seizes up, so the yard makes up the difference with brokers of its own.</p></div>`);
   const inner = $(`<div class="inner"></div>`);
-  const go = $(`<button class="go">Open the market</button>`);
-  go.onclick = async () => {
-    go.disabled = true;
-    try { const out = await api('hunt/start', {}); applyView(out.view); poll(6000); }
-    catch (e) { S.error = e.message; render(); }
-  };
-  inner.appendChild(go);
+  /* ONLY THE HOST OPENS THE MARKET. Everyone else waits, and is told so. The
+     button used to be drawn for anybody who had the lobby on screen, which
+     before the seat check above included people who had not joined. */
+  if (v.you && v.you.isHost) {
+    const go = $(`<button class="go">Open the market</button>`);
+    go.onclick = async () => {
+      go.disabled = true;
+      try { const out = await api('hunt/start', {}); applyView(out.view); poll(6000); }
+      catch (e) { S.error = e.message; render(); }
+    };
+    inner.appendChild(go);
+  } else {
+    inner.appendChild($(`<div class="fc"><small>Waiting</small>
+      <span class="v">${v.seats[0] ? v.seats[0].name : 'the host'} opens the market</span></div>`));
+  }
   if (S.error) inner.appendChild($(`<p class="err">${S.error}</p>`));
   dock.appendChild(inner);
 }
@@ -482,7 +605,7 @@ function screenOver(app, dock, v) {
 }
 
 /* -------------------------------------------------------------- the stamp */
-const PAGE_BUILD = '2026-10-17 · tap to pick, tap to drop';
+const PAGE_BUILD = '2026-10-17 · one link, no code';
 (async () => {
   let server = '—';
   try { const c = await (await fetch('/api/config')).json(); server = c.build || '—'; } catch {}
@@ -497,9 +620,18 @@ window.S = S;
 /* ------------------------------------------------------------------- boot */
 (() => {
   const saved = load();
-  const fromUrl = (location.pathname.match(/\/h\/([A-Z0-9]{6})/i) || [])[1];
-  if (fromUrl) S.code = fromUrl.toUpperCase();
-  else if (saved.code) { S.code = saved.code; S.token = saved.token; }
+  S.name = saved.name || null;
+  /* SIX CHARACTERS OR A NAMED DOOR. Generated codes are always exactly six
+     from a fixed alphabet, so a longer word can never be one — which is what
+     makes /h/testing safe to reserve. Anything else on the path is treated as
+     a code and will simply not be found. */
+  const fromUrl = (location.pathname.match(/\/h\/([A-Za-z0-9]{4,12})/) || [])[1];
+  if (fromUrl) {
+    S.code = fromUrl.toUpperCase();
+    if (RESERVED.includes(S.code)) S.slug = S.code;
+    /* a token saved for a DIFFERENT hunt must not be offered to this one */
+    if (saved.code === S.code) S.token = saved.token;
+  } else if (saved.code) { S.code = saved.code; S.token = saved.token; }
   if (S.code) { refresh().then(() => poll(6000)); } else render();
   setInterval(() => {
     const v = S.view;
